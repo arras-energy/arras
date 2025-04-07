@@ -1,0 +1,5 @@
+pylint
+git+https://github.com/eudoxys/qdox
+numpy
+cvxpy
+pypower

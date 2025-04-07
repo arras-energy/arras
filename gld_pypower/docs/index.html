@@ -1,0 +1,882 @@
+<!doctype html>
+    <html>
+    <head>
+        <title>gld_pypower</title>
+        <meta name="expires" content="86400" />
+        <link rel="stylesheet" href="qdox.css">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <link rel="stylesheet" href="https://www.w3schools.com/w3css/4/w3.css">
+    </head>
+    <body>
+
+    <!-- Sidebar -->
+    <div class="w3-sidebar w3-light-grey w3-bar-block" style="width:180px">
+      <center>
+        <img src="https://avatars.githubusercontent.com/u/21315775?v=4" height="128px" width="128px"/>
+        <br/><a href="https://github.com/eudoxys">Eudoxys Sciences LLC</a>
+        <br/><a href="https://github.com/eudoxys"></a>
+      </center>
+      <title class="w3-bar-item">gld_pypower</title>
+      <a href="#main" class="w3-bar-item w3-button">Command Line</a>
+      <a href="#python" class="w3-bar-item w3-button">Python Library</a>
+      <a href="#package" class="w3-bar-item w3-button">Package Metadata</a>
+    </div>
+
+    <!-- Page Content -->
+    <div style="margin-left:220px">
+
+    <h1 id="main" class="w3-container">Command Line</h1>
+
+    <p/>
+
+
+<h2 class="w3-container">gld_pypower</h2>
+<p/>
+GridLAB-D PyPower Module
+
+
+<h1 id="python" class="w3-container">Python Library</h1>
+
+
+<h2 class="w3-container">Class gld_pypower()</h2>
+<p/>
+GridLAB-D model handler
+<p/>
+
+
+<h4 class="w3-container">Example</h4>
+<p/>
+The following example loads the 4-bus model and attempts an OPF. However,
+there is insufficient generation to avoid curtailment. Then it runs
+the optimal sizing/placement problem and updates the model with the result.
+Then the OPF runs without curtailment and the simulation is run with the new model.
+<p/>
+<pre>from arras import gld_pypower
+import numpy as np
+test = gld_pypower.Model("gld_pypower/example.json")
+test.optimal_powerflow()["curtailment"]
+test.optimal_sizing(gen_cost=np.array([100,500,1000,1000])+1000j,
+cap_cost={0:1000,1:500},update_model=True)
+test.optimal_powerflow(refresh=True)["curtailment"]
+test.save("test_out.json")
+test.run("test_out.json")
+</pre>
+
+
+<h3 class="w3-container"><code><b>gld_pypower.Model</b>(<b>data</b>:<i>Union</i>)</code></h3>
+<p/>
+Access GridLAB-D PyPower model
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>data</code>:</dt>
+<dd>JSON string, filename, or dict of model data</dd>
+
+
+<h3 class="w3-container"><code><b>Model.add_object</b>(<b>oclass</b>:<i>str</i>, <b>obj</b>:<i>str</i>) &rightarrow; <i>dict</i></code></h3>
+<p/>
+Add object
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>oclass</code>:</dt>
+<dd>object class</dd>
+<dt><code>obj</code>:</dt>
+<dd>object name</dd>
+<dt><code>kwargs</code>:</dt>
+<dd>object data</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt><code>dict</code>:</dt>
+<dd>object data</dd>
+
+
+<h3 class="w3-container"><code><b>Model.assert_module</b>(<b>name</b>:<i>str</i>) &rightarrow; <i>None</i></code></h3>
+<p/>
+Assert that pypower module is found
+
+
+<h3 class="w3-container"><code><b>Model.bool</b>(<b>x</b>:<i>str</i>) &rightarrow; <i>bool</i></code></h3>
+<p/>
+Extract a boolean value from a GridLAB-D property
+
+
+<h3 class="w3-container"><code><b>Model.capacitors</b>(<b>kind</b>:<i>str</i>, <b>refresh</b>:<i>bool</i>) &rightarrow; <i>array</i></code></h3>
+<p/>
+Get capacitor array
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>kind</code>:</dt>
+<dd>'installed' or 'setting'</dd>
+<dt><code>refresh</code>:</dt>
+<dd>force recalculation of previous results</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt>np.array:</dt>
+<dd>capacitor array</dd>
+
+
+<h3 class="w3-container"><code><b>Model.classes</b>(<b>module</b>:<i>str</i>, <b>astype</b>:<i>type</i>) &rightarrow; <i>None</i></code></h3>
+<p/>
+Get classes
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>module</code>:</dt>
+<dd>name of module (None return all classes)</dd>
+<dt><code>astype</code>:</dt>
+<dd>format of result</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt><code>astype</code>:</dt>
+<dd>result</dd>
+
+
+<h3 class="w3-container"><code><b>Model.complex</b>(<b>x</b>:<i>str</i>) &rightarrow; <i>complex</i></code></h3>
+<p/>
+Extract a complex value from a GridLAB-D property
+
+
+<h3 class="w3-container"><code><b>Model.costs</b>(<b>refresh</b>:<i>bool</i>) &rightarrow; <i>dict</i></code></h3>
+<p/>
+Get generation cost data
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>refresh</code>:</dt>
+<dd>force regeneration of data from model</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt><code>dict</code>:</dt>
+<dd>cost data</dd>
+
+
+<h3 class="w3-container"><code><b>Model.del_object</b>(<b>obj</b>:<i>str</i>, <b>on_ref</b>:<i>str</i>, <b>ignore_errors</b>:<i>bool</i>) &rightarrow; <i>None</i></code></h3>
+<p/>
+Delete object
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<pre>obj:
+</pre>
+<dt><code>on_ref</code>:</dt>
+<dd>how handle objects that refer to deleted object,<pre>e.g., 'delete', 'ignore' or 'error'
+</pre>
+</dd>
+<dt><code>ignore_errors</code>:</dt>
+<dd>enable ignoring of errors</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt><code>dict</code>:</dt>
+<dd>data from deleted object</dd>
+
+
+<h3 class="w3-container"><code><b>Model.demand</b>(<b>kind</b>:<i>str</i>, <b>refresh</b>:<i>bool</i>) &rightarrow; <i>array</i></code></h3>
+<p/>
+Get demand array
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>kind</code>:</dt>
+<dd>'actual' or 'peak' demand</dd>
+<dt><code>refresh</code>:</dt>
+<dd>force recalculation of previous results</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt>np.array:</dt>
+<dd>demand vector</dd>
+
+
+<h3 class="w3-container"><code><b>Model.double</b>(<b>x</b>:<i>str</i>) &rightarrow; <i>float</i></code></h3>
+<p/>
+Extract a double value from a GridLAB-D property
+
+
+<h3 class="w3-container"><code><b>Model.find</b>(<b>oclass</b>:<i>str</i>, <b>astype</b>:<i>type</i>) &rightarrow; <i>dict | list</i></code></h3>
+<p/>
+Find objects of a class
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>model</code>:</dt>
+<dd>the GridLAB-D model</dd>
+<dt><code>oclass</code>:</dt>
+<dd>the desired class</dd>
+<dt><code>astype</code>:</dt>
+<dd>the return value (list or dict)</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt><code>list</code>:</dt>
+<dd>list of object names</dd>
+<dt><code>dict</code>:</dt>
+<dd>object data by name</dd>
+
+
+<h3 class="w3-container"><code><b>Model.format</b>(<b>value</b>:<i>Any</i>) &rightarrow; <i>str</i></code></h3>
+<p/>
+Apply formatting rules
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>value</code>:</dt>
+<dd>value to format</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt><code>str</code>:</dt>
+<dd>formatted value</dd>
+See <code>formatter</code>.
+<p/>
+
+
+<h3 class="w3-container"><code><b>Model.generation</b>(<b>kind</b>:<i>str</i>, <b>refresh</b>:<i>bool</i>) &rightarrow; <i>array</i></code></h3>
+<p/>
+Get generation array
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>kind</code>:</dt>
+<dd>'actual' or 'capacity'</dd>
+<dt><code>refresh</code>:</dt>
+<dd>force recalculation of previous results</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt>np.array:</dt>
+<dd>generation vector</dd>
+
+
+<h3 class="w3-container"><code><b>Model.generators</b>(<b>refresh</b>:<i>bool</i>) &rightarrow; <i>dict</i></code></h3>
+<p/>
+Get generator data
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>refresh</code>:</dt>
+<dd>force regeneration of data from model</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt><code>dict</code>:</dt>
+<dd>generator data</dd>
+
+
+<h3 class="w3-container"><code><b>Model.get_bus</b>(str | list) &rightarrow; <i>str | list</i></code></h3>
+<p/>
+Get bus name
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>name</code>:</dt>
+<dd>object name</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt><code>int</code>:</dt>
+<dd>bus id for specified object name</dd>
+<dt><code>list</code>:</dt>
+<dd>bus names for specified object names</dd>
+
+
+<h3 class="w3-container"><code><b>Model.get_name</b>(<b>kind</b>:<i>str</i>, int | list[int]) &rightarrow; <i>list</i></code></h3>
+<p/>
+Get bus/branch name
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>kind</code>:</dt>
+<dd>'bus' or 'branch'</dd>
+<dt><code>id</code>:</dt>
+<dd>bus/branch index</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt><code>str</code>:</dt>
+<dd>name of bus/branch at index id</dd>
+<dt>list[str]:</dt>
+<dd>list of names of busses/branches at indexes id</dd>
+
+
+<h3 class="w3-container"><code><b>Model.get_object</b>(<b>obj</b>:<i>str</i>) &rightarrow; <i>dict</i></code></h3>
+<p/>
+Get object data
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>obj</code>:</dt>
+<dd>object name</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt><code>dict</code>:</dt>
+<dd>object data</dd>
+
+
+<h3 class="w3-container"><code><b>Model.get_result</b>(<b>name</b>:<i>str</i>) &rightarrow; <i>Any</i></code></h3>
+<p/>
+Get result from cache
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>name</code>:</dt>
+<dd>cache variable name</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt><code>varies</code>:</dt>
+<dd>cached result if any</dd>
+
+
+<h3 class="w3-container"><code><b>Model.globals</b>(<b>name</b>:<i>str</i>) &rightarrow; <i>Union</i></code></h3>
+<p/>
+Get global variables
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>name</code>:</dt>
+<dd>name of global variable</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt><code>type</code>:</dt>
+<dd>value of global variable of type according to GridLAB-D type</dd>
+
+
+<h3 class="w3-container"><code><b>Model.graphIncidence</b>(<b>refresh</b>:<i>bool</i>) &rightarrow; <i>array</i></code></h3>
+<p/>
+Get network indicidence matrix
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>refresh</code>:</dt>
+<dd>force recalculation of previous results</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt>np.array:</dt>
+<dd>incidence matrix</dd>
+
+
+<h3 class="w3-container"><code><b>Model.graphLaplacian</b>(<b>refresh</b>:<i>bool</i>) &rightarrow; <i>array</i></code></h3>
+<p/>
+Get network graph Laplacian
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>refresh</code>:</dt>
+<dd>force recalculation of previous results</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt>np.array:</dt>
+<dd>graph Laplacian matrix</dd>
+
+
+<h3 class="w3-container"><code><b>Model.graphSpectral</b>(<b>refresh</b>:<i>bool</i>) &rightarrow; <i>tuple</i></code></h3>
+<p/>
+Get spectral analysis results
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>refresh</code>:</dt>
+<dd>force recalculation of previous results</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt><code>tuple</code>:</dt>
+<dd>(E,U,K) where E is the eigenvalues, U is the eigenvectors, and K is the number of networks found</dd>
+
+
+<h3 class="w3-container"><code><b>Model.impedance</b>(<b>refresh</b>:<i>bool</i>) &rightarrow; <i>array</i></code></h3>
+<p/>
+Get impedance array
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>refresh</code>:</dt>
+<dd>force regeneration of data from model</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt>np.array:</dt>
+<dd>line impedance array</dd>
+
+
+<h3 class="w3-container"><code><b>Model.int16</b>(<b>x</b>:<i>str</i>) &rightarrow; <i>int</i></code></h3>
+<p/>
+Extract an integer value from a GridLAB-D property
+
+
+<h3 class="w3-container"><code><b>Model.int32</b>(<b>x</b>:<i>str</i>) &rightarrow; <i>int</i></code></h3>
+<p/>
+Extract an integer value from a GridLAB-D property
+
+
+<h3 class="w3-container"><code><b>Model.int64</b>(<b>x</b>:<i>str</i>) &rightarrow; <i>int</i></code></h3>
+<p/>
+Extract an integer value from a GridLAB-D property
+
+
+<h3 class="w3-container"><code><b>Model.int8</b>(<b>x</b>:<i>str</i>) &rightarrow; <i>int</i></code></h3>
+<p/>
+Extract an integer value from a GridLAB-D property
+
+
+<h3 class="w3-container"><code><b>Model.lineratings</b>(<b>rating</b>:<i>str</i>, <b>refresh</b>:<i>bool</i>) &rightarrow; <i>array</i></code></h3>
+<p/>
+Get line ratings array
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>rating</code>:</dt>
+<dd>'A', 'B', or 'C'</dd>
+<dt><code>refresh</code>:</dt>
+<dd>force recalculation of previous results</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt>np.array:</dt>
+<dd>array of line ratings</dd>
+
+
+<h3 class="w3-container"><code><b>Model.lines</b>(<b>refresh</b>:<i>bool</i>) &rightarrow; <i>dict</i></code></h3>
+<p/>
+Get line data
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>refresh</code>:</dt>
+<dd>force regeneration of data from model</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt><code>dict</code>:</dt>
+<dd>line data</dd>
+
+
+<h3 class="w3-container"><code><b>Model.mermaid</b>(<b>orientation</b>:<i>str</i>, <b>overvolt</b>:<i>float</i>, <b>undervolt</b>:<i>float</i>, <b>highflow</b>:<i>float</i>, <b>showbusdata</b>:<i>Union</i>) &rightarrow; <i>str</i></code></h3>
+<p/>
+Generate network diagram in Mermaid
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>orientation</code>:</dt>
+<dd>horizontal or vertical graph orientation</dd>
+<dt><code>label</code>:</dt>
+<dd>property to use as label</dd>
+<dt><code>overvolt</code>:</dt>
+<dd>voltage limit for red fill</dd>
+<dt><code>undervolt</code>:</dt>
+<dd>voltage limit for blue fill</dd>
+<dt><code>highflow</code>:</dt>
+<dd>current limit for heavy line</dd>
+<dt><code>showbusdata</code>:</dt>
+<dd>enable display of bus data (or list of properties to display)</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt><code>str</code>:</dt>
+<dd>Mermaid diagram string</dd>
+
+
+<h3 class="w3-container"><code><b>Model.mod_object</b>(<b>obj</b>:<i>str</i>) &rightarrow; <i>None</i></code></h3>
+<p/>
+Modify object
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>obj</code>:</dt>
+<dd>object name</dd>
+<dt><code>kwargs</code>:</dt>
+<dd>properties and values to modify</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt><code>dict</code>:</dt>
+<dd>data from modified object</dd>
+
+
+<h3 class="w3-container"><code><b>Model.modules</b>() &rightarrow; <i>list</i></code></h3>
+<p/>
+Return list of active modules
+
+
+<h3 class="w3-container"><code><b>Model.nodes</b>(<b>refresh</b>:<i>bool</i>) &rightarrow; <i>dict</i></code></h3>
+<p/>
+Get node data
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>refresh</code>:</dt>
+<dd>force regeneration of data from model</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt><code>dict</code>:</dt>
+<dd>node data</dd>
+
+
+<h3 class="w3-container"><code><b>Model.optimal_powerflow</b>(<b>refresh</b>:<i>bool</i>, <b>verbose</b>:<i>Union</i>, int | str, <b>on_invalid</b>:<i>callable</i>, <b>on_fail</b>:<i>callable</i>) &rightarrow; <i>dict</i></code></h3>
+<p/>
+Compute optimal powerflow
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>refresh</code>:</dt>
+<dd>force recalculation of previous result</dd>
+<dt><code>verbose</code>:</dt>
+<dd>output solver data and results</dd>
+<dt><code>curtailment_price</code>:</dt>
+<dd>price at which load is curtailed</dd>
+<dt><code>ref</code>:</dt>
+<dd>reference bus id or name</dd>
+<dt><code>on_invalid</code>:</dt>
+<dd>invalid problem handler</dd>
+<dt><code>on_fail</code>:</dt>
+<dd>solution failed handler</dd>
+<dt><code>kwargs</code>:</dt>
+<dd>options passed of cvxpy.Problem.solve()</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt><code>dict</code>:</dt>
+<dd>solution results</dd>
+
+
+<h3 class="w3-container"><code><b>Model.optimal_sizing</b>(<b>refresh</b>:<i>bool</i>, <b>verbose</b>:<i>Union</i>, <b>update_model</b>:<i>bool</i>, <b>margin</b>:<i>float</i>, float | list | dict, float | list | dict, float | list | dict, float | list | dict, float | list | dict, float | list | dict, float | list | dict, int | str) &rightarrow; <i>dict</i></code></h3>
+<p/>
+Solve optimal sizing/placement problem
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>refresh</code>:</dt>
+<dd>force recalculation of all values</dd>
+<dt><code>verbose</code>:</dt>
+<dd>output solver data and results</dd>
+<dt><code>update_model</code>:</dt>
+<dd>update model with new generation and capacitors</dd>
+<dt><code>margin</code>:</dt>
+<dd>load capacity margin</dd>
+<dt><code>gen_cost</code>:</dt>
+<dd>generation addition cost data</dd>
+<dt><code>cap_cost</code>:</dt>
+<dd>capacitor addition cost data</dd>
+<dt><code>min_power_ratio</code>:</dt>
+<dd>new generation minimum reactive power ratio relative to real power</dd>
+<dt><code>voltage_high</code>:</dt>
+<dd>upper voltage constraint</dd>
+<dt><code>voltage_low</code>:</dt>
+<dd>lower voltage constraint</dd>
+<dt><code>steps</code>:</dt>
+<dd>number of capacitor steps</dd>
+<dt><code>admittance</code>:</dt>
+<dd>capacity admittance per step</dd>
+<dt><code>ref</code>:</dt>
+<dd>reference bus id or name</dd>
+<dt><code>on_invalid</code>:</dt>
+<dd>invalid problem handler</dd>
+<dt><code>on_fail</code>:</dt>
+<dd>failed solution handler</dd>
+<dt><code>kwargs</code>:</dt>
+<dd>arguments passed to solver</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt><code>dict</code>:</dt>
+<dd>results of optimization</dd>
+
+
+<h3 class="w3-container"><code><b>Model.perunit</b>(<b>kind</b>:<i>str</i>, <b>refresh</b>:<i>bool</i>) &rightarrow; <i>Union</i></code></h3>
+<p/>
+Get the per-unit values in the pypower model
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+
+
+<h3 class="w3-container"><code><b>Model.prices</b>(<b>refresh</b>:<i>bool</i>) &rightarrow; <i>array</i></code></h3>
+<p/>
+Get generation price array
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>refresh</code>:</dt>
+<dd>force recalculation of previous results</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt>np.array:</dt>
+<dd>price vector</dd>
+
+
+<h3 class="w3-container"><code><b>Model.property</b>(<b>obj</b>:<i>str</i>, <b>name</b>:<i>str</i>, <b>astype</b>:<i>str</i>) &rightarrow; <i>Any</i></code></h3>
+<p/>
+Get an object property and convert to Python type
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>obj</code>:</dt>
+<dd>name of object</dd>
+<dt><code>name</code>:</dt>
+<dd>name of property</dd>
+<dt><code>astype</code>:</dt>
+<dd>force property to type</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt><code>varies</code>:</dt>
+<dd>value of object property</dd>
+
+
+<h3 class="w3-container"><code><b>Model.run</b>(<b>filename</b>:<i>str</i>, <b>binary</b>:<i>bool</i>, <b>exception</b>:<i>bool</i>, <b>autosave</b>:<i>bool</i>) &rightarrow; <i>None</i></code></h3>
+<p/>
+Run a gridlabd simulation
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>name</code>:</dt>
+<dd>file name to load (default is ./${modelname}.glm)</dd>
+<dt><code>binary</code>:</dt>
+<dd>enable use of gridlabd binary with environment</dd>
+<dt><code>exception</code>:</dt>
+<dd>enable use of exceptions on errors</dd>
+<dt><code>autosave</code>:</dt>
+<dd>enable autosave of modified models</dd>
+<dt><code>args</code>:</dt>
+<dd>command line arguments</dd>
+<dt><code>kwargs</code>:</dt>
+<dd>global definitions</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt>int,list[str],list[str]:</dt>
+<dd>exit code, stdout, and stderr</dd>
+
+
+<h3 class="w3-container"><code><b>Model.runopf</b>() &rightarrow; <i>dict</i></code></h3>
+<p/>
+Run pypower optimal powerflow solver
+
+
+<h3 class="w3-container"><code><b>Model.runpf</b>() &rightarrow; <i>dict</i></code></h3>
+<p/>
+Run pypower powerflow solver
+
+
+<h3 class="w3-container"><code><b>Model.save</b>(<b>filename</b>:<i>str</i>) &rightarrow; <i>None</i></code></h3>
+<p/>
+Save model to file
+
+
+<h3 class="w3-container"><code><b>Model.savecase</b>() &rightarrow; <i>None</i></code></h3>
+<p/>
+Save pypower case data
+
+
+<h3 class="w3-container"><code><b>Model.select</b>(<b>criteria</b>:<i>dict</i>, <b>startwith</b>:<i>dict</i>) &rightarrow; <i>dict</i></code></h3>
+<p/>
+Select objects matching criteria
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>criteria</code>:</dt>
+<dd>selection criteria as "property":"value" dictionary</dd>
+<dt><code>startwith</code>:</dt>
+<dd>data dictionary to start with</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt><code>dict</code>:</dt>
+<dd>object data by name</dd>
+
+
+<h3 class="w3-container"><code><b>Model.set_result</b>(<b>value</b>:<i>Any</i>) &rightarrow; <i>Any</i></code></h3>
+<p/>
+Set result in cache
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>name</code>:</dt>
+<dd>cache variable name</dd>
+<dt><code>value</code>:</dt>
+<dd>value to stored in cache</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt><code>varies</code>:</dt>
+<dd>value stored in cache</dd>
+
+
+<h3 class="w3-container"><code><b>Model.shunts</b>(<b>refresh</b>:<i>bool</i>) &rightarrow; <i>dict</i></code></h3>
+<p/>
+Get shunt device data
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>refresh</code>:</dt>
+<dd>force regeneration of data from original model</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt><code>dict</code>:</dt>
+<dd>shunt device data</dd>
+
+
+<h3 class="w3-container"><code><b>Model.unit</b>(<b>x</b>:<i>str</i>) &rightarrow; <i>str</i></code></h3>
+<p/>
+Extract a unit specifier from a GridLAB-D property
+
+
+<h3 class="w3-container"><code><b>Model.validate</b>(<b>modules</b>:<i>str</i>) &rightarrow; <i>None</i></code></h3>
+<p/>
+Validate a GridLAB-D model
+<p/>
+
+
+<h4 class="w3-container">Arguments</h4>
+<p/>
+<dt><code>model</code>:</dt>
+<dd>the GridLAB-D model</dd>
+<dt><code>modules</code>:</dt>
+<dd>list of modules that must be present in the model</dd>
+
+
+<h4 class="w3-container">Returns</h4>
+<p/>
+<dt><code>None</code>:</dt>
+<dd>model contain no errors</dd>
+<dt><code>str</code>:</dt>
+<dd>model contains an error</dd>
+<h3 class="w3-container">Static Variables</h3>
+<p/><code>formatter = {<class 'float'>: <function Model.<lambda> at 0x11195ec00>, <class 'complex'>: <function Model.<lambda> at 0x11195e8e0>, <class 'int'>: <function Model.<lambda> at 0x11195ed40>}</code>
+<p/><code>pypower = {'bus': ['bus<sub>i',</sub> 'type', 'Pd', 'Qd', 'Gs', 'Bs', 'area', 'Vm', 'Va', 'baseKV', 'zone', 'Vmax', 'Vmin'], 'branch': ['fbus', 'tbus', 'r', 'x', 'b', 'rateA', 'rateB', 'rateC', 'ratio', 'angle', 'status', 'angmin', 'angmax'], 'gen': ['bus', 'Pg', 'Qg', 'Qmax', 'Qmin', 'Vg', 'mBase', 'status', 'Pmax', 'Pmin', 'Pc1', 'Pc2', 'Qc1min', 'Qc1max', 'Qc2min', 'Qc2max', 'ramp<sub>agc',</sub> 'ramp<sub>10',</sub> 'ramp<sub>30',</sub> 'ramp<sub>q',</sub> 'apf'], 'gencost': ['model', 'startup', 'shutdown']}</code>
+
+
+<h1 id="package" class="w3-container">Package Metadata</h1>
+<p/>
+<table class="w3-container">
+<tr><th><nobr>Name</nobr></th><td>:</td><td>gld_pypower</td></tr>
+<tr><th><nobr>Version</nobr></th><td>:</td><td>0.0.0a0</td></tr>
+<tr><th><nobr>Description</nobr></th><td>:</td><td>Arras Energy GridLAB-D PyPower API</td></tr>
+<tr><th><nobr>Authors</nobr></th><td>:</td><td>David P. Chassin <dchassin@eudoxys.com></td></tr>
+<tr><th><nobr>Maintainers</nobr></th><td>:</td><td>David P. Chassin <dchassin@eudoxys.com></td></tr>
+<tr><th><nobr>Requires-Python</nobr></th><td>:</td><td>>= 3.10</td></tr>
+<tr><th><nobr>Dependencies</nobr></th><td>:</td><td>numpy<br/>cvxpy<br/>pypower</td></tr>
+<tr><th><nobr>Keywords</nobr></th><td>:</td><td>github<br/>python<br/>energy<br/>arras<br/>gridlabd<br/>pypower</td></tr>
+<tr><th><nobr>License</nobr></th><td>:</td><td>MIT License</td></tr>
+<tr><th><nobr>Classifiers</nobr></th><td>:</td><td>Development Status :: 3 - Alpha<br/>Intended Audience :: Developers<br/>License :: OSI Approved :: MIT License<br/>Programming Language :: Python :: 3 :: Only<br/>Topic :: Software Development :: Libraries</td></tr>
+<tr><th><nobr>Urls</nobr></th><td>:</td><td>Homepage = https://github.com/eudoxys/arras<br/>Documentation = https://www.eudoxys.com/arras<br/>Repository = https://github.com/eudoxys/arras.git<br/>Issues = https://github.com/eudoxys/arras/issues</td></tr>
+<tr><th><nobr>Scripts</nobr></th><td>:</td><td><code>gld_pypower</code> &rightarrow; <code>main()</code></td></tr>
+</table>
+
+
+<hr/><p/><cite>Copyright &copy; 2025 Eudoxys Sciences LLC</body>
+            </html>
