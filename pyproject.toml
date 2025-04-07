@@ -3,7 +3,7 @@ requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
 [tools.setuptools.packages.find]
-where = ["src"]
+where = ["gld_pypower"]
 
 [tool.setuptools.package-data]
 qdox = ["*.py","*.css"]
