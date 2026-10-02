@@ -41,7 +41,7 @@ jobs:
       - name: Build documentation
         run: |
           # Generates documentation and places it in a 'docs' directory
-          pdoc -o docs your_package_name
+          pdoc -o docs src/arras/*.py
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
