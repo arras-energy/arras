@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.dynamic]
+dependencies = {file=["requirements.txt"]}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project]
+name = "arras"
+version = "26.0.0"
+description = "Arras Energy GridLAB-D engine"
+authors = [
+    {name = "David P. Chassin <dchassin@eudoxys.com>"},
+    ]
+maintainers = [
+    {name = "David P. Chassin <dchassin@eudoxys.com>"},
+    ]
+readme = "README.md"
+requires-python = "== 3.12.*"
+keywords = ["github","python","arras","gridlabd","engine"]
+license = "MIT"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3 :: Only",
+    ]
+dynamic=["dependencies"]
+
+[project.urls]
+Homepage = "https://github.com/arras-energy/gridlabd"
+Documentation = "https://arras.energy/gridlabd"
+Repository = "https://github.com/arras-energy/gridlabd.git"
+Issues = "https://github.com/arras-energy/gridlabd/issues"
+
+[project.scripts]
+arras = "arras.main:main"
