@@ -46,10 +46,29 @@ jobs:
     - name: Run tests
       # coverage settings are in pyproject.toml ([tool.coverage.*]); informational only
       run: |
-        pytest --durations=10 --cov --cov-report=term --cov-report=xml
+        pytest --durations=10 --cov --cov-report=term --cov-report=xml --cov-report=html
 
     - name: Coverage summary
       if: ${{ !cancelled() && hashFiles('.coverage') != '' }}
       run: |
         echo "## Test coverage" >> "$GITHUB_STEP_SUMMARY"
         coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
+        # shields.io endpoint for the README badge (published with the docs);
+        # --precision=0: the shell compares integers only
+        total=$(coverage report --format=total --precision=0)
+        if [ "$total" -ge 90 ]; then color=brightgreen
+        elif [ "$total" -ge 80 ]; then color=green
+        elif [ "$total" -ge 70 ]; then color=yellow
+        else color=red; fi
+        mkdir -p htmlcov
+        printf '{"schemaVersion":1,"label":"coverage","message":"%s%%","color":"%s"}\n' "$total" "$color" > htmlcov/badge.json
+
+    - name: Upload coverage report
+      if: ${{ !cancelled() && hashFiles('.coverage') != '' }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: |
+          coverage.xml
+          htmlcov/
+        retention-days: 90 # the docs site republishes the latest one from main
