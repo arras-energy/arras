@@ -8,7 +8,7 @@ on:
     branches: ["main"]
     paths:
       - ".github/workflows/deploy-pages.yml"
-  # docs (pdoc reads the package docstrings) after Validation passes on main
+  # docs (pdoc reads the package docstrings) and coverage after Validation passes on main
   workflow_run:
     workflows: ["Validation"]
     types: [completed]
@@ -17,6 +17,7 @@ on:
 
 permissions:
   contents: read
+  actions: read # download the coverage report artifact
   pages: write
   id-token: write
 
@@ -51,6 +52,19 @@ jobs:
       - name: Create docs
         run: |
           pdoc -o docs arras
+
+      - name: Add coverage report
+        # coverage-report artifact of the Validation run that triggered this one,
+        # else of the latest successful Validation run on main;
+        # served at /coverage/ (badge.json feeds the README badge)
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          run=${RUN_ID:-$(gh run list -R "$GITHUB_REPOSITORY" -w validate.yaml -b main -s success -L 1 --json databaseId -q '.[0].databaseId')}
+          gh run download "$run" -R "$GITHUB_REPOSITORY" -n coverage-report -D coverage-report
+          mv coverage-report/htmlcov docs/coverage
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

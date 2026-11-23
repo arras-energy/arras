@@ -15,7 +15,12 @@ Coverage (settings in `pyproject.toml` under `[tool.coverage.*]`):
 	pytest --cov --cov-report=term --cov-report=html   # report in htmlcov/
 
 CI (`.github/workflows/validate.yaml`) installs the package non-editable and
-runs the tests with coverage. Coverage is informational. The tests use no
+runs the tests with coverage. Coverage is informational. Each run shows a
+summary on its page and uploads `coverage.xml` and `htmlcov/` as the
+`coverage-report` artifact. After Validation passes on `main`,
+`.github/workflows/deploy-pages.yml` publishes that report at
+https://arras-energy.github.io/arras/coverage/, where `badge.json` feeds the
+README badge. The tests use no
 network and no credentials, and finish in about a second.
 
 test_globals.py
