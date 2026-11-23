@@ -27,6 +27,23 @@ See https://docs.gridlabd.us/ for documentation of the HiPAS GridLAB-D simulator
 
 See the [`arras.globals` documentation](https://arras-energy.github.io/arras/arras/globals.html) for the full list.
 
+`arras.Class` holds GridLAB-D object class definitions. Users register classes, declare properties as a GLM `class { ... }` block does, look up properties through the inheritance chain, and print a class as `gridlabd --modhelp` does:
+
+```python
+>>> from arras import Class
+>>> node = Class("node", module="powerflow")
+>>> node.publish("voltage_A[V]", "complex")
+<Property node.voltage_A:complex[V]>
+>>> test = Class.declare("test")
+>>> test.set_parent(node)
+>>> test.add_property("x", "double", unit="MW")
+<Property test.x:double[MW]>
+>>> test.find_property("voltage_A").oclass.name
+'node'
+```
+
+See the [`arras.oclass` documentation](https://arras-energy.github.io/arras/arras/oclass.html) for the rules each method follows.
+
 ## Testing
 
 ```bash
