@@ -110,9 +110,17 @@ Server mode
 -  `--slave MASTER`: Enables slave mode under master
 -  `--slavenode`: Sets a listener for a remote GridLAB-D call to run in slave mode
 -  --id IDNUM`: Sets the ID number for the slave to inform its using to the master
+
+Python API
+----------
+-  `arras.globals.Globals`: global variables with gridlabd defaults, get/set/create,
+   and `${...}` pseudo-global and expansion evaluation (see `arras.globals`)
 """
 
 import arras.exceptions as exception
 import arras.exitcodes as exitcodes
+import arras.globals
 import arras.main as main
 import arras.runner as runner
+
+from arras.globals import Globals, GlobalsError

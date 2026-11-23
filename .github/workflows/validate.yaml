@@ -1,0 +1,55 @@
+name: Validation
+
+# Run only when code or packaging changes
+on:
+  push:
+    branches: [ main ]
+    paths: &paths
+      - "src/**"
+      - "!**/*.md"
+      - "pyproject.toml"
+      - ".github/workflows/validate.yaml"
+  pull_request:
+    branches: [ main ]
+    paths: *paths
+  workflow_dispatch:
+
+# A newer push to the same branch/PR cancels the run in progress
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: ubuntu-24.04 # ubuntu-latest (26.04) has no python 3.12 builds yet
+    timeout-minutes: 15
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12" # must satisfy requires-python
+        cache: pip
+        cache-dependency-path: pyproject.toml
+
+    - name: Install packages
+      run: |
+        pip install --upgrade pip
+        pip install . pytest pytest-cov pylint   # non-editable: catches packaging mistakes
+
+    - name: Analyse code
+      run: |
+        pylint --fail-under 0 src/arras/*.py
+
+    - name: Run tests
+      # coverage settings are in pyproject.toml ([tool.coverage.*]); informational only
+      run: |
+        pytest --durations=10 --cov --cov-report=term --cov-report=xml
+
+    - name: Coverage summary
+      if: ${{ !cancelled() && hashFiles('.coverage') != '' }}
+      run: |
+        echo "## Test coverage" >> "$GITHUB_STEP_SUMMARY"
+        coverage report --format=markdown >> "$GITHUB_STEP_SUMMARY"
