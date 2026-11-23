@@ -2,3 +2,7 @@ __pycache__/
 build/
 .venv/
 *.egg-info
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
