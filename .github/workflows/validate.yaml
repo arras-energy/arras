@@ -61,7 +61,7 @@ jobs:
         elif [ "$total" -ge 70 ]; then color=yellow
         else color=red; fi
         mkdir -p htmlcov
-        printf '{"schemaVersion":1,"label":"coverage","message":"%s%%","color":"%s"}\n' "$total" "$color" > htmlcov/badge.json
+        printf '{"schemaVersion":1,"label":"Coverage","message":"%s%%","color":"%s"}\n' "$total" "$color" > htmlcov/badge.json
 
     - name: Upload coverage report
       if: ${{ !cancelled() && hashFiles('.coverage') != '' }}
