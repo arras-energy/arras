@@ -1,47 +1,59 @@
-name: Deploy to GitHub Pages
+name: Documentation
 
 on:
+  # Code and pyproject.toml changes also trigger Validation, so their docs are
+  # published by the workflow_run below (one deploy per push, docs only for
+  # passing code). Push triggers only for files Validation does not watch.
   push:
-    branches:
-      - main  # Change to master if your default branch is master
+    branches: ["main"]
+    paths:
+      - ".github/workflows/deploy-pages.yml"
+  # docs (pdoc reads the package docstrings) after Validation passes on main
+  workflow_run:
+    workflows: ["Validation"]
+    types: [completed]
+    branches: ["main"]
+  workflow_dispatch:
 
-# Sets permissions of the GITHUB_TOKEN to allow deployment to GitHub Pages
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# Allow one concurrent deployment
+# One deployment at a time; let a running deployment finish
 concurrency:
   group: "pages"
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   deploy:
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # ubuntu-latest (26.04) has no python 3.12 builds yet
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Setup python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.x'
+          python-version: "3.12" # must satisfy requires-python
+          cache: pip
+          cache-dependency-path: pyproject.toml
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pdoc
-          # If your package has dependencies required for import, install them here:
-          # pip install -r requirements.txt 
+          pip install . pdoc
 
-      - name: Build documentation
+      - name: Create docs
         run: |
-          # Generates documentation and places it in a 'docs' directory
-          pdoc -o docs src/arras/*.py
+          pdoc -o docs arras
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
@@ -50,4 +62,4 @@ jobs:
 
       - name: Deploy to GitHub Pages
         id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
