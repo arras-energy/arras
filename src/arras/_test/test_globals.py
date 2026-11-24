@@ -339,7 +339,7 @@ def test_findfile(g, tmp_path, monkeypatch):
     assert g.get("FINDFILE unitfile.txt") == os.path.join(arras.folders.PACKAGEDIR,"unitfile.txt")
     (tmp_path / "glpath").mkdir()
     (tmp_path / "glpath" / "glpath.txt").write_text("")
-    assert g.get("FINDFILE glpath.txt") == ""
+    assert g.get("FINDFILE glpath.txt") == str(tmp_path / "glpath" / "glpath.txt")
     work = tmp_path / "work"
     work.mkdir()
     (work / "weather.tmy3").write_text("")

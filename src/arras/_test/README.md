@@ -33,8 +33,8 @@ Fast, self-contained tests of `arras.folders`:
 - the package folder holds the files installed with `arras`;
 - the user folder from `ARRAS_USERDIR` and `~/.arras`, its subfolders, and
   folder creation only with `create=True`;
-- the working folder and the search order (working folder, user `share`
-  folder, package folder), with `GLPATH` not read;
+- the working folder, the `GLPATH` list, and the search order (working
+  folder, user `share` folder, `GLPATH` folders, package folder);
 - the module docstring examples (doctest).
 
 Run it alone with:
@@ -115,8 +115,9 @@ Fast, self-contained tests of `arras.model`:
 - GLM reading: a sample model with nested objects, `:..COUNT` and
   `:FIRST..LAST`, `inherit`, `@NAME`, multi-line and structured values,
   every supported directive and macro, `#include` and its search of the
-  working folder and the user `include` and `share` folders (not
-  `GLPATH`), `Model.module_loader`, and the error message and line number for each kind of bad input;
+  working folder, the user `include` and `share` folders, and `GLPATH`,
+  `Model.module_loader`, and the error message and line number for each
+  kind of bad input;
 - GLM and JSON writing, and reading the output back into the same objects;
 - `load_classes` from `--modhelp=json` style data, JSON globals, filters,
   and errors;
@@ -178,7 +179,7 @@ Fast, self-contained tests of `arras.units`:
 
 - loading the bundled copy of gridlabd's `runtime/unitfile.txt`: constants,
   scalar prefixes, primary and derived units, and the `unitfile.txt` search
-  in the working folder and the user `share` folder (not `GLPATH`);
+  in the working folder, the user `share` folder, and `GLPATH`;
 - the unit parameters that gridlabd's `unit.cpp` computes, including the
   parsing behaviors that `arras.units` reproduces (see its Caveats);
 - prefixed and compound units derived on request, and lookup errors;

@@ -444,6 +444,9 @@ def test_include_search(model, tmp_path, monkeypatch):
     monkeypatch.setenv("GLPATH", str(tmp_path / "glpath"))
     model.read_glm("#include <inc.glm>\n#include <shared.glm>\n")
     assert list(model.objects) == ["from_include", "from_share"]
+    model.read_glm("#include <old.glm>\n")
+    assert "from_glpath" in model.objects
+    monkeypatch.delenv("GLPATH")
     with pytest.raises(ModelError, match="#include file 'old.glm' is not found"):
         model.read_glm("#include <old.glm>\n")
     (work / "shared.glm").write_text("object node { name from_work; }\n")

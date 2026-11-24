@@ -181,7 +181,7 @@ The folder globals do not depend on a gridlabd install (see
    the user folder and the running Python. `GLD_ETC`, `GLD_BIN`,
    `GLD_LIB`, `GLD_VAR`, `GLD_INC`, and `GLTEMP` are not read.
 9. `${FINDFILE NAME}` searches the working folder, the user `share`
-   folder, and the `arras` package folder. `GLPATH` is not read.
+   folder, the `GLPATH` folders, and the `arras` package folder.
 
 References
 ----------

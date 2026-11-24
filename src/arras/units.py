@@ -23,8 +23,9 @@ Given no arguments, `Units()` loads the first `unitfile.txt` found in
 
 1. the current working folder (project files),
 2. the `share` folder of the user folder (files shared by all models,
-   see `arras.folders`), and
-3. the `arras` package folder, which holds the copy of gridlabd's
+   see `arras.folders`),
+3. each folder listed in `GLPATH` (separated by `;` or `os.pathsep`), and
+4. the `arras` package folder, which holds the copy of gridlabd's
    `runtime/unitfile.txt` that ships with `arras`,
 
 and returns an object that is expected to satisfy:
@@ -108,8 +109,8 @@ Caveats
 
 - `Units` is an independent Python model of gridlabd's unit manager. It
   does not read from or write to a running `gridlabd` process.
-- `GLPATH` is not read; a unit file shared by all models goes in the
-  `share` folder of the user folder (`arras.folders.userdir("share")`).
+- A unit file shared by all models goes in the `share` folder of the user
+  folder (`arras.folders.userdir("share")`) or in a `GLPATH` folder.
 - Each `Units` object has its own unit list. Units derived by `find()` are
   added to it, as `unit_find()` adds them to gridlabd's list.
 - Constants are read and checked but, as in gridlabd, not used in any
@@ -264,8 +265,8 @@ class Units:
         Arguments
         ---------
         - `file`: path of the unit definition file (default searches the
-          working folder, the user `share` folder, then the `arras`
-          package folder)
+          working folder, the user `share` folder, `GLPATH`, then the
+          `arras` package folder)
 
         Exceptions
         ----------
@@ -288,7 +289,8 @@ class Units:
         Returns
         -------
         - `str`: path of the first `unitfile.txt` found in the working
-          folder or the user `share` folder, else `DEFAULT_UNITFILE`
+          folder, the user `share` folder, or a `GLPATH` folder, else
+          `DEFAULT_UNITFILE`
         """
         for folder in folders.search_path(".")[:-1]:
             path = os.path.join(folder,UNITFILE)

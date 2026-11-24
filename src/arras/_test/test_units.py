@@ -31,11 +31,11 @@ def test_locate(tmp_path,monkeypatch):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("ARRAS_USERDIR",str(tmp_path / "user"))
     assert Units.locate() == DEFAULT_UNITFILE
-    folder = tmp_path / "glpath"
-    folder.mkdir()
-    (folder / "unitfile.txt").write_text("")
-    monkeypatch.setenv("GLPATH",str(folder))
-    assert Units.locate() == DEFAULT_UNITFILE
+    glpath = tmp_path / "glpath"
+    glpath.mkdir()
+    (glpath / "unitfile.txt").write_text("unit=0,0,0,0,0,0,1,0,16\n")
+    monkeypatch.setenv("GLPATH",f"/nowhere;{glpath}")
+    assert Units.locate() == str(glpath / "unitfile.txt")
     folder = tmp_path / "user" / "share"
     folder.mkdir(parents=True)
     (folder / "unitfile.txt").write_text("unit=0,0,0,0,0,0,1,0,16\n")

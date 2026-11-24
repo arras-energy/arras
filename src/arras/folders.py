@@ -2,7 +2,8 @@
 
 The `arras.folders` module gives the three places where `arras` reads and
 writes files, so that no part of `arras` depends on a `gridlabd` install
-(`/usr/local/opt/gridlabd`, `GLD_*`, `GLPATH`, `~/.gridlabd`).
+(`/usr/local/opt/gridlabd`, `GLD_*`, `~/.gridlabd`). `GLPATH` is kept as
+an optional list of extra folders to search.
 
 Syntax
 ------
@@ -11,6 +12,7 @@ Syntax
     arras.folders.PACKAGEDIR
     arras.folders.userdir([*parts], [create=False])
     arras.folders.workdir()
+    arras.folders.glpath()
     arras.folders.search_path([workdir])
     arras.folders.findfile(name, [workdir])
 
@@ -51,10 +53,14 @@ The functions are expected to satisfy:
 1. `userdir(*parts)` returns the absolute path of `parts` under the user
    folder. It creates no folder unless `create=True`, in which case it
    creates the folder that the path names and its parents.
-2. `search_path(workdir)` returns the working folder, the `share` folder
-   of the user folder, and the package folder, in that order, so a project
-   file hides a shared file and a shared file hides an installed file.
-3. `findfile(name, workdir)` returns the absolute path of the first file
+2. `glpath()` returns the folders listed in `GLPATH`, separated by `;` or
+   `os.pathsep`, with empty entries dropped, or `[]` when `GLPATH` is not
+   set.
+3. `search_path(workdir)` returns the working folder, the `share` folder
+   of the user folder, the `GLPATH` folders, and the package folder, in
+   that order, so a project file hides a shared file and a shared file
+   hides an installed file.
+4. `findfile(name, workdir)` returns the absolute path of the first file
    `name` in `search_path(workdir)`, or `None`. An absolute `name` is
    returned when the file exists.
 
@@ -67,8 +73,10 @@ Examples
     >>> os.environ["ARRAS_USERDIR"] = "/home/user/.arras"
     >>> arras.folders.userdir("share")
     '/home/user/.arras/share'
-    >>> arras.folders.search_path("/project")[:2]
-    ['/project', '/home/user/.arras/share']
+    >>> os.environ["GLPATH"] = "/data/weather;/data/library"
+    >>> arras.folders.search_path("/project")[:4]
+    ['/project', '/home/user/.arras/share', '/data/weather', '/data/library']
+    >>> del os.environ["GLPATH"]
     >>> installed = os.path.join(arras.folders.PACKAGEDIR, "unitfile.txt")
     >>> arras.folders.findfile("unitfile.txt", "/nowhere") == installed
     True
@@ -87,9 +95,11 @@ Caveats
 Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
 -----------------------------------------------------------------
 
-1. `GLD_ETC`, `GLD_BIN`, `GLD_LIB`, `GLD_VAR`, `GLD_INC`, `GLTEMP`, and
-   `GLPATH` are not read. Shared files are found in the user folder and
-   the package folder instead of the gridlabd install and `GLPATH`.
+1. `GLD_ETC`, `GLD_BIN`, `GLD_LIB`, `GLD_VAR`, `GLD_INC`, and `GLTEMP`
+   are not read. Shared files are found in the user folder and the package
+   folder instead of the gridlabd install.
+2. `GLPATH` folders are searched after the working folder and the user
+   `share` folder, and before the package folder.
 
 References
 ----------
@@ -99,6 +109,7 @@ References
 """
 
 import os
+import re
 
 PACKAGEDIR = os.path.dirname(os.path.abspath(__file__))
 """Folder of the installed `arras` package"""
@@ -136,6 +147,16 @@ def workdir() -> str:
     """
     return os.getcwd()
 
+def glpath() -> list[str]:
+    """Extra folders to search, from `GLPATH`
+
+    Returns
+    -------
+    - `list[str]`: the folders listed in `GLPATH`, separated by `;` or
+      `os.pathsep`, or `[]` when `GLPATH` is not set
+    """
+    return [x for x in re.split(f"[;{re.escape(os.pathsep)}]", os.getenv("GLPATH", "")) if x]
+
 def search_path(workdir:str|None=None) -> list[str]: # pylint: disable=redefined-outer-name
     """Folders searched for files
 
@@ -145,10 +166,10 @@ def search_path(workdir:str|None=None) -> list[str]: # pylint: disable=redefined
 
     Returns
     -------
-    - `list[str]`: the working folder, the user `share` folder, and the
-      package folder
+    - `list[str]`: the working folder, the user `share` folder, the
+      `GLPATH` folders, and the package folder
     """
-    return [workdir or os.getcwd(), userdir("share"), PACKAGEDIR]
+    return [workdir or os.getcwd(), userdir("share")] + glpath() + [PACKAGEDIR]
 
 def findfile(name:str, workdir:str|None=None) -> str|None: # pylint: disable=redefined-outer-name
     """Find a file in the search path

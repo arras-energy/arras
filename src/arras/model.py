@@ -192,8 +192,8 @@ Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
 3. Values that end at a newline without `;` are refused. gridlabd ends a
    value at the newline and then expects `;`.
 4. `#include` searches the folder of the including file, the working
-   folder, the user `include` and `share` folders, and the `arras` package
-   folder (`arras.folders`). `GLPATH` is not read.
+   folder, the user `include` and `share` folders, the `GLPATH` folders,
+   and the `arras` package folder (`arras.folders`).
 
 References
 ----------
@@ -1505,8 +1505,8 @@ class Model: # pylint: disable=too-many-instance-attributes,too-many-public-meth
         if depth >= MAXINCLUDE:
             raise ModelError(f"{where}: #include nesting is too deep")
         search = [os.path.dirname(filename) if filename != "(text)" else ""]
-        workdir, share, package = arras.folders.search_path()
-        search += [workdir, arras.folders.userdir("include"), share, package]
+        path = arras.folders.search_path()
+        search += path[:1] + [arras.folders.userdir("include")] + path[1:]
         for folder in search:
             path = os.path.join(folder, name)
             if os.path.isfile(path):
