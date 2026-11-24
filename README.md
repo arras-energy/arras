@@ -106,6 +106,30 @@ True
 
 See the [`arras.runner` documentation](https://arras-energy.github.io/arras/arras/runner.html) for the command line options, the synchronization passes, the handler rules, and the differences from gridlabd.
 
+## gridlabd modules in Python
+
+Some gridlabd modules are ported to Python packages that are installed with `arras`. A model loads one as gridlabd does, with `module NAME;`, and its objects work in `arras.Runner` simulations. The first is the `assert` module, whose objects check properties at each time step and stop the simulation when a check fails:
+
+```python
+>>> from arras import Model, Runner
+>>> m = Model()
+>>> m.read_glm("""
+... clock { starttime "2020-01-01 00:00:00 UTC"; stoptime "2020-01-01 00:00:00 UTC"; }
+... module assert;
+... class meter { complex voltage_A[V]; }
+... object meter {
+...     name "m1";
+...     voltage_A 120+1j;
+...     object assert { target "voltage_A"; part "mag"; relation "inside"; lower 119; upper 121; };
+...     object complex_assert { target "voltage_A"; value 120; operation REAL; within 0.1; };
+... }
+... """)
+>>> Runner(model=m).returncode
+0
+```
+
+`assert` is a Python keyword, so the package is imported with `importlib.import_module("assert")`. See the [`assert` documentation](https://arras-energy.github.io/arras/assert.html) for its classes `assert`, `double_assert`, `complex_assert`, `enum_assert`, and `int_assert`, and the differences from gridlabd. A distribution can provide other modules the same way, as an `arras.modules` entry point (see [`arras.model`](https://arras-energy.github.io/arras/arras/model.html)).
+
 ## Testing
 
 ```bash
@@ -114,7 +138,7 @@ pip install -e . pytest pytest-cov
 pytest --cov
 ```
 
-See `src/arras/_test/README.md` for what the tests check. The coverage report for `main` is published at https://arras-energy.github.io/arras/coverage/.
+See `src/arras/_test/README.md` and `src/assert/_test/README.md` for what the tests check. The coverage report for `main` is published at https://arras-energy.github.io/arras/coverage/.
 
 ## Source Code Repositories
 

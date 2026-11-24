@@ -1,0 +1,5 @@
+// climate class standing in for the climate module class used by the gridlabd autotests
+class climate {
+	double temperature[degF];
+	enumeration {NONE=0, LINEAR=1, QUADRATIC=2} interpolate;
+}

@@ -47,6 +47,16 @@ Python API
 -  `arras.runner.Runner`: quasi-steady time-series simulation of a model,
    in the foreground or in a background thread with a progress callback
    (see `arras.runner`)
+
+gridlabd modules in Python
+--------------------------
+Python packages installed with `arras` implement some gridlabd modules. A
+model loads one with GLM `module NAME;` (`arras.model.Model.load_module()`
+finds it as an `arras.modules` entry point):
+
+-  `assert`: the `assert`, `double_assert`, `complex_assert`, `enum_assert`,
+   and `int_assert` classes, whose objects stop a simulation when a property
+   check fails (see `assert`)
 """
 
 import arras.exceptions as exception

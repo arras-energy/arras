@@ -1,0 +1,4 @@
+// house class standing in for the residential house used by the gridlabd autotests
+class house {
+	int64 compressor_count;
+}

@@ -4,7 +4,8 @@ Status: decisions recorded from the code as merged through #16, 2026-11-23;
 modules and solver dispatch (`arras.module`, #22) added 2026-11-23;
 internal item and heartbeat dispatch added 2026-11-23;
 runner decisions revised for #45, 2026-11-24;
-folders without a gridlabd install (`arras.folders`, decision 1.12, #47), 2026-11-24
+folders without a gridlabd install (`arras.folders`, decision 1.12, #47), 2026-11-24;
+gridlabd modules as Python packages and the `assert` module (decisions 1.13, 6.15, group 8, #49), 2026-11-24
 
 ## Purpose
 
@@ -17,7 +18,9 @@ GridLAB-D. It provides:
   global variables (`arras.globals`), object classes (`arras.oclass`),
   units (`arras.units`), models with GLM and JSON input and output
   (`arras.model`), and modules with the solvers that keep the clock
-  synchronized (`arras.module`).
+  synchronized (`arras.module`); and
+- gridlabd modules implemented in Python, each a top-level package under
+  `src/` (the first is `assert`, decision group 8).
 
 The Python model reads, checks, edits, and writes what gridlabd reads and
 writes, without running `gridlabd`. Users get the same values, text, and
@@ -34,7 +37,8 @@ transforms, enduses), with all of them written as Python callables
 (decisions 7.3, 7.8, 7.9). Excluded: the gridlabd modules (`powerflow`,
 `residential`, ...) themselves, deltamode, realtime mode, and multithreaded
 passes. These stay in the C++ code of
-[arras-energy/gridlabd](https://github.com/arras-energy/gridlabd).
+[arras-energy/gridlabd](https://github.com/arras-energy/gridlabd), except
+the modules ported to Python packages (1.13).
 The classes that modules publish come into `arras` from JSON that gridlabd
 writes.
 
@@ -65,8 +69,9 @@ PRs can cite "decision 4.3".
 | 1.8 | Module docstring examples and the README examples run as doctests in the test suite. |
 | 1.9 | Tests are fast and self-contained: no network, no credentials, no gridlabd install; the suite finishes in seconds. Coverage is reported but has no threshold. |
 | 1.10 | Python 3.12 only (`requires-python = "== 3.12.*"`). CI pins `ubuntu-24.04` and Python 3.12 and installs the package non-editable to catch packaging mistakes. |
-| 1.11 | Source layout is `src/arras/`; tests are in `src/arras/_test/` with their data in `src/arras/_test/data/` and a README for each. |
+| 1.11 | Source layout is `src/arras/`; tests are in `src/arras/_test/` with their data in `src/arras/_test/data/` and a README for each. A gridlabd module package (1.13) follows the same layout in `src/NAME/` (`src/NAME/_test/`, `src/NAME/_test/data/`); its test file names do not repeat those of other packages, because the test folders are not packages. (Edited 2026-11-24, #49.) |
 | 1.12 | `arras` does not depend on gridlabd folders or files (`/usr/local/opt/gridlabd`, `GLD_*`, `GLTEMP`, `~/.gridlabd`, `/tmp/gridlabd-*`). `arras.folders` gives three folders: the package folder (`PACKAGEDIR`, where Python imports `arras` from) for files installed with `arras`; the user folder (`ARRAS_USERDIR`, else `~/.arras`, with `share`, `lib`, `include`, `var`, and `tmp` subfolders) for files installed at runtime and shared by all models; and the working folder for project files. Files are searched in the working folder, the user `share` folder, the folders listed in `GLPATH` (optional, separated by `;` or `os.pathsep`), then the package folder. No folder is created unless code asks for it. (2026-11-24, #47) |
+| 1.13 | A gridlabd module implemented in Python is a top-level package named for the module, in `src/NAME/`, installed with the `arras` distribution. It registers itself in the `arras.modules` entry point group (`[project.entry-points."arras.modules"]` in `pyproject.toml`) with a function `load(model)`, which `Model.load_module()` calls (6.15). The package registers the module in `Module.registry`, its classes in `Class.registry` with the properties gridlabd publishes, and its globals in the model. Object behavior comes from class event handlers `python:NAME.FUNCTION` (2.6), since the runner gives objects behavior only through handlers. A module name that is a Python keyword (`assert`) is imported with `importlib.import_module()`. Other distributions can provide modules the same way. (2026-11-24, #49) |
 
 ### 2. Command line and runner (`main`, `runner`, `exitcodes`, `exceptions`)
 
@@ -79,7 +84,7 @@ PRs can cite "decision 4.3".
 | 2.5 | `Runner` reproduces the event-mode main loop of `GldExec::exec_start()` (`source/exec.cpp`): objects initialized in creation order with `init_max_defer` deferral rounds, then `Module.initall()`; at each iteration `Module.internalsyncall()` with the objects whose `heartbeat` header is greater than 0; on the first iteration of a time step object precommit then `Module.precommitall()`, whose result is posted as an event (the clock itself means no event); `Module.presyncall()` and presync top-down, sync bottom-up and `Module.syncall()`, `Module.postsyncall()` and postsync top-down, by rank (parents rank above children, `set_rank()`), equal ranks in creation order, with `Module.transformsyncall()` for non-schedule sources after each pass; hard and soft events merged as `sync_set()` does, with `stoptime+1` as a hard event when `stoptime` is set; `minimum_timestep` rounding of object hard events; iteration while the earliest event is the clock, up to `iteration_limit`; object commit then `Module.commitall()`, every object's `clock` set, then `Module.clockupdateall()`, posted as a hard event only when it lowers the next time; `in_svc`/`out_svc`; finalize then `Module.termall()` after the time series, also after a failure or stop. Object commit times other than `TS_INVALID` and 0 are ignored, as in `commit_all()`. Two core behaviors are fixed rather than reproduced (2.12, 2.13). (Edited 2026-11-24, #45: module solvers, internal items, and heartbeats added after #23 merged.) |
 | 2.6 | Object behavior comes only from event handlers (`docs/GLM/Object/Events.md`): an object's `on_<event>` property, else its class's. `python:MODULE.FUNCTION` calls `FUNCTION(name, t)`; other text runs as a shell command with `CLOCK`, `HOSTNAME`, `PORT`, and `OBJECT` set and its output lines captured. Class `PASSCONFIG` bits do not add objects to passes. For each module that the model loads and that has no solvers in `Module.registry`, a Python file `NAME.py` in a `pythonpath` folder, the working folder, or the user `lib` folder (1.12) is imported and its `on_init(t)` ... `on_term(t)` functions become the module's solvers, wrapped as `python/python.cpp` does (exceptions and non-integer sync results give `TS_INVALID` or false with an error line). The module stays registered after the run. |
 | 2.7 | Errors during a run do not raise: `Runner` records `returncode` (`ARGERR`, `LDERR`, `INIERR`, `RUNERR`, `IOERR`, or `EXCEPTION` for an unexpected exception) and adds `ERROR [TIME]: text` to `stderr`. Only bad constructor arguments raise `RunnerError`. |
-| 2.8 | `stdout` and `stderr` are lists of lines. Handlers add lines with `Runner.current().output()` and `.error()`; verbose, warning, and debug lines follow the `verbose`, `warn`, `debug`, and `quiet` globals of the model. |
+| 2.8 | `stdout` and `stderr` are lists of lines. Handlers add lines with `Runner.current().output()`, `.error()`, `.warning()`, and `.verbose()`; verbose, warning, and debug lines follow the `verbose`, `warn`, `debug`, and `quiet` globals of the model. (`verbose()` added 2026-11-24 for module packages, 1.13.) |
 | 2.9 | `background=True` runs the simulation in a daemon thread of the calling process; `running`, `wait()`, and `stop()` control it. A thread rather than a process keeps the model, its classes, and Python handlers shared with the caller without serialization. |
 | 2.10 | The progress callback is called after each committed time step and once at the end, with only those of the optional arguments `timestamp`, `percent`, `stdout`, `stderr` that its signature names (all with `**kwargs`); `stdout` and `stderr` hold the lines added since the previous call. Returning `False` stops the run; raising stops it with `RUNERR`. |
 | 2.11 | The model given with `-o` is written whenever the model was loaded, also after a failed run. |
@@ -145,6 +150,7 @@ PRs can cite "decision 4.3".
 | 6.12 | A value that ends at a newline without `;` is refused. |
 | 6.13 | Time zone abbreviations (e.g. `PST`) in JSON globals that `Globals` cannot convert (3.9) leave the global at its default and log a warning. Object timestamps in that form are stored as given. |
 | 6.14 | Numbers written after unit conversion are rounded to 15 significant digits, so conversion errors such as `1500.0000000000002` do not appear. |
+| 6.15 | `Model.load_module(name)` first calls the `arras.modules` entry point named `name`, if an installed distribution provides one (1.13), on every load, so each model gets the module's globals; then it adds the module's registered classes, and calls `Model.module_loader` only when none are registered. An entry point that cannot be loaded, is not callable, or raises an `ArrasException` raises `ModelError`. (2026-11-24, #49) |
 
 ### 7. Modules (`arras.module`)
 
@@ -160,6 +166,19 @@ PRs can cite "decision 4.3".
 | 7.8 | Heartbeat solvers are attached per class by the class's module (`set_heartbeat()`), as a module sets `CLASS::heartbeat`. `heartbeatsyncall(objects)` takes the heartbeat objects from the caller (objects with `heartbeat > 0`, as `exec_init()` collects them) and does not read objects itself; an object whose class has no solver counts as `TS_NEVER`; parents' solvers are not used. |
 | 7.9 | Random variables, schedules, loadshapes, transforms, and enduses are internal items: Python callables `sync(t1)` added with `Module.add_internal()` and kept in `Module.internals` in creation order (transforms with their `TRANSFORMSOURCE` bits, schedules with an `interpolated` flag). Their values, shapes, and transform arithmetic (including schedule skew) are the callables' job. |
 | 7.10 | `randomvarsyncall()`, `schedulesyncall()`, `loadshapesyncall()`, `transformsyncall()`, `endusesyncall()`, `heartbeatsyncall()`, and `internalsyncall()` reproduce the single-thread paths of the core functions: absolute-time minimum returned as a soft time for random variables and heartbeats, signed minimum for the others, the schedule and loadshape next-time caches (shared by the process, cleared by `Module.reset()`), the interpolated-schedule override, and `syncall_internals()`'s soft-event combination, `minimum_timestep` rounding, and the zero-terminated `earliest_timestamp()` list. Link and instance times, which `arras` does not model, are arguments. |
+
+### 8. The `assert` module (`src/assert/`, #49)
+
+| # | Decision |
+|---|---|
+| 8.1 | The package reproduces gridlabd's `module/assert` (`init.cpp`, `assert.cpp`, `double_assert.cpp`, `complex_assert.cpp`, `enum_assert.cpp`, `int_assert.cpp`): the classes `assert`, `double_assert`, `complex_assert`, `enum_assert`, and `int_assert` in registration order, with the published property names, types, keywords (listed in reverse publication order, as gridlabd lists them), defaults (including `within` and `upper` defaulting to `0`, set by `g_assert::create()`), flags, descriptions, `PC_AUTOLOCK|PC_OBSERVER`, and `TRL_PROVEN`; and the `assert::message_flags` global (`INIT_MMF()`). One module per class (`g_assert.py`, `double_assert.py`, ...), each with one public class and the class's documentation; private helpers in `_common.py`, `_compare.py`, `_find.py`, `_base.py`. |
+| 8.2 | Each class has `on_init "python:assert.init"` and `on_commit "python:assert.commit"`, which dispatch on the object's class to the `init()` and `commit()` of the class's Python class. The state that the C++ objects keep in members that are not published (targets, the hold start time, `once_value`) is kept per model and object name, and dropped with the model. |
+| 8.3 | Messages reproduce the C++ text and routing: `gld_object::error()`, `warning()`, and `verbose()` prefix the object name and follow the object flags (`QUIET`, `WARNING`, `VERBOSE`), taken from the `flags` header and `assert::message_flags`; `gl_error()`, `gl_warning()`, and `gl_verbose()` do not. `init()` failures are written as `INIT_CATCHALL()` writes them. |
+| 8.4 | The `assert` class compares as the core does (`property_compare_basic_str()`, `property_compare_basic()`, `source/compare.cpp`, the `convert_to_*()` functions, and the `get_part` functions), including the core's quirks: `within` is the tolerance of `==` and `!=` on real numbers; integer, enumeration, set, and timestamp comparisons use the low 32 bits as a signed `int` (`int16` its unsigned 16 bits); a complex compares its real part; `charN` values are cut to N characters; a value that converts with an error code below 0 makes the comparison false with a warning. `int_assert` reads `value` and `within` as unsigned 32-bit numbers (they are `int32` properties in 64-bit members). These are documented in each class's docstring so they can be fixed in both code bases together. |
+| 8.5 | Where reproducing the C++ is not possible, the intended behavior is used and listed under the module's Differences from gridlabd (1.4): `object` parts read the object referred to (gridlabd's `object_get_part()` reads the reference's own address); conversions that gridlabd leaves uninitialized fail with a warning; typed asserts without a parent test the global variable (gridlabd dereferences a null parent); integers given to `%g` in `enum_assert` messages are printed as numbers. Where the code and the documentation disagree, the code's published types and keyword values are kept (`assert.status`, `int_assert.value` and `within`) and listed for review, as a deliberate exception to 1.3, because they define the class interface that gridlabd writes in JSON and modhelp. |
+| 8.6 | `group` supports the header terms of gridlabd's find language (`class`, `isa`, `groupid`, `module`, `id`, `name`, `parent`, `rank` with `=`, `!=`, `<`, `>`, `<=`, `>=`, joined by `;`, `AND`, `and`); other terms make the group not valid. |
+| 8.7 | The tests port every gridlabd autotest in `module/assert/autotest/` to `src/assert/_test/data/`, with the changes listed in `src/assert/_test/README.md` (classes of the `powerflow`, `climate`, and `residential` modules declared in GLM, IANA time zones, `randomvar` refreshes replaced by a seeded Python handler). Files named `*_err.glm` must fail with `RUNERR`; the others must succeed. |
+| 8.8 | Deltamode update functions (`update_double_assert()`, `update_complex_assert()`, `update_enum_assert()`) and property notifications (`postnotify()`) are not modeled, because `arras` runs no deltamode and has no property notifications; the `once` logic runs the test again when `value` changes. |
 
 ## Conventions inherited
 
@@ -201,6 +220,20 @@ src/arras/
   module.py        Module(name, major, minor, **solvers): modules, solver dispatch
   _test/           pytest tests, one test_<module>.py per module
     data/          gridlabd-written test inputs (case14.json)
+
+src/assert/        gridlabd assert module (decision group 8), entry point assert:load
+  __init__.py      package docs; load(model), classes(), init(name,t), commit(name,t)
+  g_assert.py      Assert: class assert
+  double_assert.py DoubleAssert: class double_assert
+  complex_assert.py ComplexAssert: class complex_assert
+  enum_assert.py   EnumAssert: class enum_assert
+  int_assert.py    IntAssert: class int_assert
+  _base.py         AssertClass: registration and helpers shared by the classes
+  _common.py       targets, value conversion, messages, per-object state
+  _compare.py      core property comparisons and parts
+  _find.py         group (find) expressions
+  _test/           pytest tests
+    data/          gridlabd assert autotests ported to arras
 ```
 
 Dependencies between modules (`runner` imports `model` when a `Runner`
@@ -223,7 +256,14 @@ flowchart LR
   model --> oclass
   model --> units
   module --> oclass
+  assert --> model
+  assert --> module
+  assert --> oclass
+  assert --> runner
 ```
+
+`model` reaches `assert` only through the `arras.modules` entry point
+(6.15), so `arras` does not import the module packages.
 
 ## Contracts
 
@@ -235,6 +275,7 @@ flowchart LR
 | `Model` | `Model(file=None, globals=None, strict=True)` | globals, modules, classes, schedules, filters, objects |
 | `Module` | `Module(name, major=0, minor=0, **solvers)`, `Module.load(name)` | module registry entry, its solvers; its classes through `Class.registry` |
 | `Runner` | `Runner(*args, model=None, background=False, progress=None)` | the model run, exit code, output and error lines, clock, step count |
+| module package | `load(model)` (`arras.modules` entry point) | registers the module, its classes and event handlers, and its globals (1.13) |
 
 A `Model` composes the others: it owns one `Globals`, registers its classes
 in the shared `Class.registry`, and checks units with the shared
@@ -253,6 +294,7 @@ Each module is checked against these gridlabd files (`master` 076e78a):
 | `module` | `source/module.h`, `module.cpp`, `exec.cpp` (`clock_update_modules()`, `syncall_internals()`, `sync_heartbeats()`, module calls in the sync passes), `deltamode.cpp`, `object.cpp` (`object_heartbeat()`), `random.cpp`, `schedule.cpp`, `loadshape.cpp`, `transform.cpp`, `transform.h`, `enduse.cpp`, `timestamp.h`, `timestamp.cpp`; `docs/GLM/Directive/Module.md` |
 | `exitcodes` | gridlabd exit codes |
 | `runner` | `source/exec.cpp`, `object.cpp`, `main.cpp`, `module.cpp`; `python/python.cpp` (`python_module_load()`, `python_event()`); `docs/GLM/Object/Events.md`, `docs/Module/Python.md` |
+| `assert` | `module/assert/` (all files and `autotest/`), `source/gridlabd.h` (`INIT_MMF()`, `gld_object`, `gld_property`, `INIT_CATCHALL()`), `property.cpp`, `compare.cpp`, `convert.cpp`, `timestamp.cpp`, `object.cpp`, `enduse.cpp`, `random.cpp`, `find.cpp`; `docs/Module/Assert.md`, `docs/Module/Assert/` |
 
 ## Files and formats
 
@@ -281,7 +323,12 @@ Each module is checked against these gridlabd files (`master` 076e78a):
   `gridlabd` (#16).
 - `arras.model.Model.modules` still holds each module as a `dict` of
   `major` and `minor`; `Model.load_module()` does not yet create or use an
-  `arras.module.Module` (see open question 4).
+  `arras.module.Module` (see open question 4), though module packages
+  (1.13) call `Module.load()` themselves.
+- `arras` writes object `clock` values with time zone abbreviations
+  (`2001-01-01 00:00:00 PST`) that `Globals.timestamp_from_string()` does
+  not read back (#41); `assert` resolves the abbreviation against the
+  model's time zone.
 - Models and scripts that set `GLD_*` or `GLTEMP` for gridlabd
   get no effect from them in `arras` (1.12): move shared files to the user
   `share` folder (or set `ARRAS_USERDIR`), or set the folder globals in the
@@ -302,3 +349,9 @@ Each module is checked against these gridlabd files (`master` 076e78a):
    look modules up in `Module.registry` by name.
 5. Should `background=True` also offer a separate process, for
    simulations whose handlers hold the GIL for long periods (2.9)?
+6. Should the find-expression subset in `assert._find` move to
+   `arras.model`, where it could also serve the `FIND` pseudo-global
+   (#34)? It stays private to `assert` until then (8.6).
+7. Should `assert.status` follow the documentation (`NONE=3`) or the code
+   (`ERROR=3`, `NONE=INIT=0`), and `int_assert.value` and `within` be
+   `double` as documented (8.5)? The code is followed for now.

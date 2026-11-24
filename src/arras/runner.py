@@ -166,7 +166,8 @@ The module stays in the registry after the run.
 
 Object handlers reach the model and the run through `Runner.current()`, e.g.
 `Runner.current().model.get_property(name, "x")`, and add output lines with
-`Runner.current().output(...)` and `Runner.current().error(...)`.
+`Runner.current().output(...)`, `.error(...)`, `.warning(...)`, and
+`.verbose(...)`.
 
 Progress callback
 -----------------
@@ -518,6 +519,11 @@ class Runner: # pylint: disable=too-many-instance-attributes
         `quiet` is false"""
         if self._flag("warn") and not self._flag("quiet"):
             self.stderr.append(f"WARNING [{self._simtime()}]: " + " ".join(str(x) for x in args))
+
+    def verbose(self, *args:Any) -> None:
+        """Add a verbose line to `stderr` when the `verbose` global is true
+        and `quiet` is false"""
+        self._verbose(*args)
 
     def _verbose(self, *args:Any) -> None:
         if self._flag("verbose") and not self._flag("quiet"):
