@@ -8,7 +8,9 @@ import pytest
 import arras.module
 from arras.module import Module, ModuleError, SOLVERS, SIMULATIONMODE, \
     TS_NEVER, TS_INVALID, TS_MAX, TS_ZERO, DT_INFINITY, DT_INVALID, \
-    DT_SECOND, DT_DEFAULT, SM_INIT, SM_EVENT, SM_DELTA, SM_DELTA_ITER, SM_ERROR
+    DT_SECOND, DT_DEFAULT, SM_INIT, SM_EVENT, SM_DELTA, SM_DELTA_ITER, SM_ERROR, \
+    INTERNALS, TRANSFORMSOURCE, XS_UNKNOWN, XS_DOUBLE, XS_LOADSHAPE, XS_ENDUSE, \
+    XS_SCHEDULE, XS_RANDOMVAR, XS_ALL
 from arras.oclass import Class, ClassError
 
 T0 = 946684800 # 2000-01-01 00:00:00 UTC
@@ -479,6 +481,282 @@ def test_delta_missing_solver(missing, dispatch):
     module.set_solver(missing, None)
     with pytest.raises(ModuleError, match=f"module 'a' has a deltamode_desired solver but no {missing} solver"):
         dispatch()
+
+#
+# Heartbeats
+#
+class Obj: # pylint: disable=too-few-public-methods
+    """Minimal object with a class"""
+    def __init__(self, oclass, name="obj"):
+        self.oclass = oclass
+        self.name = name
+
+def test_set_heartbeat():
+    tape = Module("tape")
+    recorder = tape.register_class("recorder")
+    def f(obj):
+        return TS_NEVER
+    tape.set_heartbeat(recorder, f)
+    assert tape.get_heartbeat("recorder") is f
+    assert tape.get_heartbeat(recorder) is f
+    assert tape.heartbeats == {"recorder": f}
+    tape.set_heartbeat("recorder", None)
+    assert tape.get_heartbeat("recorder") is None
+    tape.set_heartbeat("recorder", None) # removing an absent solver is allowed
+
+def test_set_heartbeat_errors():
+    tape = Module("tape")
+    tape.register_class("recorder")
+    Module("other").register_class("player")
+    with pytest.raises(ModuleError, match="class 'player' is not a class of module 'tape'"):
+        tape.set_heartbeat("player", lambda obj: 0)
+    with pytest.raises(ModuleError, match="class 'missing' is not a class"):
+        tape.set_heartbeat("missing", lambda obj: 0)
+    with pytest.raises(ModuleError, match="heartbeat is not callable"):
+        tape.set_heartbeat("recorder", 5)
+
+def test_heartbeatsyncall():
+    assert Module.heartbeatsyncall([]) == TS_NEVER
+    tape = Module("tape")
+    recorder = tape.register_class("recorder")
+    player = tape.register_class("player")
+    glm = Class("glmclass")
+    calls = []
+    def beat(obj):
+        calls.append(obj.name)
+        return {"r1": T0+300, "r2": -(T0+120), "r3": T0+600}[obj.name]
+    tape.set_heartbeat(recorder, beat)
+    objects = [Obj(recorder,"r1"), Obj(player,"p1"), Obj(glm,"g1"),
+        Obj(recorder,"r2"), Obj(recorder,"r3")]
+    # always a soft time; the earliest by absolute value wins
+    assert Module.heartbeatsyncall(objects) == -(T0+120)
+    assert calls == ["r1", "r2", "r3"]
+    assert Module.heartbeatsyncall(objects[:1]) == -(T0+300)
+    # objects without a heartbeat solver count as TS_NEVER
+    assert Module.heartbeatsyncall(objects[1:3]) == TS_NEVER
+
+def test_heartbeatsyncall_unloaded_module():
+    oclass = Class("recorder", module="notloaded")
+    assert Module.heartbeatsyncall([Obj(oclass)]) == TS_NEVER
+
+def test_heartbeatsyncall_invalid_and_bad():
+    tape = Module("tape")
+    recorder = tape.register_class("recorder")
+    tape.set_heartbeat(recorder, lambda obj: TS_INVALID)
+    assert Module.heartbeatsyncall([Obj(recorder)]) == TS_INVALID
+    tape.set_heartbeat(recorder, lambda obj: 1.5)
+    with pytest.raises(ModuleError, match="class 'recorder' heartbeat returned 1.5, not a time"):
+        Module.heartbeatsyncall([Obj(recorder)])
+
+#
+# Internal items
+#
+def test_internal_tables():
+    assert INTERNALS == ("randomvar", "schedule", "loadshape", "transform", "enduse")
+    assert TRANSFORMSOURCE == {"UNKNOWN":0x00, "DOUBLE":0x01, "COMPLEX":0x02,
+        "LOADSHAPE":0x04, "ENDUSE":0x08, "SCHEDULE":0x10, "RANDOMVAR":0x20, "ALL":0x3f}
+
+def test_add_internal():
+    def f(t):
+        return t
+    Module.add_internal("randomvar", f)
+    Module.add_internal("schedule", f, interpolated=True)
+    Module.add_internal("transform", f, source="SCHEDULE|LOADSHAPE")
+    Module.add_internal("transform", f, source=XS_DOUBLE)
+    Module.add_internal("transform", f, source="UNKNOWN")
+    assert Module.internals["randomvar"] == [(f, None)]
+    assert Module.internals["schedule"] == [(f, True)]
+    assert Module.internals["transform"] == [(f, XS_SCHEDULE|XS_LOADSHAPE), (f, XS_DOUBLE), (f, XS_UNKNOWN)]
+    Module.reset()
+    assert all(not items for items in Module.internals.values())
+
+@pytest.mark.parametrize("args,kwargs,message", [
+    (("bogus", lambda t: t), {}, "kind 'bogus' is not valid"),
+    (("schedule", 3), {}, "schedule sync is not callable"),
+    (("transform", lambda t: t), {}, "a transform needs a source"),
+    (("enduse", lambda t: t), {"source": XS_ENDUSE}, "a enduse does not take a source"),
+    (("loadshape", lambda t: t), {"interpolated": True}, "a loadshape cannot be interpolated"),
+    (("transform", lambda t: t), {"source": "BOGUS"}, "transform source 'BOGUS' is not valid"),
+    (("transform", lambda t: t), {"source": 0x40}, "transform source 64 is not valid"),
+    (("transform", lambda t: t), {"source": 1.0}, "transform source 1.0 is not valid"),
+    ])
+def test_add_internal_errors(args, kwargs, message):
+    with pytest.raises(ModuleError, match=message):
+        Module.add_internal(*args, **kwargs)
+    assert all(not items for items in Module.internals.values())
+
+def test_randomvarsyncall():
+    assert Module.randomvarsyncall(T0) == TS_NEVER
+    Module.add_internal("randomvar", lambda t: T0+600)
+    assert Module.randomvarsyncall(T0) == -(T0+600) # always soft
+    Module.add_internal("randomvar", lambda t: -(T0+60))
+    Module.add_internal("randomvar", lambda t: TS_NEVER)
+    assert Module.randomvarsyncall(T0) == -(T0+60)
+    Module.reset()
+    Module.add_internal("randomvar", lambda t: TS_NEVER)
+    assert Module.randomvarsyncall(T0) == TS_NEVER
+
+def test_schedulesyncall_cache():
+    assert Module.schedulesyncall(T0) == TS_NEVER
+    calls = []
+    def sched(t):
+        calls.append(t)
+        return t + 900
+    Module.add_internal("schedule", sched)
+    Module.add_internal("schedule", lambda t: t + 1800)
+    assert Module.schedulesyncall(T0) == T0+900
+    assert calls == [T0]
+    # before the next change the cached time is returned without calls
+    assert Module.schedulesyncall(T0+300) == T0+900
+    assert calls == [T0]
+    # at the next change the schedules are called again
+    assert Module.schedulesyncall(T0+900) == T0+1800
+    assert calls == [T0, T0+900]
+
+def test_schedulesyncall_signed():
+    Module.add_internal("schedule", lambda t: T0+60)
+    Module.add_internal("schedule", lambda t: -(T0+600)) # signed comparison: negative wins
+    assert Module.schedulesyncall(T0) == -(T0+600)
+
+def test_schedulesyncall_interpolated():
+    calls = []
+    def sched(t):
+        calls.append(t)
+        return t + 900
+    Module.add_internal("schedule", sched)
+    Module.add_internal("schedule", lambda t: t + 3600, interpolated=True)
+    assert Module.schedulesyncall(T0) == T0+900
+    assert Module.schedulesyncall(T0+300) == T0+1200
+    assert calls == [T0, T0+300]
+
+def test_schedulesyncall_never():
+    calls = []
+    def sched(t):
+        calls.append(t)
+        return TS_NEVER
+    Module.add_internal("schedule", sched, interpolated=True)
+    assert Module.schedulesyncall(T0) == TS_NEVER
+    assert Module.schedulesyncall(T0+60) == TS_NEVER
+    assert calls == [T0] # never called again, even when interpolated
+
+def test_loadshapesyncall():
+    assert Module.loadshapesyncall(T0) == TS_NEVER
+    calls = []
+    def shape(t):
+        calls.append(t)
+        return TS_NEVER if len(calls) > 2 else t + 600
+    Module.add_internal("loadshape", shape)
+    assert Module.loadshapesyncall(T0) == T0+600
+    assert Module.loadshapesyncall(T0+100) == T0+600 # cached
+    assert Module.loadshapesyncall(T0+600) == T0+1200
+    assert Module.loadshapesyncall(T0+1200) == TS_NEVER
+    # TS_NEVER is not cached: called every time
+    assert Module.loadshapesyncall(T0+1300) == TS_NEVER
+    assert calls == [T0, T0+600, T0+1200, T0+1300]
+
+def test_endusesyncall():
+    assert Module.endusesyncall(T0) == TS_NEVER
+    calls = []
+    def enduse(t):
+        calls.append(t)
+        return t + 60
+    Module.add_internal("enduse", enduse)
+    Module.add_internal("enduse", lambda t: t + 30)
+    assert Module.endusesyncall(T0) == T0+30
+    assert Module.endusesyncall(T0+10) == T0+40 # not cached
+    assert calls == [T0, T0+10]
+
+def test_transformsyncall(caplog):
+    assert Module.transformsyncall(T0) == TS_NEVER
+    calls = []
+    def make(name, result):
+        def apply(t):
+            calls.append(name)
+            return result
+        return apply
+    Module.add_internal("transform", make("sch", T0+900), source="SCHEDULE")
+    Module.add_internal("transform", make("ls", T0+300), source=XS_LOADSHAPE)
+    Module.add_internal("transform", make("dbl", T0+60), source="DOUBLE")
+    Module.add_internal("transform", make("rv", TS_NEVER), source=XS_RANDOMVAR)
+    assert Module.transformsyncall(T0, XS_SCHEDULE|XS_LOADSHAPE) == T0+300
+    assert calls == ["sch", "ls"]
+    calls.clear()
+    assert Module.transformsyncall(T0, XS_ALL & ~(XS_SCHEDULE|XS_LOADSHAPE)) == T0+60
+    assert calls == ["dbl", "rv"]
+    calls.clear()
+    assert Module.transformsyncall(T0, "RANDOMVAR") == TS_NEVER
+    assert Module.transformsyncall(T0) == T0+60
+    Module.add_internal("transform", make("unk", T0+30), source="UNKNOWN")
+    calls.clear()
+    with caplog.at_level(logging.WARNING):
+        assert Module.transformsyncall(T0, XS_ENDUSE) == T0+30
+    assert calls == ["unk"]
+    assert "unknown source type" in caplog.text
+
+def test_internal_bad_result():
+    Module.add_internal("enduse", lambda t: "soon")
+    with pytest.raises(ModuleError, match="enduse sync returned 'soon', not a time"):
+        Module.endusesyncall(T0)
+
+def test_internalsyncall_order():
+    log = []
+    def make(kind, result):
+        def sync(t):
+            log.append((kind, t))
+            return result
+        return sync
+    tape = Module("tape")
+    recorder = tape.register_class("recorder")
+    tape.set_heartbeat(recorder, lambda obj: log.append(("heartbeat", None)) or TS_NEVER)
+    Module.add_internal("enduse", make("enduse", TS_NEVER))
+    Module.add_internal("transform", make("transform", TS_NEVER), source="LOADSHAPE")
+    Module.add_internal("transform", make("double", TS_NEVER), source="DOUBLE")
+    Module.add_internal("loadshape", make("loadshape", TS_NEVER))
+    Module.add_internal("schedule", make("schedule", TS_NEVER))
+    Module.add_internal("randomvar", make("randomvar", TS_NEVER))
+    assert Module.internalsyncall(T0, [Obj(recorder)]) == TS_NEVER
+    assert [x[0] for x in log] == ["randomvar", "schedule", "loadshape", "transform", "enduse", "heartbeat"]
+
+def test_internalsyncall_soft():
+    assert Module.internalsyncall(T0) == TS_NEVER
+    Module.add_internal("enduse", lambda t: T0+60)    # hard times become soft
+    Module.add_internal("schedule", lambda t: T0+900)
+    assert Module.internalsyncall(T0) == -(T0+60)
+
+def test_internalsyncall_link_instance():
+    Module.add_internal("enduse", lambda t: T0+60)
+    assert Module.internalsyncall(T0, link=T0+30) == T0+30
+    assert Module.internalsyncall(T0, instance=T0+30) == T0+30
+    assert Module.internalsyncall(T0, link=T0+120) == -(T0+60)
+    Module.reset()
+    assert Module.internalsyncall(T0, link=T0+120) == T0+120
+    assert Module.internalsyncall(T0, link=-(T0+120)) == -(T0+120)
+
+def test_internalsyncall_zero_quirk():
+    # earliest_timestamp() stops at the first 0 after the first time
+    Module.add_internal("schedule", lambda t: 0)
+    Module.add_internal("enduse", lambda t: T0+60)
+    assert Module.internalsyncall(T0) == TS_NEVER
+    Module.reset()
+    Module.add_internal("randomvar", lambda t: T0+600) # -> -(T0+600)
+    Module.add_internal("schedule", lambda t: 0)
+    Module.add_internal("enduse", lambda t: T0+60)
+    assert Module.internalsyncall(T0) == -(T0+600)
+
+def test_internalsyncall_invalid():
+    Module.add_internal("enduse", lambda t: TS_INVALID)
+    assert Module.internalsyncall(T0) == TS_INVALID
+
+def test_internalsyncall_minimum_timestep():
+    Module.add_internal("enduse", lambda t: T0+61)
+    assert Module.internalsyncall(T0, minimum_timestep=60) == -(T0+120)
+    assert Module.internalsyncall(T0, minimum_timestep=1) == -(T0+61)
+    assert Module.internalsyncall(T0, link=T0+61, minimum_timestep=60) == T0+120
+    assert Module.internalsyncall(T0, link=T0+120, minimum_timestep=60) == -(T0+120)
+    # times not after the clock, and TS_NEVER, are not rounded
+    assert Module.internalsyncall(T0+61, minimum_timestep=60) == -(T0+61)
+    Module.reset()
+    assert Module.internalsyncall(T0, minimum_timestep=60) == TS_NEVER
 
 #
 # Documentation

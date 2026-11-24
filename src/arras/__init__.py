@@ -124,9 +124,10 @@ Python API
    filters, and objects keyed on name) with GLM and gridlabd JSON read/write,
    regex search, add/delete, and validated get/set of properties (see `arras.model`)
 -  `arras.module.Module`: modules with gridlabd's module list, the classes each
-   module registers, and the solvers that keep the clock synchronized, with
-   dispatchers that combine solver results as the gridlabd core does (see
-   `arras.module`)
+   module registers, the solvers that keep the clock synchronized, class
+   heartbeat solvers, and the core's internal items (random variables,
+   schedules, loadshapes, transforms, enduses), with dispatchers that combine
+   their results as the gridlabd core does (see `arras.module`)
 """
 
 import arras.exceptions as exception

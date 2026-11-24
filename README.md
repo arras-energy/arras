@@ -88,7 +88,7 @@ Module classes come from JSON that gridlabd writes (`gridlabd -o FILE.json` or `
 -946684860
 ```
 
-A negative time is a soft event; the earliest time by absolute value is kept. See the [`arras.module` documentation](https://arras-energy.github.io/arras/arras/module.html) for each solver's arguments and the dispatchers' rules.
+A negative time is a soft event; the earliest time by absolute value is kept. Class heartbeat solvers (`set_heartbeat()`) and the core's internal items (random variables, schedules, loadshapes, transforms, and enduses, added with `Module.add_internal()`) are combined the same way by `Module.internalsyncall()`, which gridlabd runs before each set of object passes. See the [`arras.module` documentation](https://arras-energy.github.io/arras/arras/module.html) for each solver's arguments and the dispatchers' rules.
 
 ## Testing
 

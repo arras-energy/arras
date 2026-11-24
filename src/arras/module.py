@@ -1,4 +1,4 @@
-# pylint: disable=line-too-long
+# pylint: disable=too-many-lines,line-too-long
 # (the markdown tables in the docstring are kept one row per line)
 """Arras modules
 
@@ -8,12 +8,16 @@ simulation clock synchronized. It models the module list that
 `arras-energy/gridlabd` implements in `source/module.cpp` and the way the
 core combines the functions that each module exports: the event-mode hooks
 in `source/module.cpp` and `GldExec::clock_update_modules()`
-(`source/exec.cpp`), and the deltamode hooks in `source/deltamode.cpp`.
+(`source/exec.cpp`), the deltamode hooks in `source/deltamode.cpp`, and the
+class heartbeat functions (`GldExec::sync_heartbeats()`). It also models how
+the core synchronizes its internal items before each set of object passes
+(`GldExec::syncall_internals()`): random variables, schedules, loadshapes,
+transforms, and enduses.
 
 Users can register modules, register the classes that a module provides,
-attach a solver to each synchronization hook, and run the core's
-dispatchers, which call the solvers of every loaded module in load order and
-combine their results as gridlabd does.
+attach a solver to each synchronization hook and a heartbeat solver to each
+class, add internal items, and run the core's dispatchers, which call the
+solvers in order and combine their results as gridlabd does.
 
 Syntax
 ------
@@ -69,6 +73,20 @@ Given a name, `Module(name)` returns a module that is expected to satisfy:
 
 5. The deltamode dispatchers call only the modules that have a
    `deltamode_desired` solver, as `delta_init()` selects them.
+6. `set_heartbeat(oclass, call)` attaches a heartbeat solver to one of the
+   module's classes, and `add_internal(kind, sync)` adds an internal item
+   (see `INTERNALS`), kept in creation order in `Module.internals`. Their
+   dispatchers combine results as the core does:
+
+   | Dispatcher | gridlabd function | Result |
+   | ---------- | ----------------- | ------ |
+   | `randomvarsyncall(t1)` | `randomvar_syncall()` | earliest by absolute time, always soft (negative); `TS_NEVER` when none |
+   | `schedulesyncall(t1)` | `schedule_syncall()` | earliest by signed time; the previous result while it is later than `t1` (unless a schedule interpolates); `TS_NEVER` forever once every schedule returns `TS_NEVER` |
+   | `loadshapesyncall(t1)` | `loadshape_syncall()` | earliest by signed time; the previous result while it is later than `t1` and not `TS_NEVER` |
+   | `transformsyncall(t1, source)` | `transform_syncall()` | earliest by signed time over the transforms whose source matches (or is `XS_UNKNOWN`) |
+   | `endusesyncall(t1)` | `enduse_syncall()` | earliest by signed time |
+   | `heartbeatsyncall(objects)` | `GldExec::sync_heartbeats()` | earliest by absolute time over the objects' class heartbeat solvers, always soft; `TS_NEVER` when none |
+   | `internalsyncall(t1, objects)` | `GldExec::syncall_internals()` | the six results above as one soft event, combined with the `link` and `instance` hard times and rounded up to `minimum_timestep` |
 
 Solvers
 -------
@@ -88,6 +106,11 @@ Solvers
 | `interupdate` | `interupdate` | `interupdate(clock, deltaclock, timestep, iteration)` | `SM_EVENT`, `SM_DELTA`, `SM_DELTA_ITER`, or `SM_ERROR` |
 | `deltaclockupdate` | `deltaClockUpdate` | `deltaclockupdate(next_time, timestep, mode)` | `SM_EVENT`, `SM_DELTA`, `SM_DELTA_ITER`, or `SM_ERROR` |
 | `postupdate` | `postupdate` | `postupdate(clock, deltaclock)` | `bool`: false fails the update |
+
+A heartbeat solver (`set_heartbeat()`) is called as `call(obj)` and returns
+a time. An internal item (`add_internal()`) is called as `sync(t1)` and
+returns its next time; a transform also has a source (`TRANSFORMSOURCE`)
+and a schedule an `interpolated` flag.
 
 Times are gridlabd `TIMESTAMP` values: seconds since 1970-01-01 00:00:00
 UTC as `int`. `clock` is the event clock (`global_clock`), `deltaclock` the
@@ -124,6 +147,17 @@ Examples
     Traceback (most recent call last):
     ...
     arras.module.ModuleError: module 'tape' is already loaded
+    >>> Module.add_internal("schedule", lambda t: t + 900)          # next change in 15 minutes
+    >>> Module.add_internal("transform", lambda t: TS_NEVER, source="SCHEDULE")
+    >>> Module.internalsyncall(946684800)                           # soft event
+    -946685700
+    >>> class Obj:
+    ...     oclass = recorder
+    >>> tape.set_heartbeat("recorder", lambda obj: 946684830)
+    >>> Module.heartbeatsyncall([Obj()])
+    -946684830
+    >>> Module.internalsyncall(946684800, [Obj()], minimum_timestep=60)
+    -946684860
 
 Caveats
 -------
@@ -147,6 +181,24 @@ Caveats
   those values are arguments.
 - `clockupdateall()` repeats until no solver lowers the time, as the core
   does; a solver that always returns an earlier time never ends the loop.
+- Random variables, schedules, loadshapes, transforms, and enduses are not
+  modeled: each internal item is a Python callable that returns its next
+  time. For a schedule transform, the core reads the schedule and applies
+  the object's `schedule_skew` inside `transform_syncall()`; in `arras` that
+  is the transform callable's job. The core's multithreaded item loops
+  (more than one thread and at least 8 items) are not modeled; the results
+  are the same earliest times.
+- The schedule and loadshape next-time caches, and the flag set by an
+  interpolated schedule, are shared by the process, as the core's static
+  variables are, and are cleared only by `Module.reset()`.
+- `internalsyncall()` reproduces a quirk of the core's variadic
+  `earliest_timestamp()`: the list of times ends at the first `0` after
+  the first time, so a later result of exactly `0` hides the results after
+  it.
+- `heartbeatsyncall()` does not select objects: pass the objects whose
+  `heartbeat` header value is greater than 0, as `exec_init()` collects
+  them. A heartbeat solver belongs to the exact class; parents' solvers are
+  not used.
 - Module globals, `import_file`, `export_file`, `check`, `cmdargs`,
   `kmldump`, `subload`, `test`, and streams are not modeled. Module globals
   are kept in `arras.globals.Globals` as `MODULE::NAME` by `arras.model`.
@@ -162,7 +214,12 @@ Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
    more, and a name with whitespace, `.`, or `:` raise `ModuleError`. The
    core uses the name as a library file name and does not check it.
 3. A solver result of the wrong type (a time that is not an `int`, or a
-   `bool` where a time is expected) raises `ModuleError`.
+   `bool` where a time is expected) raises `ModuleError`. This includes
+   heartbeat solvers and internal items.
+4. A transform must be added with a source; the core accepts a transform
+   with no source type (`XS_UNKNOWN`), which `arras` accepts only when
+   given as `source="UNKNOWN"` or `0`. The warning for such a transform
+   does not name the target property and object.
 
 References
 ----------
@@ -175,7 +232,14 @@ References
   the module calls in the sync passes), `source/deltamode.cpp`
   (`delta_init()`, `delta_modedesired()`, `delta_preupdate()`,
   `delta_interupdate()`, `delta_clockupdate()`, `delta_postupdate()`),
-  `source/timestamp.h`, `source/timestamp.cpp` (`absolute_timestamp()`)
+  `source/exec.cpp` (`GldExec::syncall_internals()`,
+  `GldExec::sync_heartbeats()`, heartbeat object list in `exec_init()`),
+  `source/object.cpp` (`object_heartbeat()`), `source/random.cpp`
+  (`randomvar_syncall()`), `source/schedule.cpp` (`schedule_syncall()`),
+  `source/loadshape.cpp` (`loadshape_syncall()`), `source/transform.cpp`
+  (`transform_syncall()`), `source/transform.h` (`TRANSFORMSOURCE`),
+  `source/enduse.cpp` (`enduse_syncall()`), `source/timestamp.h`,
+  `source/timestamp.cpp` (`absolute_timestamp()`, `earliest_timestamp()`)
 - [Module directive](https://docs.gridlabd.us/index.html?owner=arras-energy&project=gridlabd&doc=/GLM/Directive/Module.md)
   (`docs/GLM/Directive/Module.md`)
 """
@@ -241,6 +305,46 @@ SIMULATIONMODE = {
 }
 """Simulation modes (gridlabd `SIMULATIONMODE`)"""
 
+XS_UNKNOWN = 0x00
+"""Transform source: unknown (always run, with a warning)"""
+
+XS_DOUBLE = 0x01
+"""Transform source: `double` property"""
+
+XS_COMPLEX = 0x02
+"""Transform source: `complex` property"""
+
+XS_LOADSHAPE = 0x04
+"""Transform source: loadshape"""
+
+XS_ENDUSE = 0x08
+"""Transform source: enduse"""
+
+XS_SCHEDULE = 0x10
+"""Transform source: schedule"""
+
+XS_RANDOMVAR = 0x20
+"""Transform source: random variable"""
+
+XS_ALL = 0x3f
+"""Transform source: all"""
+
+TRANSFORMSOURCE = {
+    "UNKNOWN": XS_UNKNOWN,
+    "DOUBLE": XS_DOUBLE,
+    "COMPLEX": XS_COMPLEX,
+    "LOADSHAPE": XS_LOADSHAPE,
+    "ENDUSE": XS_ENDUSE,
+    "SCHEDULE": XS_SCHEDULE,
+    "RANDOMVAR": XS_RANDOMVAR,
+    "ALL": XS_ALL,
+}
+"""Transform source flags (gridlabd `TRANSFORMSOURCE`, `source/transform.h`)"""
+
+INTERNALS = ("randomvar", "schedule", "loadshape", "transform", "enduse")
+"""Kinds of internal items that `Module.add_internal()` accepts, in the
+order `syncall_internals()` synchronizes them"""
+
 SOLVERS = {
     "init": ("on_init",),
     "precommit": ("on_precommit",),
@@ -268,6 +372,39 @@ def _absolute(t:int) -> int:
     """Absolute time of a soft time (gridlabd `absolute_timestamp()`)"""
     return -t if -TS_MAX <= t < 0 else t
 
+def _earliest_of(first:int, *others:int) -> int:
+    """Earliest time by absolute value (gridlabd `earliest_timestamp()`);
+    like the core's variadic function, the list ends at the first `0`
+    after `first`"""
+    result = first
+    for value in others:
+        if value == 0:
+            break
+        if _absolute(value) < _absolute(result):
+            result = value
+    return result
+
+def _check_time(what:str, result) -> int:
+    """Check that a solver returned a time"""
+    if not isinstance(result,int) or isinstance(result,bool):
+        raise ModuleError(f"{what} returned {result!r}, not a time")
+    return result
+
+def _source(value:int|str) -> int:
+    """Transform source bits from an `int` or `|`-separated `TRANSFORMSOURCE` keys"""
+    if isinstance(value,int) and not isinstance(value,bool):
+        if not 0 <= value <= XS_ALL:
+            raise ModuleError(f"transform source {value!r} is not valid")
+        return value
+    if not isinstance(value,str):
+        raise ModuleError(f"transform source {value!r} is not valid")
+    bits = 0
+    for key in (x.strip() for x in value.split("|")):
+        if key not in TRANSFORMSOURCE:
+            raise ModuleError(f"transform source '{key}' is not valid")
+        bits |= TRANSFORMSOURCE[key]
+    return bits
+
 class Module: # pylint: disable=too-many-public-methods
     """Arras module
 
@@ -284,7 +421,15 @@ class Module: # pylint: disable=too-many-public-methods
     registry: list["Module"] = []
     """Loaded modules, in load order"""
 
+    internals: dict[str,list[tuple[Callable,int|bool|None]]] = {kind: [] for kind in INTERNALS}
+    """Internal items keyed on kind (see `INTERNALS`), each a list of
+    `(sync, option)` in creation order; `option` is the transform source
+    bits, the schedule `interpolated` flag, or `None`"""
+
     _count: int = 0
+    _next_schedule: int = TS_ZERO
+    _next_loadshape: int = TS_ZERO
+    _interpolated: bool = False
 
     def __init__(self, name:str, major:int=0, minor:int=0, **solvers:Callable):
         """Register a module (gridlabd `module_load()`)
@@ -320,6 +465,8 @@ class Module: # pylint: disable=too-many-public-methods
         """Minor version"""
         self.solvers: dict[str,Callable] = {}
         """Solvers keyed on hook name"""
+        self.heartbeats: dict[str,Callable] = {}
+        """Heartbeat solvers keyed on class name"""
         for hook, call in solvers.items():
             self._check_solver(hook, call)
         for hook, call in solvers.items():
@@ -336,9 +483,15 @@ class Module: # pylint: disable=too-many-public-methods
     #
     @classmethod
     def reset(cls) -> None:
-        """Remove all loaded modules and restart module ids at 0"""
+        """Remove all loaded modules and internal items, restart module ids
+        at 0, and clear the schedule and loadshape next-time caches"""
         cls.registry.clear()
         cls._count = 0
+        for items in cls.internals.values():
+            items.clear()
+        cls._next_schedule = TS_ZERO
+        cls._next_loadshape = TS_ZERO
+        cls._interpolated = False
 
     @classmethod
     def find(cls, name:str) -> "Module|None":
@@ -441,10 +594,37 @@ class Module: # pylint: disable=too-many-public-methods
 
     def _time(self, hook:str, *args) -> int:
         """Call a solver that returns a time and check the result"""
-        result = self.solvers[hook](*args)
-        if not isinstance(result,int) or isinstance(result,bool):
-            raise ModuleError(f"module '{self.name}' solver '{hook}' returned {result!r}, not a time")
-        return result
+        return _check_time(f"module '{self.name}' solver '{hook}'", self.solvers[hook](*args))
+
+    def set_heartbeat(self, oclass:"Class|str", call:Callable|None) -> None:
+        """Attach a heartbeat solver to one of the module's classes (the
+        class `heartbeat` function of gridlabd's `CLASS`), replacing any it
+        has
+
+        Arguments
+        ---------
+        - `oclass`: the class or its name
+        - `call`: solver called as `call(obj)` for each heartbeat object of
+          the class, returning a time; `None` removes the class's solver
+
+        Exceptions
+        ----------
+        - `ModuleError`: the class is not a class of this module, or `call`
+          is not callable
+        """
+        name = oclass.name if isinstance(oclass,Class) else oclass
+        if name not in [x.name for x in self.classes]:
+            raise ModuleError(f"class '{name}' is not a class of module '{self.name}'")
+        if call is None:
+            self.heartbeats.pop(name, None)
+        elif not callable(call):
+            raise ModuleError(f"module '{self.name}' class '{name}' heartbeat is not callable")
+        else:
+            self.heartbeats[name] = call
+
+    def get_heartbeat(self, oclass:"Class|str") -> Callable|None:
+        """Get the heartbeat solver of one of the module's classes, or `None`"""
+        return self.heartbeats.get(oclass.name if isinstance(oclass,Class) else oclass)
 
     #
     # Event-mode dispatchers
@@ -727,3 +907,219 @@ class Module: # pylint: disable=too-many-public-methods
             if not module.solvers["postupdate"](clock, deltaclock):
                 return False
         return True
+
+    #
+    # Internal item dispatchers
+    #
+    @classmethod
+    def add_internal(cls, kind:str, sync:Callable, *, source:int|str|None=None,
+            interpolated:bool=False) -> None:
+        """Add an internal item: a random variable, schedule, loadshape,
+        transform, or enduse that the core synchronizes before the object
+        passes (gridlabd `syncall_internals()`)
+
+        Arguments
+        ---------
+        - `kind`: one of `INTERNALS`
+        - `sync`: called as `sync(t1)`; returns the item's next time
+          (`randomvar_sync()`, `schedule_sync()`, `loadshape_sync()`,
+          `transform_apply()`, `enduse_sync()`)
+        - `source`: transform source, `TRANSFORMSOURCE` bits or `|`-separated
+          keys; required for a transform and refused for other kinds
+        - `interpolated`: for a schedule, whether it interpolates; once one
+          interpolated schedule is added, `schedulesyncall()` calls every
+          schedule at every time, as in gridlabd
+
+        Exceptions
+        ----------
+        - `ModuleError`: the kind is not valid, `sync` is not callable, or
+          `source` or `interpolated` does not fit the kind
+        """
+        if kind not in INTERNALS:
+            raise ModuleError(f"internal item kind '{kind}' is not valid")
+        if not callable(sync):
+            raise ModuleError(f"{kind} sync is not callable")
+        if (source is not None) != (kind == "transform"):
+            raise ModuleError("a transform needs a source" if kind == "transform" else f"a {kind} does not take a source")
+        if interpolated and kind != "schedule":
+            raise ModuleError(f"a {kind} cannot be interpolated")
+        if kind == "transform":
+            cls.internals[kind].append((sync, _source(source)))
+        elif kind == "schedule":
+            cls.internals[kind].append((sync, bool(interpolated)))
+            cls._interpolated |= bool(interpolated)
+        else:
+            cls.internals[kind].append((sync, None))
+
+    @classmethod
+    def _min_signed(cls, kind:str, t1:int, items=None) -> int:
+        """Earliest next time by signed value, as the item loops of
+        `schedule_syncall()`, `loadshape_syncall()`, `enduse_syncall()`, and
+        `transform_syncall()` take it"""
+        t2 = TS_NEVER
+        for sync, _ in cls.internals[kind] if items is None else items:
+            t2 = min(t2, _check_time(f"{kind} sync", sync(t1)))
+        return t2
+
+    @classmethod
+    def randomvarsyncall(cls, t1:int) -> int:
+        """Synchronize the random variables (gridlabd `randomvar_syncall()`)
+
+        Returns
+        -------
+        - `int`: the earliest next time by absolute value, always as a soft
+          (negative) time; `TS_NEVER` when there is none
+        """
+        t2 = TS_NEVER
+        for sync, _ in cls.internals["randomvar"]:
+            t3 = _check_time("randomvar sync", sync(t1))
+            if _absolute(t3) < _absolute(t2):
+                t2 = t3
+        return -_absolute(t2) if t2 != TS_NEVER else TS_NEVER
+
+    @classmethod
+    def schedulesyncall(cls, t1:int) -> int:
+        """Synchronize the schedules (gridlabd `schedule_syncall()`)
+
+        The schedules are called only when the time of the previous update
+        is not later than `t1`, or when any schedule interpolates. Once the
+        schedules all return `TS_NEVER`, they are not called again until
+        `reset()`.
+
+        Returns
+        -------
+        - `int`: the earliest next time (signed comparison); `TS_NEVER` when
+          there are no schedules
+        """
+        if not cls.internals["schedule"] or cls._next_schedule == TS_NEVER:
+            return TS_NEVER
+        if cls._next_schedule > t1 and not cls._interpolated:
+            return cls._next_schedule
+        cls._next_schedule = cls._min_signed("schedule", t1)
+        return cls._next_schedule
+
+    @classmethod
+    def loadshapesyncall(cls, t1:int) -> int:
+        """Synchronize the loadshapes (gridlabd `loadshape_syncall()`)
+
+        The loadshapes are called only when the time of the previous update
+        is not later than `t1` or was `TS_NEVER`.
+
+        Returns
+        -------
+        - `int`: the earliest next time (signed comparison); `TS_NEVER` when
+          there are no loadshapes
+        """
+        if not cls.internals["loadshape"]:
+            return TS_NEVER
+        if t1 < cls._next_loadshape < TS_NEVER:
+            return cls._next_loadshape
+        cls._next_loadshape = cls._min_signed("loadshape", t1)
+        return cls._next_loadshape
+
+    @classmethod
+    def endusesyncall(cls, t1:int) -> int:
+        """Synchronize the enduses (gridlabd `enduse_syncall()`)
+
+        Returns
+        -------
+        - `int`: the earliest next time (signed comparison); `TS_NEVER` when
+          there are no enduses
+        """
+        return cls._min_signed("enduse", t1)
+
+    @classmethod
+    def transformsyncall(cls, t1:int, source:int|str=XS_ALL) -> int:
+        """Apply the transforms whose source matches (gridlabd
+        `transform_syncall()`)
+
+        Transforms with source `XS_UNKNOWN` are always applied, with a
+        warning. The core calls this with `XS_SCHEDULE|XS_LOADSHAPE` before
+        the object passes (`internalsyncall()`) and with the other sources
+        after each pass.
+
+        Arguments
+        ---------
+        - `t1`: time to synchronize to
+        - `source`: `TRANSFORMSOURCE` bits or `|`-separated keys
+
+        Returns
+        -------
+        - `int`: the earliest next time (signed comparison), or `TS_NEVER`
+        """
+        bits = _source(source)
+        items = []
+        for item in cls.internals["transform"]:
+            if item[1] == XS_UNKNOWN:
+                _logger.warning("transform_syncall(...): transform has an unknown source type, it will always be run")
+                items.append(item)
+            elif item[1] & bits:
+                items.append(item)
+        return cls._min_signed("transform", t1, items)
+
+    @classmethod
+    def heartbeatsyncall(cls, objects) -> int:
+        """Call the heartbeat solvers of the heartbeat objects (gridlabd
+        `GldExec::sync_heartbeats()`)
+
+        Arguments
+        ---------
+        - `objects`: the objects whose `heartbeat` header value is greater
+          than 0, in object order, as `exec_init()` collects them; each
+          needs an `oclass` attribute (for example `arras.model.Object`)
+
+        Returns
+        -------
+        - `int`: the earliest result by absolute value, always as a soft
+          (negative) time; `TS_NEVER` when there is none. An object whose
+          class has no heartbeat solver counts as `TS_NEVER`.
+        """
+        t1 = TS_NEVER
+        for obj in objects:
+            module = Module.find(obj.oclass.module) if obj.oclass.module is not None else None
+            call = module.get_heartbeat(obj.oclass) if module is not None else None
+            if call is not None:
+                t2 = _check_time(f"class '{obj.oclass.name}' heartbeat", call(obj))
+                if _absolute(t2) < _absolute(t1):
+                    t1 = t2
+        return -_absolute(t1) if t1 < TS_NEVER else TS_NEVER
+
+    # pylint: disable=too-many-arguments
+    @classmethod
+    def internalsyncall(cls, t1:int, objects=(), *, minimum_timestep:int=1,
+            link:int=TS_NEVER, instance:int=TS_NEVER) -> int:
+        """Synchronize the internal items and heartbeats (gridlabd
+        `GldExec::syncall_internals()`)
+
+        Calls `randomvarsyncall()`, `schedulesyncall()`,
+        `loadshapesyncall()`, `transformsyncall()` for schedule and
+        loadshape sources, `endusesyncall()`, and `heartbeatsyncall()`, in
+        that order. Their earliest time by absolute value becomes a soft
+        event, which is combined with the hard `link` and `instance` times
+        and rounded up to `minimum_timestep`.
+
+        Arguments
+        ---------
+        - `t1`: time to synchronize to (the event clock)
+        - `objects`: heartbeat objects (see `heartbeatsyncall()`)
+        - `minimum_timestep`: the `minimum_timestep` global (gridlabd
+          default 1)
+        - `link`, `instance`: next times of external links
+          (`link_syncall()`) and remote instances (`instance_syncall()`),
+          which `arras` does not model
+
+        Returns
+        -------
+        - `int`: the next time, or `TS_NEVER`
+        """
+        times = (cls.randomvarsyncall(t1), cls.schedulesyncall(t1),
+            cls.loadshapesyncall(t1), cls.transformsyncall(t1, XS_SCHEDULE|XS_LOADSHAPE),
+            cls.endusesyncall(t1), cls.heartbeatsyncall(objects))
+        soft = _absolute(_earliest_of(*times))
+        result = _earliest_of(link, instance, -soft if soft != TS_NEVER else TS_NEVER)
+        if minimum_timestep > 1 and _absolute(result) > t1 and result < TS_NEVER:
+            if result > 0:
+                result = ((result - 1) // minimum_timestep + 1) * minimum_timestep
+            else:
+                result = -(((-result - 1) // minimum_timestep + 1) * minimum_timestep)
+        return result
