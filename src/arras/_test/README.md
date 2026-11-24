@@ -173,3 +173,36 @@ Run it alone with:
 	pytest src/arras/_test/test_units.py
 
 Tests that write unit files write only to pytest's temporary folder.
+
+test_runner.py
+--------------
+
+Fast, self-contained tests of `arras.runner` and `arras.main`:
+
+- the timestamp and pass constants, and argument checks;
+- the time series: hourly events, the order of the `init`, `precommit`,
+  presync (top-down), sync (bottom-up), `postsync`, `commit`, and
+  `finalize` handlers by rank, the `rank` header, iteration while a handler
+  returns the clock, the iteration limit, hard and soft events, `stoptime`
+  `NEVER` and 0, `minimum_timestep`, `in_svc`/`out_svc`, commit results,
+  and init deferral;
+- failures and their exit codes: handlers that stop the clock, return the
+  wrong type, raise, or cannot be found, failed precommit, commit, init,
+  and finalize, and unexpected exceptions;
+- class and object handlers, `Runner.current()`, the message lines and the
+  `quiet`, `verbose`, `warn`, and `debug` toggles, shell handlers and their
+  environment, and handler modules imported from the working folder;
+- the command line: files, `-D`, `-o`, `-c`, `-C`, `-I`, option values and
+  errors, and output files; `main()` printing the output as it arrives;
+- the progress callback (argument selection, stop by returning `False`,
+  callbacks that raise) and background runs with `wait()` and `stop()`;
+- the module docstring examples (doctest).
+
+Each test starts and ends with an empty class registry (`Class.reset()`).
+Handlers are functions of the test module, named `python:test_runner.NAME`.
+Run it alone with:
+
+	pytest src/arras/_test/test_runner.py
+
+Shell handler tests run `echo` and `exit`; tests that write files write only
+to pytest's temporary folder.

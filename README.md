@@ -90,6 +90,22 @@ Module classes come from JSON that gridlabd writes (`gridlabd -o FILE.json` or `
 
 A negative time is a soft event; the earliest time by absolute value is kept. Class heartbeat solvers (`set_heartbeat()`) and the core's internal items (random variables, schedules, loadshapes, transforms, and enduses, added with `Module.add_internal()`) are combined the same way by `Module.internalsyncall()`, which gridlabd runs before each set of object passes. See the [`arras.module` documentation](https://arras-energy.github.io/arras/arras/module.html) for each solver's arguments and the dispatchers' rules.
 
+`arras.Runner` solves the quasi-steady time series of a model in Python, as the gridlabd core main loop does, without running `gridlabd`. The `arras` command uses it: `arras -D NAME=VALUE model.glm -o result.json`. Objects get their behavior from GLM event handlers such as `on_sync "python:module.function";`, a Python function called as `function(name, t)` that returns the time of the object's next event. Users run a simulation in the foreground, or in a background thread with a progress callback that takes any of the optional arguments `timestamp`, `percent`, `stdout`, and `stderr`:
+
+```python
+>>> from arras import Runner
+>>> done = []
+>>> r = Runner("model.glm", background=True, progress=lambda percent: done.append(percent))  # doctest: +SKIP
+>>> r.running  # doctest: +SKIP
+True
+>>> r.wait()  # doctest: +SKIP
+0
+>>> done[-1]  # doctest: +SKIP
+100.0
+```
+
+See the [`arras.runner` documentation](https://arras-energy.github.io/arras/arras/runner.html) for the command line options, the synchronization passes, the handler rules, and the differences from gridlabd.
+
 ## Testing
 
 ```bash
