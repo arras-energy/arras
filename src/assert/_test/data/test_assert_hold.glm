@@ -1,0 +1,34 @@
+// test_assert_hold (from gridlabd module/assert/autotest/test_assert_hold.glm)
+// randomvar values are not refreshed by arras: the random_value of each test
+// object is set by the on_sync handler assert_test_random.sync, which draws
+// uniform(0,1) values every `refresh` seconds from Python's random module
+#set randomseed=1
+
+// set the clock
+clock {
+	timezone "America/Los_Angeles";
+	starttime "2001-01-01 00:00:00";
+	stoptime "2001-01-01 01:00:00";
+}
+
+// create the test class
+class test {
+	double random_value;
+	double refresh[s];
+	on_sync "python:assert_test_random.sync";
+}
+
+object test {
+	refresh 1;
+}
+
+module assert;
+
+object assert {
+	group "class=test";
+	target "random_value";
+	relation "<";
+	value 0.5;
+	hold 30 s;
+}
+

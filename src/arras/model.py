@@ -41,9 +41,11 @@ satisfy:
    `Object.oclass`). An object without a name is keyed `CLASS:ID`, the name
    gridlabd's JSON writer uses.
 2. Every object's class is registered in `arras.oclass.Class.registry` and
-   listed in `classes`. Classes that modules provide come from a gridlabd
-   JSON file (`load_classes()`), from `Model.module_loader` when a GLM file
-   loads a module, or from classes the user registered with
+   listed in `classes`. Classes that modules provide come from a Python
+   package that implements the module (an `arras.modules` entry point,
+   e.g. the `assert` package), from a gridlabd JSON file
+   (`load_classes()`), from `Model.module_loader` when a GLM file loads a
+   module, or from classes the user registered with
    `arras.oclass.Class`. Runtime classes come from GLM `class` blocks and
    from the `classes` section of a JSON file.
 3. Every stored property is a header property (`HEADER`), an event handler
@@ -151,7 +153,9 @@ Caveats
 
 - `Model` is an independent Python model of a gridlabd model. It does not
   run `gridlabd` or load module libraries, so it does not know the classes
-  that a module publishes until they are registered. Register them by
+  that a module publishes until they are registered. Modules implemented
+  in Python (`arras.modules` entry points, such as the `assert` package)
+  register their classes when the model loads them. Register others by
   reading a JSON file that gridlabd wrote (`gridlabd -o FILE.json`, or
   `gridlabd --modhelp=json MODULE > FILE.json`) with `load_classes()` or
   `read_json()`, by assigning `Model.module_loader`, or with
@@ -215,6 +219,7 @@ import json
 import bisect
 import logging
 import datetime
+import importlib.metadata
 from typing import Any, Callable, Iterable
 
 import arras.folders
@@ -287,8 +292,31 @@ _DATETIME = re.compile(r"\d{4}-\d{1,2}-\d{1,2}[ T]\d{1,2}:\d{2}(?::\d{2}(?:\.\d*
 _LATLON = re.compile(r"\d+\s*[NSEW]\s*[\d:.'\" ]*$")
 _NAME = re.compile(r"[A-Za-z_][\w.:]*")
 
+MODULE_ENTRY_POINTS = "arras.modules"
+"""Entry point group of the gridlabd modules that Python packages provide:
+each entry point is named for the module and refers to a function called
+as `function(model)` when a model loads the module (`Model.load_module()`)"""
+
 class ModelError(ArrasException):
     """Model error"""
+
+def module_entry_point(name:str) -> Callable|None:
+    """Function that an installed package provides for module `name` in
+    the `arras.modules` entry point group, or `None`
+
+    Exceptions
+    ----------
+    - `ModelError`: the entry point cannot be loaded or is not callable
+    """
+    for entry in importlib.metadata.entry_points(group=MODULE_ENTRY_POINTS, name=name):
+        try:
+            loader = entry.load()
+        except Exception as err: # pylint: disable=broad-exception-caught
+            raise ModelError(f"module '{name}' entry point '{entry.value}' cannot be loaded: {type(err).__name__}: {err}") from err
+        if not callable(loader):
+            raise ModelError(f"module '{name}' entry point '{entry.value}' is not callable")
+        return loader
+    return None
 
 def _fmt(value:float) -> str:
     """Text of a float rounded to 15 significant digits (so that unit
@@ -580,20 +608,33 @@ class Model: # pylint: disable=too-many-instance-attributes,too-many-public-meth
     def load_module(self, name:str, major:int|None=None, minor:int|None=None) -> None:
         """Load a module, as GLM `module NAME;` does
 
-        The classes registered for the module are added to `classes`. When
-        none are registered and `Model.module_loader` is set, its result is
-        passed to `load_classes()`.
+        When an installed package provides the module as an `arras.modules`
+        entry point (see `MODULE_ENTRY_POINTS`), the entry point is called
+        with the model first; it registers the module's classes and
+        globals. Then the classes registered for the module are added to
+        `classes`. When none are registered and `Model.module_loader` is
+        set, its result is passed to `load_classes()`.
 
         Arguments
         ---------
         - `name`: module name
         - `major`, `minor`: module version
+
+        Exceptions
+        ----------
+        - `ModelError`: the module's entry point cannot be loaded or fails
         """
         info = self.modules.setdefault(name, {"major": 0, "minor": 0})
         if major is not None:
             info["major"] = int(major)
         if minor is not None:
             info["minor"] = int(minor)
+        loader = module_entry_point(name)
+        if loader is not None:
+            try:
+                loader(self)
+            except ArrasException as err:
+                raise ModelError(f"module '{name}': {err}") from err
         found = [oclass for oclass in Class.registry if oclass.module == name]
         if not found and Model.module_loader is not None:
             data = Model.module_loader(name) # pylint: disable=not-callable

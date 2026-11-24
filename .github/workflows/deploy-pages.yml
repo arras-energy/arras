@@ -51,7 +51,7 @@ jobs:
 
       - name: Create docs
         run: |
-          pdoc -o docs arras
+          pdoc -o docs arras assert
 
       - name: Add coverage report
         # coverage-report artifact of the Validation run that triggered this one,

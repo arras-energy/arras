@@ -1,0 +1,13 @@
+// test_enum_assert_err
+
+module assert;
+#include "climate.glm"
+
+object climate {
+	interpolate NONE;
+	object enum_assert {
+		target "interpolate";
+		value 1;
+	};
+};
+	
