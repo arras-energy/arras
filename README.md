@@ -57,6 +57,26 @@ See the [`arras.oclass` documentation](https://arras-energy.github.io/arras/arra
 
 See the [`arras.units` documentation](https://arras-energy.github.io/arras/arras/units.html) for the unit file syntax and the gridlabd parsing behaviors it reproduces.
 
+`arras.Model` holds a gridlabd model: globals, modules, the classes that modules provide and the runtime classes that GLM `class` blocks declare, schedules, filters, and objects keyed on name. Users read and write GLM and gridlabd's JSON format, search objects with regular expressions, add and delete objects, and get and set properties, which are checked against the object's class:
+
+```python
+>>> from arras import Model
+>>> m = Model()
+>>> m.read_glm("""
+... class meter { double power[kW]; enumeration {OFF=0, ON=1} status; }
+... object meter { name m1; power 1.5 MW; }
+... """)
+>>> m.get_property("m1", "power")
+'1500.0 kW'
+>>> m.add_object("meter", "m2", status="ON", parent="m1")
+'m2'
+>>> m.find("^m")
+['m1', 'm2']
+>>> m.write_json("model.json")  # doctest: +SKIP
+```
+
+Module classes come from JSON that gridlabd writes (`gridlabd -o FILE.json` or `gridlabd --modhelp=json MODULE`), read with `Model.load_classes()` or `Model.read_json()`. See the [`arras.model` documentation](https://arras-energy.github.io/arras/arras/model.html) for the value checks, the GLM directives supported, and the differences from gridlabd.
+
 ## Testing
 
 ```bash

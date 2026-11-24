@@ -77,6 +77,44 @@ Run it alone with:
 
 	pytest src/arras/_test/test_oclass.py
 
+test_model.py
+-------------
+
+Fast, self-contained tests of `arras.model`:
+
+- objects: names (`CLASS:ID` for unnamed objects, naming rules,
+  `relax_naming_rules`), ids, `Class.numobjs`, and the container protocol;
+- `add_object`/`add_objects` (all or nothing, references within a batch,
+  parent loops), `delete_object`/`delete_objects` with `children` set to
+  `error`, `orphan`, and `delete`, and `rename`;
+- `find` by name, property value, class default, and class (with
+  inheritance);
+- `get_property`/`get_properties` and `set_property`/`set_properties`
+  (several objects at once, all or nothing, read-only header properties);
+- the value check of every property type, accepted and refused values, unit
+  conversion, transforms and filters, `strict=False`, and `check()`;
+- GLM reading: a sample model with nested objects, `:..COUNT` and
+  `:FIRST..LAST`, `inherit`, `@NAME`, multi-line and structured values,
+  every supported directive and macro, `#include`, `Model.module_loader`,
+  and the error message and line number for each kind of bad input;
+- GLM and JSON writing, and reading the output back into the same objects;
+- `load_classes` from `--modhelp=json` style data, JSON globals, filters,
+  and errors;
+- JSON objects list class defaults for unset `PUBLIC` properties (type
+  defaults for GLM-declared properties), in gridlabd's order, unless
+  `filesave_options` has `MINIMAL`;
+- `data/case14.json`, written by gridlabd 4.3.11 (see `data/README.md`):
+  read, checked, compared with the original objects, and written back as
+  JSON and GLM;
+- the module docstring examples (doctest).
+
+Each test starts and ends with an empty class registry (`Class.reset()`).
+Run it alone with:
+
+	pytest src/arras/_test/test_model.py
+
+Tests that write files write only to pytest's temporary folder.
+
 test_units.py
 -------------
 
