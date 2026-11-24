@@ -1,4 +1,4 @@
-# pylint: disable=line-too-long
+# pylint: disable=too-many-lines,line-too-long
 # (the markdown tables in the docstring are kept one row per line)
 """Arras simulation runner
 
@@ -14,7 +14,10 @@ iteration, commits each time step, and finalizes the objects. The
 
 Object behavior comes from the event handlers that gridlabd objects and
 classes accept (`on_init`, `on_precommit`, `on_presync`, `on_sync`,
-`on_postsync`, `on_commit`, `on_finalize`).
+`on_postsync`, `on_commit`, `on_finalize`). Module behavior comes from the
+solvers of the modules in `arras.module.Module.registry` and from the
+event handlers of the Python modules that the model loads; the internal
+items and class heartbeats of `arras.module` are synchronized too.
 
 Syntax
 ------
@@ -65,44 +68,61 @@ Given command line arguments, `Runner(*args)` runs a simulation that is
 expected to satisfy:
 
 1. Exit codes are those of `arras.exitcodes`: `SUCCESS`, `ARGERR` for a
-   command line error or a model with no objects and no file, `LDERR` for a
-   file that cannot be read or a failed check, `INIERR` for an
+   command line error or no file with a model that has no objects or
+   modules, `LDERR` for a file that cannot be read or a failed check, `INIERR` for an
    initialization failure, `RUNERR` for a failure or stop during the run,
    and `IOERR` for an output file that cannot be written.
 2. Every object starts with `clock` set to `starttime`. Objects are
    initialized in creation order. An `on_init` handler that returns `False`
    fails the initialization; one that returns `2` is deferred and called
    again after the others, up to `init_max_defer` rounds, as
-   `init_by_deferral()` does.
-3. The clock starts at `starttime`. At each time, `on_precommit` handlers
-   run once, then the presync handlers top-down (parents before children),
-   the sync handlers bottom-up (children before parents), and the postsync
-   handlers top-down. An object's rank is its `rank` header value, raised
-   so that each parent ranks above its children, as `object_set_parent()`
-   does; objects of equal rank run in creation order.
-4. A sync handler returns the time of the object's next event: a positive
-   time is a hard event, a negative time `-t` is a soft event at `t`, and
-   `None` or `TS_NEVER` means no event. The next time is the earliest event,
-   rounded up to a multiple of `minimum_timestep` for hard events. A time
-   before the clock, `TS_INVALID`, or 0 stops the run.
+   `init_by_deferral()` does. Then the module `init` solvers run
+   (`Module.initall()`); a false result fails the initialization.
+3. The clock starts at `starttime`. At each time (each iteration), the
+   internal items and the heartbeats of the objects whose `heartbeat`
+   header is greater than 0 are synchronized first
+   (`Module.internalsyncall()`, a soft event; a time before the clock
+   stops the run). On the first iteration of a time step the object
+   `on_precommit` handlers run, then the module `precommit` solvers. Then
+   come the module `presync` solvers and the presync handlers top-down
+   (parents before children), the sync handlers bottom-up (children before
+   parents) and the module `sync` solvers, and the module `postsync`
+   solvers and the postsync handlers top-down, with the transforms of
+   sources other than schedules and loadshapes after each pass
+   (`Module.transformsyncall()`). An object's rank is its `rank` header
+   value, raised so that each parent ranks above its children, as
+   `object_set_parent()` does; objects of equal rank run in creation order.
+4. A sync handler or module solver returns the time of the next event: a
+   positive time is a hard event, a negative time `-t` is a soft event at
+   `t`, and `None` (handlers only) or `TS_NEVER` means no event. The next
+   time is the earliest event; object hard events are rounded up to a
+   multiple of `minimum_timestep`. A time before the clock, `TS_INVALID`,
+   or 0 stops the run.
 5. When the earliest event is the current time, the passes run again
    without advancing the clock, up to `iteration_limit` times in a row;
    reaching the limit stops the run.
-6. Otherwise the time step is committed: `on_commit` handlers run with the
-   current time, every object's `clock` is set to it, and the clock
-   advances to the next time. A commit result at or before the current time
-   stops the run; an earlier result than the next time becomes the next
-   time.
-7. The run ends when the next time is after `stoptime`, or when it is
-   `TS_NEVER`, or when only soft events remain and `stoptime` is `NEVER`.
-   `stoptime` 0 means `NEVER`.
-8. Objects are synchronized only while in service: before `in_svc` an
-   object's next event is `in_svc`; after `out_svc` its handlers are not
-   called.
+6. Otherwise the time step is committed: the object `on_commit` handlers
+   and the module `commit` solvers run with the current time, and every
+   object's `clock` is set to it. An object commit result of `TS_INVALID`,
+   a result of 0, or a false module result stops the run; other object
+   commit results do not change the next time, as in `commit_all()`. The
+   module `clockupdate` solvers may then lower the next time
+   (`Module.clockupdateall()`), and the result is posted as a hard event;
+   a result at or before the clock stops the run.
+7. The run ends when the next time is after `stoptime` or is `TS_NEVER`,
+   or when it holds only soft events while `stoptime` is `NEVER` (which
+   happens only before the first committed step, see Caveats). `stoptime`
+   0 means `NEVER`.
+8. Objects are synchronized and committed only while in service: before
+   `in_svc` an object's next event is `in_svc`; after `out_svc` its
+   handlers are not called.
 9. `on_finalize` handlers run when the time series ends, also after a
-   failure or a stop during the time series.
+   failure or a stop during the time series; then the module `term`
+   solvers run.
 10. The `clock` and `progress` globals follow the run (`progress` is the
     fraction of the time from `starttime` to `stoptime` that is done).
+11. A solver that raises or returns the wrong type stops the run
+    (`INIERR` during initialization, else `RUNERR`).
 
 Event handlers
 --------------
@@ -122,7 +142,27 @@ A handler is an object's `on_<event>` property, or else its class's
   standard output and error lines are added to `stdout` and `stderr`. A
   nonzero exit status is a handler failure.
 
-Handlers reach the model and the run through `Runner.current()`, e.g.
+Module solvers
+--------------
+
+The solvers attached to the modules in `arras.module.Module.registry` are
+called through the `Module` dispatchers, in load order. For each module
+`NAME` that the model loads (GLM `module NAME;`) and that has no solvers in
+the registry, a Python file `NAME.py` in a `pythonpath` folder or the
+working folder is imported, as gridlabd's `python_module_load()` does, and
+its functions `on_init(t)`, `on_precommit(t)`, `on_presync(t)`,
+`on_sync(t)`, `on_postsync(t)`, `on_commit(t)`, and `on_term(t)` become the
+solvers of `Module.load(NAME)`, with `t` the clock:
+
+- `on_init` and `on_commit` return true or false;
+- `on_precommit` and the sync handlers return a time;
+- an exception, or a sync handler result that is not an integer, adds an
+  error line and counts as `TS_INVALID` (or false), as gridlabd's Python
+  module does.
+
+The module stays in the registry after the run.
+
+Object handlers reach the model and the run through `Runner.current()`, e.g.
 `Runner.current().model.get_property(name, "x")`, and add output lines with
 `Runner.current().output(...)` and `Runner.current().error(...)`.
 
@@ -199,17 +239,25 @@ Caveats
 -------
 
 - Only event handlers give objects behavior. The classes that gridlabd
-  modules implement in C++ (`powerflow`, `residential`, ...) have no
+  modules implement in C++ (`powerflow`, `residential`, ...) have no object
   synchronization code in `arras`, so their objects take part in a run only
-  through handlers. Class `PASSCONFIG` bits do not add objects to passes.
+  through handlers, and module behavior only through module solvers.
+  Class `PASSCONFIG` bits do not add objects to passes.
+- Reproduced core behaviors: the `clockupdate` step posts the next time as
+  a hard event after every committed step, so soft events keep a run going
+  even when `stoptime` is `NEVER`; a module `precommit` result fails the
+  run only when it is 0 (`TS_INVALID` and times are not used, as
+  `precommit_all()` tests the result as a truth value); object commit
+  results other than `TS_INVALID` and 0 are ignored.
 - A background run is a thread of the calling Python process, not a
   separate process. Handlers and the progress callback run in that thread;
   do not change the model from another thread while it runs.
 - Python handlers that `print` write to `sys.stdout` of the process; use
   `Runner.current().output()` to add lines to `stdout`.
 - `-W`, `-M`, and gridlabd's other options are not supported, nor are
-  realtime mode, deltamode, multithreading, schedules, transforms, filters,
-  `#exec` and script events, module `on_*` hooks, and object heartbeats.
+  realtime mode, deltamode (a warning is written when a module has a
+  `deltamode_desired` solver), multithreading, link and instance times,
+  filters, and `#exec` and script events.
 - `${PYTHON ...}`, `${SHELL ...}`, `python:` handlers, and shell handlers
   run code. Do not run untrusted models.
 
@@ -227,13 +275,22 @@ Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
    returns a `bool` or a non-integer fails.
 5. The model is written with `-o` whenever the model was loaded, also
    after a failed run.
+6. A module solver or internal item result before the clock, and a
+   `clockupdate` result at or before the clock, stop the run; gridlabd
+   would move its clock back.
+7. A Python module is found as `NAME.py` in `pythonpath` folders or the
+   working folder, and is used only when the module has no solvers in
+   `arras.module.Module.registry`.
 
 References
 ----------
 
 - `arras-energy/gridlabd`: `source/exec.cpp` (`GldExec::exec_start()`,
   `ss_do_object_sync()`, `sync_set()`, `sync_isrunning()`,
-  `init_by_deferral()`, `commit_all()`), `source/object.cpp`
+  `init_by_deferral()`, `precommit_all()`, `commit_all()`,
+  `syncall_internals()`, `clock_update_modules()`), `source/module.cpp`
+  (`module_initall()`, `module_termall()`), `python/python.cpp`
+  (`python_module_load()`, `on_init()` ... `on_term()`), `source/object.cpp`
   (`object_sync()`, `object_event()`, `object_init()`,
   `object_precommit()`, `object_commit()`, `object_finalize()`,
   `set_rank()`)
@@ -253,6 +310,7 @@ from typing import Any, Callable
 
 from arras.exceptions import ArrasException
 from arras import exitcodes
+from arras.module import Module, XS_ALL, XS_SCHEDULE, XS_LOADSHAPE
 
 _logger = logging.getLogger(__file__)
 
@@ -275,6 +333,10 @@ PROGRESS_ARGUMENTS = ("timestamp", "percent", "stdout", "stderr")
 
 INIT_DEFER = 2
 """`on_init` result that defers an object's initialization"""
+
+PYTHON_MODULE_EVENTS = ("init", "precommit", "presync", "sync", "postsync", "commit", "term")
+"""Event handlers that a Python module loaded by GLM `module NAME;` may
+define as `on_<event>(t)` (gridlabd `python_module_load()`)"""
 
 class RunnerError(ArrasException):
     """Runner error"""
@@ -359,6 +421,9 @@ class Runner: # pylint: disable=too-many-instance-attributes
         self._percent: float|None = None
         self._thread: threading.Thread|None = None
         self._done = threading.Event()
+        self._step = TS_NEVER
+        self._hard = False
+        self._service: dict[str,tuple[int,int]] = {}
         if background:
             self._thread = threading.Thread(target=self._main, name="arras-runner", daemon=True)
             self._thread.start()
@@ -561,7 +626,7 @@ class Runner: # pylint: disable=too-many-instance-attributes
                     raise _Failure(exitcodes.LDERR, f"{arg}: {err}") from err
                 files += 1
                 self._verbose(f"model file '{arg}' loaded ok")
-        if files == 0 and len(self.model.objects) == 0:
+        if files == 0 and not self.model.objects and not self.model.modules:
             raise _Failure(exitcodes.ARGERR, "no model file specified")
         return options
 
@@ -609,14 +674,18 @@ class Runner: # pylint: disable=too-many-instance-attributes
         limit = globs.getvalue("iteration_limit")
         if limit < 1:
             raise _Failure(exitcodes.INIERR, f"iteration_limit {limit} is not positive")
-        mts = globs.getvalue("minimum_timestep")
 
-        # initialization
+        # initialization: objects, then modules (gridlabd exec_init())
         globs.set("clock", start)
         stamp = globs.timestamp_to_string(start)
         for name in names:
             objects[name]["clock"] = stamp
+        self._load_python_modules()
         self._initialize(names)
+        if not self._dispatch(exitcodes.INIERR, "on_init", Module.initall):
+            raise _Failure(exitcodes.INIERR, "module initialization failed")
+        if any(module.has_solver("deltamode_desired") for module in Module.registry):
+            self.warning("deltamode is not supported; deltamode solvers are not called")
         if initialize_only:
             return
 
@@ -627,17 +696,30 @@ class Runner: # pylint: disable=too-many-instance-attributes
             members = [name for name in names if self._handler(name, event)]
             members.sort(key=lambda name, td=topdown: -ranks[name] if td else ranks[name])
             passes.append((event, members))
-        service = {name: (self._time(objects[name], "in_svc", TS_ZERO),
+        self._service = {name: (self._time(objects[name], "in_svc", TS_ZERO),
             self._time(objects[name], "out_svc", TS_NEVER)) for name in names}
+        heartbeats = [objects[name] for name in names if self._heartbeat(objects[name]) > 0]
 
         self._verbose("simulation started")
         try:
-            self._loop(names, passes, service, start, stop, limit, mts)
+            self._loop(names, passes, heartbeats, start, stop, limit)
         finally:
-            self._finalize(names)
+            try:
+                self._finalize(names)
+            finally:
+                self._dispatch(exitcodes.RUNERR, "on_term", Module.termall)
         if self.stopped:
             raise _Failure(exitcodes.RUNERR, f"simulation stopped at {self._simtime()}")
         self._verbose(f"simulation ended after {self.steps} time step(s)")
+
+    def _heartbeat(self, obj:dict) -> int:
+        value = obj.get("heartbeat")
+        if not value:
+            return 0
+        try:
+            return self.model.globals.timestamp_from_string(value)
+        except ArrasException:
+            return int(value)
 
     def _initialize(self, names:list[str]) -> None:
         deferred = list(names)
@@ -660,80 +742,134 @@ class Runner: # pylint: disable=too-many-instance-attributes
             deferred = retry
             tries += 1
 
-    def _loop(self, names, passes, service, start, stop, limit, mts) -> None: # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-branches,too-many-locals,too-many-statements
+    #
+    # Main loop
+    #
+    def _post(self, t:int, what:str) -> None:
+        """Post an event time from a module dispatcher or internal items
+        (gridlabd `sync_set()`)"""
+        if t == TS_NEVER:
+            return
+        if t in (TS_INVALID, TS_ZERO):
+            raise _Failure(exitcodes.RUNERR, f"{what} failed")
+        if abs(t) < self.clock:
+            raise _Failure(exitcodes.RUNERR, f"{what} returned {t}, before the clock")
+        if t > 0:
+            self._hard = True
+        self._step = min(self._step, abs(t))
+
+    def _dispatch(self, code:int, what:str, call:Callable, *args:Any, **kwargs:Any) -> Any:
+        """Call an `arras.module.Module` dispatcher; solver errors fail the run"""
+        try:
+            return call(*args, **kwargs)
+        except _Failure:
+            raise
+        except Exception as err: # pylint: disable=broad-exception-caught
+            raise _Failure(code, f"module {what} failed: {type(err).__name__}: {err}") from err
+
+    def _in_service(self, name:str) -> int|None:
+        """`None` when the object is in service, else its next event time
+        (`in_svc`) or `TS_NEVER` (after `out_svc`)"""
+        in_svc, out_svc = self._service[name]
+        if self.clock < in_svc:
+            return in_svc
+        return None if self.clock <= out_svc else TS_NEVER
+
+    def _loop(self, names, passes, heartbeats, start, stop, limit) -> None: # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-branches,too-many-statements,too-many-locals
         globs = self.model.globals
         objects = self.model.objects
+        mts = globs.getvalue("minimum_timestep")
+        others = XS_ALL & ~(XS_SCHEDULE|XS_LOADSHAPE)
         counter = limit
-        step, hard = start, True
-        while hard and step != TS_NEVER and step <= stop:
+        self._step, self._hard = start, True
+        while self._hard and self._step != TS_NEVER and self._step <= stop:
             if self._stop.is_set():
                 self.stopped = True
                 return
-            self.clock = step
-            globs.set("clock", step)
-            step, hard = TS_NEVER, False
+            self.clock = self._step
+            globs.set("clock", self.clock)
+            self._step, self._hard = TS_NEVER, False
             if stop != TS_NEVER:
-                step, hard = stop + 1, True
+                self._step, self._hard = stop + 1, True
+
+            # internal items and heartbeats (gridlabd syncall_internals())
+            internal = self._dispatch(exitcodes.RUNERR, "internal items", Module.internalsyncall,
+                self.clock, heartbeats, minimum_timestep=mts)
+            if internal != TS_NEVER and abs(internal) < self.clock:
+                raise _Failure(exitcodes.RUNERR, "internal property sync failure")
+            self._post(internal, "internal property sync")
 
             # precommit only on the first iteration of a time step
             if counter == limit:
                 for name in names:
+                    if self._in_service(name) is not None:
+                        continue
                     result = self._time_event(name, "precommit")
                     if result is not None and result != TS_NEVER and result < self.clock:
                         raise _Failure(exitcodes.RUNERR, f"object {name} precommit failed (returned {result})")
+                if self._dispatch(exitcodes.RUNERR, "on_precommit", Module.precommitall, self.clock) == TS_ZERO:
+                    raise _Failure(exitcodes.RUNERR, "precommit failure")
 
-            # synchronization passes
+            # synchronization passes, with the module events around them
             for event, members in passes:
+                if event == "presync":
+                    self._post(self._dispatch(exitcodes.RUNERR, "on_presync", Module.presyncall, self.clock), "module on_presync")
+                elif event == "postsync":
+                    self._post(self._dispatch(exitcodes.RUNERR, "on_postsync", Module.postsyncall, self.clock), "module on_postsync")
                 for name in members:
-                    in_svc, out_svc = service[name]
-                    if self.clock < in_svc:
-                        t = in_svc
-                    elif self.clock <= out_svc:
+                    t = self._in_service(name)
+                    if t is None:
                         t = self._time_event(name, event)
-                    else:
-                        continue
                     if t is None or t == TS_NEVER:
                         continue
                     if t < -1:
                         t = -t
                     else:
-                        hard = True
+                        self._hard = True
                     if t < self.clock:
                         raise _Failure(exitcodes.RUNERR, f"object {name} stopped its clock (its {event} handler returned {t})")
                     if counter == 2 and t == self.clock:
                         self._verbose(f"object {name} iteration limit imminent")
                     if mts > 1 and self.clock < t < TS_NEVER:
                         t = ((t-1)//mts + 1) * mts
-                    step = min(step, t)
+                    self._step = min(self._step, t)
+                if event == "sync":
+                    self._post(self._dispatch(exitcodes.RUNERR, "on_sync", Module.syncall, self.clock), "module on_sync")
+                self._post(self._dispatch(exitcodes.RUNERR, "transforms", Module.transformsyncall, self.clock, others), "transform sync")
 
-            # commit or iterate
-            if step != self.clock:
-                commit = TS_NEVER
-                for name in names:
-                    result = self._time_event(name, "commit")
-                    if result is None or result == TS_NEVER:
-                        continue
-                    if result == TS_INVALID:
-                        raise _Failure(exitcodes.RUNERR, f"object {name} commit failed")
-                    if abs(commit) > abs(result):
-                        commit = result
-                if commit != TS_NEVER:
-                    if abs(commit) <= self.clock:
-                        raise _Failure(exitcodes.RUNERR, "model commit failed")
-                    if commit > 0:
-                        hard = True
-                    step = min(step, abs(commit))
+            # commit and clock update, or iterate
+            if self._step != self.clock:
+                self._commit(names)
                 stamp = globs.timestamp_to_string(self.clock)
                 for obj in objects.values():
                     obj["clock"] = stamp
                 counter = limit
                 self.steps += 1
+                update = self._dispatch(exitcodes.RUNERR, "clock_update", Module.clockupdateall, self._step)
+                if update <= self.clock:
+                    raise _Failure(exitcodes.RUNERR, f"module clock_update returned {update}, not after the clock")
+                self._post(update, "module clock_update")
                 self._progress_update(start, stop)
                 self._report()
             else:
                 counter -= 1
                 if counter == 0:
                     raise _Failure(exitcodes.RUNERR, f"convergence iteration limit reached at {self._simtime()}")
+
+    def _commit(self, names:list[str]) -> None:
+        """Commit the time step (gridlabd `commit_all()`): object results
+        other than `TS_INVALID` do not change the next time"""
+        result = TS_NEVER
+        for name in names:
+            if self._in_service(name) is not None:
+                continue
+            value = self._time_event(name, "commit")
+            if value == TS_INVALID:
+                raise _Failure(exitcodes.RUNERR, f"object {name} commit failed")
+            if value is not None and value < result:
+                result = value
+        if result == TS_ZERO or not self._dispatch(exitcodes.RUNERR, "on_commit", Module.commitall, self.clock):
+            raise _Failure(exitcodes.RUNERR, "model commit failed")
 
     def _progress_update(self, start:int, stop:int) -> None:
         if stop == TS_NEVER:
@@ -753,6 +889,62 @@ class Runner: # pylint: disable=too-many-instance-attributes
                 failed.append(name)
         if failed:
             raise _Failure(exitcodes.RUNERR, f"finalize failed for {', '.join(failed)}")
+
+    #
+    # Python module event handlers
+    #
+    def _load_python_modules(self) -> None:
+        """Attach the event handlers of the Python modules that the model
+        loads (gridlabd `python_module_load()`) as module solvers"""
+        globs = self.model.globals
+        folders = [x for x in (globs.getvalue("pythonpath") or "").split(os.pathsep) if x] + [os.getcwd()]
+        for name in self.model.modules:
+            module = Module.find(name)
+            if module is not None and module.solvers:
+                continue
+            folder = next((x for x in folders if os.path.isfile(os.path.join(x, f"{name}.py"))), None)
+            if folder is None:
+                continue
+            try:
+                pymod = self._import(name, folder)
+            except Exception as err: # pylint: disable=broad-exception-caught
+                raise _Failure(exitcodes.INIERR, f"{name}.py: python module import failed: {type(err).__name__}: {err}") from err
+            module = self._dispatch(exitcodes.INIERR, "load", Module.load, name)
+            for hook in PYTHON_MODULE_EVENTS:
+                call = getattr(pymod, f"on_{hook}", None)
+                if call is None:
+                    continue
+                if not callable(call):
+                    self.error(f"{name}.py: on_{hook} is not callable")
+                    continue
+                module.set_solver(hook, self._python_module_solver(name, hook, call))
+            self._verbose(f"python module '{name}' loaded ok")
+
+    def _python_module_solver(self, name:str, hook:str, call:Callable) -> Callable:
+        """Wrap a Python module event handler as gridlabd's python module
+        does (`python/python.cpp`): `on_init(t)` and `on_commit(t)` are true
+        or false, the sync handlers return a time (`TS_INVALID` on an
+        exception or a non-integer result), and `on_term(t)` returns nothing"""
+        def clock():
+            return self.model.globals.getvalue("clock")
+        def solver(*args):
+            t = args[0] if args else clock()
+            try:
+                result = call(t)
+            except Exception as err: # pylint: disable=broad-exception-caught
+                self.error(f"python {name}.on_{hook}({t}) failed: {type(err).__name__}: {err}")
+                return TS_INVALID if hook in ("precommit", "presync", "sync", "postsync") else False
+            if hook in ("init", "commit"):
+                if not result:
+                    self.error(f"python {name}.on_{hook}({t}) returned False")
+                return bool(result)
+            if hook == "term":
+                return None
+            if not isinstance(result, int):
+                self.error(f"python {name}.on_{hook}({t}) returned an invalid type (expected int)")
+                return TS_INVALID
+            return int(result)
+        return solver
 
     #
     # Event handlers
@@ -806,18 +998,20 @@ class Runner: # pylint: disable=too-many-instance-attributes
         return call
 
     @staticmethod
-    def _import(modname:str) -> Any:
+    def _import(modname:str, folder:str|None=None) -> Any:
+        """Import a module by name, else from `folder` (default is the
+        working folder)"""
         try:
             return importlib.import_module(modname)
         except ModuleNotFoundError:
-            cwd = os.getcwd()
-            if cwd in sys.path:
+            folder = os.getcwd() if folder is None else folder
+            if folder in sys.path:
                 raise
-            sys.path.insert(0, cwd)
+            sys.path.insert(0, folder)
             try:
                 return importlib.import_module(modname)
             finally:
-                sys.path.remove(cwd)
+                sys.path.remove(folder)
 
     def _shell(self, name:str, event:str, script:str, t:int, code:int) -> None:
         env = dict(os.environ)

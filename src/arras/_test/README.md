@@ -196,10 +196,18 @@ Fast, self-contained tests of `arras.runner` and `arras.main`:
   errors, and output files; `main()` printing the output as it arrives;
 - the progress callback (argument selection, stop by returning `False`,
   callbacks that raise) and background runs with `wait()` and `stop()`;
+- module solvers in the loop: call order relative to the object handlers,
+  module events that set the next time, solver failures and their exit
+  codes, the reproduced precommit and commit rules, `clockupdate`, the
+  deltamode warning, internal items and transforms, and heartbeats;
+- Python module event handlers loaded by `module NAME;` from the working
+  folder or `pythonpath`, modules that already have solvers, and handler
+  failures;
 - the module docstring examples (doctest).
 
-Each test starts and ends with an empty class registry (`Class.reset()`).
-Handlers are functions of the test module, named `python:test_runner.NAME`.
+Each test starts and ends with empty class and module registries
+(`Class.reset()`, `Module.reset()`). Handlers are functions of the test
+module, named `python:test_runner.NAME`.
 Run it alone with:
 
 	pytest src/arras/_test/test_runner.py

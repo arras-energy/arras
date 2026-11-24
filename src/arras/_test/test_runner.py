@@ -14,7 +14,8 @@ from arras import exitcodes
 from arras.main import main
 from arras.oclass import Class
 from arras.model import Model
-from arras.runner import Runner, RunnerError, TS_INVALID
+from arras.module import Module
+from arras.runner import Runner, RunnerError, TS_INVALID, TS_NEVER
 
 H = 3600
 START = 1577836800 # 2020-01-01 00:00:00 UTC
@@ -23,12 +24,14 @@ STATE = {}
 
 @pytest.fixture(autouse=True)
 def registry():
-    """Start and end each test with an empty class registry and log"""
+    """Start and end each test with empty class and module registries and log"""
     Class.reset()
+    Module.reset()
     LOG.clear()
     STATE.clear()
     yield
     Class.reset()
+    Module.reset()
 
 def make(body:str="", stop:str="2020-01-01 03:00:00 UTC", classes:str="class thing { double x; }") -> Model:
     model = Model()
@@ -93,6 +96,10 @@ def soft_hourly(name, t):
     LOG.append(("sync", name, t))
     return -(t + H)
 
+def soft_three(name, t):
+    LOG.append(("sync", name, t))
+    return -(t + H) if t < START + 2*H else None
+
 def three_steps(name, t):
     LOG.append(("sync", name, t))
     return t + H if t < START + 2*H else None
@@ -106,6 +113,9 @@ def commit_now(name, t):
 
 def commit_half(name, t):
     return t + H // 2
+
+def commit_zero(name, t):
+    return 0
 
 def commit_invalid(name, t):
     return TS_INVALID
@@ -268,9 +278,10 @@ def test_soft_events():
     assert [t for _, _, t in LOG] == [START, START+H, START+2*H, START+3*H]
     LOG.clear()
     model.globals.set("stoptime", "NEVER")
+    model.set_property("a", "on_sync", "python:test_runner.soft_three")
     runner = Runner(model=model)
     assert runner.returncode == exitcodes.SUCCESS
-    assert [t for _, _, t in LOG] == [START]
+    assert [t for _, _, t in LOG] == [START, START+H, START+2*H]
 
 def test_stoptime_never():
     model = make('object thing { name "a"; on_sync "python:test_runner.three_steps"; }', stop="NEVER")
@@ -308,8 +319,10 @@ def test_service_times():
 def test_commit():
     model = make('object thing { name "a"; on_sync "python:test_runner.hourly"; on_commit "python:test_runner.commit_half"; }', stop="2020-01-01 01:00:00 UTC")
     assert Runner(model=model).returncode == exitcodes.SUCCESS
-    assert [t for _, _, t in LOG] == [START, START+H//2, START+H]
-    for handler, message in (("commit_now", "model commit failed"), ("commit_invalid", "object a commit failed")):
+    assert [t for _, _, t in LOG] == [START, START+H]
+    model.set_property("a", "on_commit", "python:test_runner.commit_now")
+    assert Runner(model=model).returncode == exitcodes.SUCCESS
+    for handler, message in (("commit_zero", "model commit failed"), ("commit_invalid", "object a commit failed")):
         model.set_property("a", "on_commit", f"python:test_runner.{handler}")
         runner = Runner(model=model)
         assert runner.returncode == exitcodes.RUNERR
@@ -562,3 +575,182 @@ def test_background_stop():
     assert runner.wait(5) == exitcodes.RUNERR
     assert runner.stopped
     assert runner.steps == 1
+
+#
+# Module solvers, internal items, and heartbeats
+#
+def logger(event, result=None):
+    def call(*args):
+        LOG.append((event,) + args)
+        return result
+    return call
+
+def test_module_order():
+    Module("m", init=logger("m.init", True), precommit=logger("m.precommit", TS_NEVER),
+        presync=logger("m.presync", TS_NEVER), sync=logger("m.sync", TS_NEVER),
+        postsync=logger("m.postsync", TS_NEVER), commit=logger("m.commit", True),
+        term=logger("m.term"), clockupdate=lambda t: LOG.append(("m.clockupdate", t)) or t)
+    handlers = "".join(f' on_{e} "python:test_runner.log_{e}";' for e in ("init", "precommit", "presync", "sync", "postsync", "commit", "finalize"))
+    model = make(f'object thing {{ name "a";{handlers} }}', stop="2020-01-01 00:00:00 UTC")
+    runner = Runner(model=model)
+    assert runner.returncode == exitcodes.SUCCESS, runner.stderr
+    assert [x[0] for x in LOG] == ["init", "m.init", "precommit", "m.precommit", "m.presync", "presync",
+        "sync", "m.sync", "m.postsync", "postsync", "commit", "m.commit", "m.clockupdate", "finalize", "m.term"]
+    assert ("m.sync", START) in LOG and ("m.clockupdate", START + 1) in LOG
+
+def test_module_events():
+    Module("m", sync=lambda t: t + H // 2)
+    model = make('object thing { name "a"; on_sync "python:test_runner.log_sync"; }', stop="2020-01-01 01:00:00 UTC")
+    runner = Runner(model=model)
+    assert runner.returncode == exitcodes.SUCCESS
+    assert [t for _, _, t in LOG] == [START, START+H//2, START+H]
+    Module.reset()
+    Module("m", presync=lambda t: -(t + H // 2))
+    LOG.clear()
+    assert Runner(model=model).steps == 3
+
+@pytest.mark.parametrize("solvers,code,message", [
+    ({"presync": lambda t: TS_INVALID}, exitcodes.RUNERR, "module on_presync failed"),
+    ({"postsync": lambda t: t - 1}, exitcodes.RUNERR, "module on_postsync returned 1577836799, before the clock"),
+    ({"sync": lambda t: True}, exitcodes.RUNERR, "module on_sync failed: ModuleError"),
+    ({"init": lambda: False}, exitcodes.INIERR, "module initialization failed"),
+    ({"init": lambda: 1/0}, exitcodes.INIERR, "module on_init failed: ZeroDivisionError"),
+    ({"commit": lambda t: False}, exitcodes.RUNERR, "model commit failed"),
+    ({"precommit": lambda t: 0}, exitcodes.RUNERR, "precommit failure"),
+    ({"clockupdate": lambda t: START}, exitcodes.RUNERR, "module clock_update returned 1577836800, not after the clock"),
+    ({"term": lambda: 1/0}, exitcodes.RUNERR, "module on_term failed: ZeroDivisionError"),
+    ])
+def test_module_failures(solvers, code, message):
+    Module("m", **solvers)
+    runner = Runner(model=make('object thing { name "a"; }'))
+    assert runner.returncode == code
+    assert message in runner.stderr[-1]
+
+def test_module_quirks():
+    Module("m", precommit=lambda t: TS_INVALID, term=logger("m.term"))
+    model = make('object thing { name "a"; on_sync "python:test_runner.always_now"; }')
+    runner = Runner(model=model)
+    assert runner.returncode == exitcodes.RUNERR
+    assert "convergence iteration limit" in runner.stderr[-1]
+    assert LOG == [("m.term",)]
+
+def test_clock_update():
+    Module("m", clockupdate=lambda t: min(t, Runner.current().clock + 600))
+    model = make('object thing { name "a"; on_sync "python:test_runner.log_sync"; }', stop="2020-01-01 00:30:00 UTC")
+    runner = Runner(model=model)
+    assert runner.returncode == exitcodes.SUCCESS
+    assert [t for _, _, t in LOG] == [START, START+600, START+1200, START+1800]
+
+def test_deltamode_warning():
+    Module("m", deltamode_desired=lambda flags: 0)
+    runner = Runner(model=make('object thing { name "a"; }'))
+    assert runner.returncode == exitcodes.SUCCESS
+    assert runner.stderr == ["WARNING [INIT]: deltamode is not supported; deltamode solvers are not called"]
+
+def test_internal_items():
+    Module.add_internal("schedule", logger("schedule", -1))
+    calls = []
+    Module.add_internal("schedule", lambda t: calls.append(t) or t + 900)
+    Module.add_internal("transform", lambda t: calls.append(("transform", t)) or TS_NEVER, source="DOUBLE")
+    model = make('object thing { name "a"; on_presync "python:test_runner.log_presync"; }', stop="2020-01-01 00:30:00 UTC")
+    Module.internals["schedule"].pop(0)
+    runner = Runner(model=model)
+    assert runner.returncode == exitcodes.SUCCESS, runner.stderr
+    assert [t for _, _, t in LOG] == [START, START+900, START+1800]
+    assert calls[:4] == [START, ("transform", START), ("transform", START), ("transform", START)]
+    Module.reset()
+    Module.add_internal("enduse", lambda t: t - 10)
+    runner = Runner(model=model)
+    assert runner.returncode == exitcodes.RUNERR
+    assert runner.stderr[-1].endswith("internal property sync failure")
+
+def test_heartbeat():
+    module = Module("hb")
+    module.register_class("beacon")
+    module.set_heartbeat("beacon", lambda obj: LOG.append(("heartbeat", obj["id"])) or Runner.current().clock + 1200)
+    model = Model()
+    model.read_glm("""
+clock { starttime "2020-01-01 00:00:00 UTC"; stoptime "2020-01-01 00:40:00 UTC"; }
+object beacon { name "b1"; heartbeat 1; }
+object beacon { name "b2"; }
+""")
+    runner = Runner(model=model)
+    assert runner.returncode == exitcodes.SUCCESS, runner.stderr
+    assert runner.steps == 3
+    assert LOG == [("heartbeat", "0")] * 3
+
+#
+# Python module event handlers
+#
+PYMOD = """
+import test_runner
+def on_init(t):
+    test_runner.LOG.append(("init", t))
+    return True
+def on_precommit(t):
+    test_runner.LOG.append(("precommit", t))
+    return t
+def on_presync(t):
+    test_runner.LOG.append(("presync", t))
+    return test_runner.TS_NEVER
+def on_sync(t):
+    test_runner.LOG.append(("sync", t))
+    return t + 1800
+def on_postsync(t):
+    test_runner.LOG.append(("postsync", t))
+    return 9223372036854775807
+def on_commit(t):
+    test_runner.LOG.append(("commit", t))
+    return True
+def on_term(t):
+    test_runner.LOG.append(("term", t))
+"""
+
+def pymodel(name, stop="2020-01-01 00:30:00 UTC"):
+    return make(f"module {name};", stop=stop)
+
+def test_python_module(tmp_path, monkeypatch):
+    (tmp_path / "pymod_events.py").write_text(PYMOD)
+    monkeypatch.chdir(tmp_path)
+    runner = Runner("-v", model=pymodel("pymod_events"))
+    assert runner.returncode == exitcodes.SUCCESS, runner.stderr
+    assert [e for e, _ in LOG] == ["init", "precommit", "presync", "sync", "postsync", "commit",
+        "precommit", "presync", "sync", "postsync", "commit", "term"]
+    assert [t for e, t in LOG if e == "sync"] == [START, START+1800]
+    assert "VERBOSE [INIT]: python module 'pymod_events' loaded ok" in runner.stderr
+    assert Module.find("pymod_events").has_solver("on_sync")
+
+def test_python_module_pythonpath(tmp_path):
+    folder = tmp_path / "lib"
+    folder.mkdir()
+    (folder / "pymod_path.py").write_text("def on_sync(t):\n    return t + 600\non_presync = 3\n")
+    runner = Runner("-D", f"pythonpath={folder}", model=pymodel("pymod_path"))
+    assert runner.returncode == exitcodes.SUCCESS, runner.stderr
+    assert runner.steps == 4
+    assert runner.stderr == ["ERROR [INIT]: pymod_path.py: on_presync is not callable"]
+
+def test_python_module_skipped(tmp_path, monkeypatch):
+    (tmp_path / "pymod_user.py").write_text(PYMOD)
+    monkeypatch.chdir(tmp_path)
+    Module("pymod_user", sync=lambda t: TS_NEVER)
+    assert Runner(model=pymodel("pymod_user")).returncode == exitcodes.SUCCESS
+    assert not LOG
+    assert Runner(model=pymodel("pymod_absent")).returncode == exitcodes.SUCCESS
+    assert Module.find("pymod_absent") is None
+
+@pytest.mark.parametrize("source,code,message", [
+    ("def on_sync(t):\n    raise ValueError('x')\n", exitcodes.RUNERR, "python {name}.on_sync(1577836800) failed: ValueError: x"),
+    ("def on_sync(t):\n    return 'later'\n", exitcodes.RUNERR, "python {name}.on_sync(1577836800) returned an invalid type (expected int)"),
+    ("def on_init(t):\n    return False\n", exitcodes.INIERR, "python {name}.on_init(1577836800) returned False"),
+    ("def on_init(t):\n    raise ValueError('x')\n", exitcodes.INIERR, "python {name}.on_init(1577836800) failed: ValueError: x"),
+    ("def on_commit(t):\n    return 0\n", exitcodes.RUNERR, "python {name}.on_commit(1577836800) returned False"),
+    ("def on_term(t):\n    raise ValueError('x')\n", exitcodes.SUCCESS, "python {name}.on_term(1577836800) failed: ValueError: x"),
+    ("def on_sync(t:\n", exitcodes.INIERR, "{name}.py: python module import failed: SyntaxError"),
+    ])
+def test_python_module_failures(tmp_path, monkeypatch, source, code, message):
+    name = f"pymod_fail_{abs(hash(source))}"
+    (tmp_path / f"{name}.py").write_text(source)
+    monkeypatch.chdir(tmp_path)
+    runner = Runner(model=pymodel(name, stop="2020-01-01 00:00:00 UTC"))
+    assert runner.returncode == code
+    assert any(message.format(name=name) in line for line in runner.stderr), runner.stderr
