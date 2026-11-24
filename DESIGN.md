@@ -3,7 +3,8 @@
 Status: decisions recorded from the code as merged through #16, 2026-11-23;
 modules and solver dispatch (`arras.module`, #22) added 2026-11-23;
 internal item and heartbeat dispatch added 2026-11-23;
-runner decisions revised for #45, 2026-11-24
+runner decisions revised for #45, 2026-11-24;
+folders without a gridlabd install (`arras.folders`, decision 1.12, #47), 2026-11-24
 
 ## Purpose
 
@@ -65,17 +66,18 @@ PRs can cite "decision 4.3".
 | 1.9 | Tests are fast and self-contained: no network, no credentials, no gridlabd install; the suite finishes in seconds. Coverage is reported but has no threshold. |
 | 1.10 | Python 3.12 only (`requires-python = "== 3.12.*"`). CI pins `ubuntu-24.04` and Python 3.12 and installs the package non-editable to catch packaging mistakes. |
 | 1.11 | Source layout is `src/arras/`; tests are in `src/arras/_test/` with their data in `src/arras/_test/data/` and a README for each. |
+| 1.12 | `arras` does not depend on gridlabd folders or files (`/usr/local/opt/gridlabd`, `GLD_*`, `GLTEMP`, `GLPATH`, `~/.gridlabd`, `/tmp/gridlabd-*`). `arras.folders` gives three folders: the package folder (`PACKAGEDIR`, where Python imports `arras` from) for files installed with `arras`; the user folder (`ARRAS_USERDIR`, else `~/.arras`, with `share`, `lib`, `include`, `var`, and `tmp` subfolders) for files installed at runtime and shared by all models; and the working folder for project files. Files are searched in the working folder, the user `share` folder, then the package folder. No folder is created unless code asks for it. (2026-11-24, #47) |
 
 ### 2. Command line and runner (`main`, `runner`, `exitcodes`, `exceptions`)
 
 | # | Decision |
 |---|---|
 | 2.1 | The `arras` command (`arras.main:main`) passes its arguments to `arras.runner.Runner`, prints the runner's output and error lines through the progress callback as they arrive, and returns the runner's exit code. `Runner` processes the arguments in order: model files, `-D`, `-o`, `-c`, `-C`, `-I`, `-q`, `-v`, `-w`, `--debug`; any other option fails with `ARGERR`. The package docstring lists only these options. (Edited 2026-11-24, #45: the command no longer runs `gridlabd.bin`.) |
-| 2.2 | `Runner.GRIDLABD_PATH` (`/usr/local/opt/gridlabd/current`) remains only as the default for the folder globals that `arras.globals` takes from `GLD_*` (3.6). `Runner` no longer sets environment variables or runs an executable; the `exe` and `subprocess.run` keyword arguments are removed. (Edited 2026-11-24, #45.) |
+| 2.2 | `Runner` does not set environment variables or run an executable; the `exe` and `subprocess.run` keyword arguments are removed (#45). `Runner.GRIDLABD_PATH` is removed: folder globals come from `arras.folders` (1.12, 3.6). (Edited 2026-11-24.) |
 | 2.3 | Exit codes in `arras.exitcodes` use gridlabd's values. An exception caught by `main()` returns `EXCEPTION` (255). |
 | 2.4 | An exception caught by `main()` prints one line, `EXCEPTION [arras/FILE@LINE]: MESSAGE`, to stderr. `arras.exceptions.DEBUG` re-raises instead, and `TRACE` adds a traceback. |
 | 2.5 | `Runner` reproduces the event-mode main loop of `GldExec::exec_start()` (`source/exec.cpp`): objects initialized in creation order with `init_max_defer` deferral rounds, then `Module.initall()`; at each iteration `Module.internalsyncall()` with the objects whose `heartbeat` header is greater than 0; on the first iteration of a time step object precommit then `Module.precommitall()`, whose result is posted as an event (the clock itself means no event); `Module.presyncall()` and presync top-down, sync bottom-up and `Module.syncall()`, `Module.postsyncall()` and postsync top-down, by rank (parents rank above children, `set_rank()`), equal ranks in creation order, with `Module.transformsyncall()` for non-schedule sources after each pass; hard and soft events merged as `sync_set()` does, with `stoptime+1` as a hard event when `stoptime` is set; `minimum_timestep` rounding of object hard events; iteration while the earliest event is the clock, up to `iteration_limit`; object commit then `Module.commitall()`, every object's `clock` set, then `Module.clockupdateall()`, posted as a hard event only when it lowers the next time; `in_svc`/`out_svc`; finalize then `Module.termall()` after the time series, also after a failure or stop. Object commit times other than `TS_INVALID` and 0 are ignored, as in `commit_all()`. Two core behaviors are fixed rather than reproduced (2.12, 2.13). (Edited 2026-11-24, #45: module solvers, internal items, and heartbeats added after #23 merged.) |
-| 2.6 | Object behavior comes only from event handlers (`docs/GLM/Object/Events.md`): an object's `on_<event>` property, else its class's. `python:MODULE.FUNCTION` calls `FUNCTION(name, t)`; other text runs as a shell command with `CLOCK`, `HOSTNAME`, `PORT`, and `OBJECT` set and its output lines captured. Class `PASSCONFIG` bits do not add objects to passes. For each module that the model loads and that has no solvers in `Module.registry`, a Python file `NAME.py` in a `pythonpath` folder or the working folder is imported and its `on_init(t)` ... `on_term(t)` functions become the module's solvers, wrapped as `python/python.cpp` does (exceptions and non-integer sync results give `TS_INVALID` or false with an error line). The module stays registered after the run. |
+| 2.6 | Object behavior comes only from event handlers (`docs/GLM/Object/Events.md`): an object's `on_<event>` property, else its class's. `python:MODULE.FUNCTION` calls `FUNCTION(name, t)`; other text runs as a shell command with `CLOCK`, `HOSTNAME`, `PORT`, and `OBJECT` set and its output lines captured. Class `PASSCONFIG` bits do not add objects to passes. For each module that the model loads and that has no solvers in `Module.registry`, a Python file `NAME.py` in a `pythonpath` folder, the working folder, or the user `lib` folder (1.12) is imported and its `on_init(t)` ... `on_term(t)` functions become the module's solvers, wrapped as `python/python.cpp` does (exceptions and non-integer sync results give `TS_INVALID` or false with an error line). The module stays registered after the run. |
 | 2.7 | Errors during a run do not raise: `Runner` records `returncode` (`ARGERR`, `LDERR`, `INIERR`, `RUNERR`, `IOERR`, or `EXCEPTION` for an unexpected exception) and adds `ERROR [TIME]: text` to `stderr`. Only bad constructor arguments raise `RunnerError`. |
 | 2.8 | `stdout` and `stderr` are lists of lines. Handlers add lines with `Runner.current().output()` and `.error()`; verbose, warning, and debug lines follow the `verbose`, `warn`, `debug`, and `quiet` globals of the model. |
 | 2.9 | `background=True` runs the simulation in a daemon thread of the calling process; `running`, `wait()`, and `stop()` control it. A thread rather than a process keeps the model, its classes, and Python handlers shared with the caller without serialization. |
@@ -93,7 +95,7 @@ PRs can cite "decision 4.3".
 | 3.3 | `strictnames` is true by default, as in gridlabd: setting an undefined name raises `GlobalsError`. When it is false, the name is created as a `char1024` global. |
 | 3.4 | `get(spec)` evaluates pseudo-globals and `${...}` expansions in the order that `global_getvar()` tests them, and returns `None` where gridlabd returns `NULL`. |
 | 3.5 | Pseudo-globals that need a model (`FIND`, `object.last`, `GEOCODE OBJECT`) call the assignable hooks `object_finder`, `object_last`, and `object_locator`, so `arras.globals` does not depend on `arras.model`. Without a hook, `FIND` returns an empty string and the others return `None`. |
-| 3.6 | Values that gridlabd fixes at build or run time (`version*`, `command_line`, `origin`, `gitbranch`, ...) come from the installed `arras` version or start empty. Folder globals come from `GLD_*` when set, else from `Runner.GRIDLABD_PATH`. All can be overridden in the constructor. |
+| 3.6 | Values that gridlabd fixes at build or run time (`version*`, `command_line`, `origin`, `gitbranch`, ...) come from the installed `arras` version or start empty. Folder globals come from `arras.folders` (1.12): `datadir`, `libdir`, `incdir`, `vardir`, and `tmp` are subfolders of the user folder, `configpath`, `logfile`, and `pidfile_dir` are in it, `bindir` is the Python scripts folder, and `pythonexec` is the running Python. `GLD_*` and `GLTEMP` are not read, and `${FINDFILE}` does not read `GLPATH`. All can be overridden in the constructor. (Edited 2026-11-24.) |
 | 3.7 | `set()` does not check `access`, matching `global_setvar()`; the access value is recorded only. |
 | 3.8 | Random numbers come from Python's `random` module seeded by `randomseed`. Sequences differ from gridlabd's generator even with the same seed. |
 | 3.9 | `timezone_locale` supports `UTC` and IANA zone names (Python `zoneinfo`) only; gridlabd's `tzinfo.txt` is not read. |
@@ -119,7 +121,7 @@ PRs can cite "decision 4.3".
 | # | Decision |
 |---|---|
 | 5.1 | `Units` is a port of the gridlabd core unit manager (`source/unit.cpp`) and reads the same `unitfile.txt` format. A copy of gridlabd's `runtime/unitfile.txt` ships in the package (`package-data`). |
-| 5.2 | `Units()` loads the first `unitfile.txt` found in the working folder, then each `GLPATH` folder, then the bundled copy. |
+| 5.2 | `Units()` loads the first `unitfile.txt` found in the working folder, then the user `share` folder, then the bundled copy in the package folder (1.12). `GLPATH` is not read. (Edited 2026-11-24.) |
 | 5.3 | Each `Units` object has its own unit list. Prefixed and compound units are derived when `find()` asks for them and added to that list, as `unit_find()` does. |
 | 5.4 | The parsing behaviors of `unit.cpp` that change results are reproduced so conversions give the same numbers (leading number read twice, `$` ending a derivation, reverse prefix order, second `^` ignored, offset applied to the imaginary part). Each is documented so it can be fixed in both code bases together. |
 | 5.5 | `find()` and `convert()` raise `UnitsError` where gridlabd returns `NULL` or `0`. `convert()` returns the value unchanged when both unit names are the same string, as `unit_convert()` does. |
@@ -187,6 +189,7 @@ published at https://arras-energy.github.io/arras rather than under
 src/arras/
   __init__.py      package docs (CLI options, Python API); re-exports
   main.py          main(args): `arras` command entry point
+  folders.py       PACKAGEDIR, userdir(), workdir(), search_path(), findfile(): folders
   runner.py        Runner(*args, model, background, progress): runs a simulation
   exitcodes.py     gridlabd exit codes
   exceptions.py    ArrasException, exception(): error output
@@ -201,14 +204,17 @@ src/arras/
 ```
 
 Dependencies between modules (`runner` imports `model` when a `Runner`
-is created, because `globals` imports `runner` for `GRIDLABD_PATH`):
+is created; since 1.12 `globals` no longer imports `runner`):
 
 ```mermaid
 flowchart LR
   main --> runner
   main --> exceptions
   main --> exitcodes
-  globals --> runner
+  globals --> folders
+  units --> folders
+  model --> folders
+  runner --> folders
   runner --> model
   runner --> exitcodes
   runner --> module
@@ -276,9 +282,10 @@ Each module is checked against these gridlabd files (`master` 076e78a):
 - `arras.model.Model.modules` still holds each module as a `dict` of
   `major` and `minor`; `Model.load_module()` does not yet create or use an
   `arras.module.Module` (see open question 4).
-- Assumption: `Runner.GRIDLABD_PATH` defaults to
-  `/usr/local/opt/gridlabd/current`; override it with the `GLD_*`
-  environment variables or by assigning the class attribute.
+- Models and scripts that set `GLPATH`, `GLD_*`, or `GLTEMP` for gridlabd
+  get no effect from them in `arras` (1.12): move shared files to the user
+  `share` folder (or set `ARRAS_USERDIR`), or set the folder globals in the
+  model.
 
 ## Open questions
 

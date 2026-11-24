@@ -21,9 +21,11 @@ Description
 
 Given no arguments, `Units()` loads the first `unitfile.txt` found in
 
-1. the current working folder,
-2. each folder listed in `GLPATH` (separated by `;` or `os.pathsep`), and
-3. the copy of gridlabd's `runtime/unitfile.txt` that ships with `arras`,
+1. the current working folder (project files),
+2. the `share` folder of the user folder (files shared by all models,
+   see `arras.folders`), and
+3. the `arras` package folder, which holds the copy of gridlabd's
+   `runtime/unitfile.txt` that ships with `arras`,
 
 and returns an object that is expected to satisfy:
 
@@ -106,6 +108,8 @@ Caveats
 
 - `Units` is an independent Python model of gridlabd's unit manager. It
   does not read from or write to a running `gridlabd` process.
+- `GLPATH` is not read; a unit file shared by all models goes in the
+  `share` folder of the user folder (`arras.folders.userdir("share")`).
 - Each `Units` object has its own unit list. Units derived by `find()` are
   added to it, as `unit_find()` adds them to gridlabd's list.
 - Constants are read and checked but, as in gridlabd, not used in any
@@ -148,6 +152,7 @@ import logging
 from dataclasses import dataclass
 from typing import Callable, Iterator
 
+from arras import folders
 from arras.exceptions import ArrasException
 
 _logger = logging.getLogger(__file__)
@@ -259,7 +264,8 @@ class Units:
         Arguments
         ---------
         - `file`: path of the unit definition file (default searches the
-          working folder, `GLPATH`, then the copy shipped with `arras`)
+          working folder, the user `share` folder, then the `arras`
+          package folder)
 
         Exceptions
         ----------
@@ -282,10 +288,9 @@ class Units:
         Returns
         -------
         - `str`: path of the first `unitfile.txt` found in the working
-          folder or a `GLPATH` folder, else `DEFAULT_UNITFILE`
+          folder or the user `share` folder, else `DEFAULT_UNITFILE`
         """
-        folders = ["."] + [x for x in re.split(f"[;{re.escape(os.pathsep)}]",os.getenv("GLPATH","")) if x]
-        for folder in folders:
+        for folder in folders.search_path(".")[:-1]:
             path = os.path.join(folder,UNITFILE)
             if os.path.isfile(path):
                 return path
@@ -497,7 +502,7 @@ class Units:
             with open(self.file,"r",encoding="utf-8") as fh:
                 lines = fh.readlines()
         except OSError as err:
-            raise UnitsError(f"{self.file}: {err.strerror} (GLPATH={os.getenv('GLPATH')})") from err
+            raise UnitsError(f"{self.file}: {err.strerror}") from err
 
         for self._linenum,line in enumerate(lines,1):
             line = line.split(";",1)[0].rstrip()

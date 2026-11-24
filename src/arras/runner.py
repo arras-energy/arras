@@ -149,8 +149,8 @@ Module solvers
 The solvers attached to the modules in `arras.module.Module.registry` are
 called through the `Module` dispatchers, in load order. For each module
 `NAME` that the model loads (GLM `module NAME;`) and that has no solvers in
-the registry, a Python file `NAME.py` in a `pythonpath` folder or the
-working folder is imported, as gridlabd's `python_module_load()` does, and
+the registry, a Python file `NAME.py` in a `pythonpath` folder, the
+working folder, or the user `lib` folder (`arras.folders`) is imported, as gridlabd's `python_module_load()` does, and
 its functions `on_init(t)`, `on_precommit(t)`, `on_presync(t)`,
 `on_sync(t)`, `on_postsync(t)`, `on_commit(t)`, and `on_term(t)` become the
 solvers of `Module.load(NAME)`, with `t` the clock:
@@ -276,8 +276,8 @@ Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
 6. A module solver or internal item result before the clock, and a
    `clockupdate` result at or before the clock, stop the run; gridlabd
    would move its clock back.
-7. A Python module is found as `NAME.py` in `pythonpath` folders or the
-   working folder, and is used only when the module has no solvers in
+7. A Python module is found as `NAME.py` in `pythonpath` folders, the
+   working folder, or the user `lib` folder, and is used only when the module has no solvers in
    `arras.module.Module.registry`.
 8. Soft events do not keep a run going when `stoptime` is `NEVER`: the
    `clockupdate` step posts a hard event only when a solver lowers the next
@@ -318,6 +318,7 @@ import threading
 import subprocess
 from typing import Any, Callable
 
+import arras.folders
 from arras.exceptions import ArrasException
 from arras import exitcodes
 from arras.module import Module, XS_ALL, XS_SCHEDULE, XS_LOADSHAPE
@@ -375,10 +376,6 @@ class Runner: # pylint: disable=too-many-instance-attributes
     - `steps`: number of committed time steps
     - `stopped`: `True` when `stop()` or the progress callback stopped the run
     """
-
-    GRIDLABD_PATH = "/usr/local/opt/gridlabd/current"
-    """Path to the gridlabd install, used for the folder globals that
-    `arras.globals` takes from `GLD_*` when they are not set"""
 
     _local = threading.local()
 
@@ -909,7 +906,8 @@ class Runner: # pylint: disable=too-many-instance-attributes
         """Attach the event handlers of the Python modules that the model
         loads (gridlabd `python_module_load()`) as module solvers"""
         globs = self.model.globals
-        folders = [x for x in (globs.getvalue("pythonpath") or "").split(os.pathsep) if x] + [os.getcwd()]
+        folders = [x for x in (globs.getvalue("pythonpath") or "").split(os.pathsep) if x] + \
+            [os.getcwd(), arras.folders.userdir("lib")]
         for name in self.model.modules:
             module = Module.find(name)
             if module is not None and module.solvers:

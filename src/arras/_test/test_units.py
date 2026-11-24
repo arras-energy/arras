@@ -29,12 +29,16 @@ def test_default_file(units):
 
 def test_locate(tmp_path,monkeypatch):
     monkeypatch.chdir(tmp_path)
-    monkeypatch.delenv("GLPATH",raising=False)
+    monkeypatch.setenv("ARRAS_USERDIR",str(tmp_path / "user"))
     assert Units.locate() == DEFAULT_UNITFILE
-    folder = tmp_path / "lib"
+    folder = tmp_path / "glpath"
     folder.mkdir()
+    (folder / "unitfile.txt").write_text("")
+    monkeypatch.setenv("GLPATH",str(folder))
+    assert Units.locate() == DEFAULT_UNITFILE
+    folder = tmp_path / "user" / "share"
+    folder.mkdir(parents=True)
     (folder / "unitfile.txt").write_text("unit=0,0,0,0,0,0,1,0,16\n")
-    monkeypatch.setenv("GLPATH",f"/nowhere;{folder}")
     assert Units.locate() == str(folder / "unitfile.txt")
     assert len(Units()) == 1
     (tmp_path / "unitfile.txt").write_text("")
