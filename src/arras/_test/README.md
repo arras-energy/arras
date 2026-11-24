@@ -62,6 +62,10 @@ Fast, self-contained tests of `arras.oclass`:
 - `publish` (units, keywords, access, flags, defaults, reserved header
   names) and `add_property` (type checks against existing and inherited
   properties, unit and keyword rules, no additions after instantiation);
+- unit checks with `arras.units`: the shared `Class.units` manager,
+  `unit_spec` on properties, unknown units refused by `add_property` and
+  `publish`, `name[unit]` limited to `double`/`complex`, a custom unit
+  file, and a unit file that fails to load;
 - `find_property` through parents, deprecated notices, keyword order and
   the `set` `CHARSET` flag, functions, and event handlers;
 - `modhelp`, `to_glm`/`saveall` with `glm_save_options`, `to_xml`/`saveall_xml`,

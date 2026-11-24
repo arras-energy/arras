@@ -8,6 +8,7 @@ import pytest
 import arras.oclass
 from arras.oclass import Class, ClassError, Property, PASSCONFIG, \
     PROPERTY_TYPES, FLAGS, RESERVED, GSO_NOINTERNALS, GSO_NOMACROS
+from arras.units import Units, UnitsError
 
 @pytest.fixture(autouse=True)
 def fixture_reset():
@@ -331,6 +332,71 @@ def test_property_bad_type():
         Property(Class("c"), "x", "void")
 
 #
+# Units
+#
+def test_units_shared():
+    units = Class.get_units()
+    assert isinstance(units, Units)
+    assert Class.get_units() is units
+    Class.reset()
+    assert Class.units is units
+
+def test_add_property_unit_spec():
+    c = Class.declare("test")
+    x = c.add_property("x", "double", unit="MW")
+    assert x.unit_spec.name == "MW"
+    assert x.unit_spec.compatible(Class.get_units().find("W"))
+    assert not x.unit_spec.compatible(Class.get_units().find("m"))
+    assert c.add_property("v", "complex", unit="kV").unit_spec.name == "kV"
+    assert c.add_property("r", "randomvar", unit="m/s").unit_spec.name == "m/s"
+    assert c.add_property("n", "double").unit_spec is None
+
+def test_add_property_bad_unit():
+    c = Class.declare("test")
+    with pytest.raises(ClassError, match="unit 'xyz' is not found"):
+        c.add_property("x", "double", unit="xyz")
+    with pytest.raises(ClassError, match="unit 'xyz' is not found"):
+        c.add_property("x[xyz]", "double")
+    assert c.find_property("x") is None
+
+def test_publish_unit_spec(powerflow):
+    node, load = powerflow
+    assert node["voltage_A"].unit_spec.name == "V"
+    assert load["constant_power_A"].unit_spec.compatible(Class.get_units().find("W"))
+    c = Class("c", module="m")
+    assert c.publish("count", "int32", unit="W").unit_spec.name == "W"
+
+def test_publish_bad_unit():
+    c = Class("c", module="m")
+    with pytest.raises(ClassError, match="property 'x' unit 'xyz' is not recognized"):
+        c.publish("x[xyz]", "double")
+    with pytest.raises(ClassError, match="property 'x' unit 'xyz' is not recognized"):
+        c.publish("x", "double", unit="xyz")
+    with pytest.raises(ClassError, match="cannot have unit 'W' because it is not a double or complex value"):
+        c.publish("x[W]", "int32")
+    assert c.find_property("x") is None
+
+def test_custom_units(tmp_path):
+    path = tmp_path / "unitfile.txt"
+    path.write_text("m=0,0,0,0,0,0,1,0,6\nfurlong=201.168 m\n")
+    Class.units = Units(str(path))
+    try:
+        c = Class.declare("test")
+        assert c.add_property("x", "double", unit="furlong").unit_spec.a == pytest.approx(201.168)
+        with pytest.raises(ClassError, match="unit 'W' is not found"):
+            c.add_property("y", "double", unit="W")
+    finally:
+        Class.units = None
+
+def test_units_load_error(monkeypatch):
+    def fail(*args, **kwargs):
+        raise UnitsError("no unit file")
+    monkeypatch.setattr(arras.oclass, "Units", fail)
+    monkeypatch.setattr(Class, "units", None)
+    with pytest.raises(ClassError, match="unable to load units"):
+        Class.declare("test").add_property("x", "double", unit="W")
+
+#
 # Functions and events
 #
 def test_functions():
@@ -424,6 +490,7 @@ def test_to_dict(powerflow):
     _, load = powerflow
     load.set_event("init", "python:m.f")
     data = load.to_dict()
+    assert "unit_spec" not in data["properties"]["constant_power_A"]
     assert data["name"] == "load" and data["module"] == "powerflow"
     assert data["parent"] == "node"
     assert data["passconfig"] == ["PRETOPDOWN", "BOTTOMUP", "POSTTOPDOWN"]

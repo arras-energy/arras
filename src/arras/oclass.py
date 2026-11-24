@@ -44,11 +44,15 @@ satisfy:
    `<type> <name>[<unit>];` line in a `class` block: a property that the
    class or a parent already defines is checked (a different type raises
    `ClassError`) and returned; otherwise a new *extended* property is added.
-   Units are allowed only for `double`, `complex`, and `randomvar`;
-   keywords only for `enumeration` and `set`. No property can be added once
+   Units are allowed only for `double`, `complex`, and `randomvar`, and
+   must be found or derived by the unit manager `Class.units` (see
+   `arras.units`), as `class_add_extended_property()` requires; keywords
+   only for `enumeration` and `set`. No property can be added once
    an object of the class exists (`numobjs > 0`).
 3. `publish(name,ptype)` follows `class_define_map()` for one property:
-   the name may carry its unit as `name[unit]`; header property names
+   the name may carry its unit as `name[unit]` (for `double` and `complex`
+   only, as `property_malloc()` requires); every unit must be found or
+   derived by `Class.units`; header property names
    (`RESERVED`) are refused; the property's default is the type default
    from gridlabd's `property_type[]` table.
 4. `find_property(name)` searches the class, then its parents, as
@@ -98,6 +102,12 @@ Examples
     <Property test.x:double[MW]>
     >>> test.add_property("x", "double") is test.find_property("x")
     True
+    >>> test.find_property("x").unit_spec.compatible(Class.get_units().find("kW"))
+    True
+    >>> test.add_property("y", "double", unit="xyz")
+    Traceback (most recent call last):
+    ...
+    arras.oclass.ClassError: unit 'xyz' is not found
     >>> test.add_property("x", "int32")
     Traceback (most recent call last):
     ...
@@ -124,8 +134,10 @@ Caveats
 - The registry is shared by all `Class` objects in the Python process, as
   gridlabd's class list is shared by a run. Call `Class.reset()` to start
   a new model.
-- Units are recorded as given; they are not checked against gridlabd's
-  `unitfile.txt`.
+- Units are checked with one `arras.units.Units` manager shared by all
+  classes, `Class.units`. It is loaded on first use from the
+  `unitfile.txt` that `Units()` finds; assign another `Units` object to
+  `Class.units` to use a different unit file. `Class.reset()` keeps it.
 - Objects are not modeled. `numobjs` counts the objects created from the
   class; code that models objects is expected to increment it.
 - Functions are Python callables; gridlabd function addresses, intrinsic
@@ -149,12 +161,17 @@ Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
    notice.
 4. Header property names (`RESERVED`) are refused by `publish()` only,
    as in the core; `add_property()` accepts them, as the GLM loader does.
+5. `publish()` raises `ClassError` for a `name[unit]` property that is not
+   `double` or `complex`, and for a `unit=` argument the unit manager
+   cannot find. The core logs an error in both cases and publishes the
+   property without a unit.
 
 References
 ----------
 
 - `arras-energy/gridlabd`: `source/class.cpp`, `source/class.h`,
-  `source/property.cpp`, `source/property.h`, `source/load.cpp`
+  `source/property.cpp` (`property_malloc()`), `source/property.h`,
+  `source/unit.cpp` (`unit_find()`), `source/load.cpp`
   (`class_block()`, `class_properties()`, `class_parent_definition()`,
   `class_event_handler()`), `source/cmdarg.cpp` (`print_class_d()`)
 - [Class directive](https://docs.gridlabd.us/index.html?owner=arras-energy&project=gridlabd&doc=/GLM/Directive/Class.md)
@@ -168,6 +185,7 @@ import logging
 from typing import Any, Callable, Iterator
 
 from arras.exceptions import ArrasException
+from arras.units import Units, Unit, UnitsError
 
 _logger = logging.getLogger(__file__)
 
@@ -286,6 +304,7 @@ class Property: # pylint: disable=too-many-instance-attributes
     - `name`: property name
     - `ptype`: property type (see `PROPERTY_TYPES`)
     - `unit`: unit name, or `None`
+    - `unit_spec`: unit definition (`arras.units.Unit`) when `unit` is set
     - `keywords`: dict of keyword values for `enumeration` and `set` types,
       in the order gridlabd lists them
     - `access`: access name (see `ACCESS`)
@@ -305,6 +324,7 @@ class Property: # pylint: disable=too-many-instance-attributes
             flags:int|str|None=0,
             description:str|None=None,
             default:str|None=None,
+            unit_spec:Unit|None=None,
             ):
         """Create a property (use `Class.publish()` or `Class.add_property()`)"""
         if ptype not in PROPERTY_TYPES:
@@ -319,6 +339,8 @@ class Property: # pylint: disable=too-many-instance-attributes
         """Property type"""
         self.unit = unit
         """Unit name"""
+        self.unit_spec = unit_spec
+        """Unit definition"""
         self.keywords: dict[str,int] = dict(keywords) if keywords else {}
         """Keyword values for enumeration and set types"""
         self.access = access
@@ -389,6 +411,10 @@ class Class: # pylint: disable=too-many-instance-attributes,too-many-public-meth
     registry: list["Class"] = []
     """Registered classes, in registration order"""
 
+    units: Units|None = None
+    """Unit manager used to check property units; `Units()` is loaded on
+    first use when `None`"""
+
     _count: int = 0
 
     def __init__(self, name:str, module:str|None=None, passconfig:int|str|None=0):
@@ -448,6 +474,30 @@ class Class: # pylint: disable=too-many-instance-attributes,too-many-public-meth
         """Remove all registered classes and restart class ids at 0"""
         cls.registry.clear()
         cls._count = 0
+
+    @classmethod
+    def get_units(cls) -> Units:
+        """Unit manager used to check property units (loads `Units()` into
+        `Class.units` on first use)
+
+        Exceptions
+        ----------
+        - `ClassError`: the unit file cannot be loaded
+        """
+        if Class.units is None:
+            try:
+                Class.units = Units()
+            except UnitsError as err:
+                raise ClassError(f"unable to load units ({err})") from err
+        return Class.units
+
+    def _find_unit(self, name:str, unit:str, message:str) -> Unit:
+        """Look up a unit (gridlabd `unit_find()`); raise `ClassError` with
+        `message` (formatted with `cls`, `name`, `unit`) if not found"""
+        try:
+            return self.get_units().find(unit)
+        except UnitsError as err:
+            raise ClassError(message.format(cls=self.name, name=name, unit=unit)) from err
 
     @classmethod
     def find(cls, name:str, module:str|None=None) -> "Class|None":
@@ -673,10 +723,10 @@ class Class: # pylint: disable=too-many-instance-attributes,too-many-public-meth
         Exceptions
         ----------
         - `ClassError`: the type is not recognized, differs from the existing
-          property's type, does not accept a unit or keywords, or an object of
-          the class already exists
+          property's type, does not accept a unit or keywords, the unit is not
+          found, or an object of the class already exists
         """
-        name, unit = self._split_unit(name, unit)
+        name, unit, _ = self._split_unit(name, unit)
         if ptype not in PROPERTY_TYPES:
             raise ClassError(f"property type {ptype} is not recognized")
         prop = self.find_property(name)
@@ -688,8 +738,9 @@ class Class: # pylint: disable=too-many-instance-attributes,too-many-public-meth
             raise ClassError(f"units not permitted for type {ptype}")
         if keywords and ptype not in KEYWORD_TYPES:
             raise ClassError(f"keys not permitted for type {ptype}")
+        spec = None if unit is None else self._find_unit(name, unit, "unit '{unit}' is not found")
         return self._new_property(name, ptype, unit=unit, keywords=keywords,
-            flags=FLAGS["EXTENDED"])
+            flags=FLAGS["EXTENDED"], unit_spec=spec)
 
     # pylint: disable=too-many-arguments
     def publish(self,
@@ -727,30 +778,38 @@ class Class: # pylint: disable=too-many-instance-attributes,too-many-public-meth
         ----------
         - `ClassError`: the name is reserved, too long, or already defined in
           the class, the type or access is not valid, keywords are given for
-          a type that does not accept them, or an object of the class
-          already exists
+          a type that does not accept them, a `name[unit]` property is not
+          `double` or `complex`, the unit is not found, or an object of the
+          class already exists
         """
-        name, unit = self._split_unit(name, unit)
+        name, unit, in_name = self._split_unit(name, unit)
         if name in RESERVED:
             raise ClassError(f"property name '{name}' conflicts with built-in property")
         if ptype not in PROPERTY_TYPES:
             raise ClassError(f"property type '{ptype}' is not recognized")
         if keywords and ptype not in KEYWORD_TYPES:
             raise ClassError(f"keys not permitted for type {ptype}")
+        spec = None
+        if unit is not None:
+            if in_name and ptype not in ("double","complex"):
+                raise ClassError(f"property '{name}' cannot have unit '{unit}' because it is not a double or complex value")
+            spec = self._find_unit(name, unit, "property '{name}' unit '{unit}' is not recognized")
         if default is None:
             default = PROPERTY_TYPES[ptype][1]
         return self._new_property(name, ptype, unit=unit, keywords=keywords,
-            access=access, flags=flags, description=description, default=default)
+            access=access, flags=flags, description=description, default=default,
+            unit_spec=spec)
 
     @staticmethod
-    def _split_unit(name:str, unit:str|None) -> tuple[str,str|None]:
+    def _split_unit(name:str, unit:str|None) -> tuple[str,str|None,bool]:
+        """Split `name[unit]`; returns `(name, unit, unit_in_name)`"""
         if isinstance(name,str):
             match = re.fullmatch(r"([^\[\]]+)\[([^\[\]]+)\]",name)
             if match:
                 if unit is not None and unit != match.group(2):
                     raise ClassError(f"property '{match.group(1)}' unit '{match.group(2)}' differs from unit '{unit}'")
-                return match.group(1), match.group(2)
-        return name, unit
+                return match.group(1), match.group(2), True
+        return name, unit, False
 
     def define_keyword(self, name:str, key:str, value:int) -> None:
         """Define an enumeration or set keyword (gridlabd
