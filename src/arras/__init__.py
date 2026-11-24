@@ -120,6 +120,9 @@ Python API
    and modhelp/GLM/XML output (see `arras.oclass`)
 -  `arras.units.Units`: unit manager that reads gridlabd's `unitfile.txt`,
    derives compound units, and converts values between units (see `arras.units`)
+-  `arras.model.Model`: gridlabd model (globals, modules, classes, schedules,
+   filters, and objects keyed on name) with GLM and gridlabd JSON read/write,
+   regex search, add/delete, and validated get/set of properties (see `arras.model`)
 """
 
 import arras.exceptions as exception
@@ -129,7 +132,9 @@ import arras.oclass
 import arras.main as main
 import arras.runner as runner
 import arras.units
+import arras.model
 
 from arras.globals import Globals, GlobalsError
 from arras.oclass import Class, ClassError
 from arras.units import Units, Unit, UnitsError
+from arras.model import Model, ModelError, Object
