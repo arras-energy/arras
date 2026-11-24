@@ -100,6 +100,9 @@ Fast, self-contained tests of `arras.model`:
 - GLM and JSON writing, and reading the output back into the same objects;
 - `load_classes` from `--modhelp=json` style data, JSON globals, filters,
   and errors;
+- JSON objects list class defaults for unset `PUBLIC` properties (type
+  defaults for GLM-declared properties), in gridlabd's order, unless
+  `filesave_options` has `MINIMAL`;
 - `data/case14.json`, written by gridlabd 4.3.11 (see `data/README.md`):
   read, checked, compared with the original objects, and written back as
   JSON and GLM;

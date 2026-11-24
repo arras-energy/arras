@@ -558,11 +558,12 @@ def test_json_roundtrip(model, tmp_path):
     path = str(tmp_path / "model.json")
     model.write(path)
     other = Model(path)
-    assert same(model, other)
+    assert other.to_json()["objects"] == data["objects"]
+    assert other["load:1"]["voltage_A"] == "0+0i"
     Class.reset()
     fresh = Model()
     fresh.read_json(json.dumps(data))
-    assert same(model, fresh)
+    assert fresh.to_json()["objects"] == data["objects"]
     assert Class.find("node").find_property("extra").is_extended
     assert fresh.write_json(indent=None) == json.dumps(fresh.to_json()) + "\n"
 
@@ -684,3 +685,22 @@ def test_json_filters():
     other = Model()
     other.read_glm(text)
     assert other.filters["lp"] == "lp(z,3600,0,minimum=-1) = (0.5+0.5z) / (1-0.5z+0.25z^2)"
+
+def test_json_defaults(model):
+    Class.find("node").publish("hidden_x", "double", access="PROTECTED")
+    Class.find("node").publish("target", "object")
+    Class.find("node").publish("custom[V]", "double", default="120 V")
+    model.add_object("load", "l1", phases="AN", constant_power_A="1+1j VA")
+    model.set_property("l1", "on_init", "python:a.b")
+    item = model.to_json()["objects"]["l1"]
+    assert list(item)[:5] == ["id", "class", "phases", "constant_power_A", "on_init"]
+    assert list(item)[5:] == ["voltage_A", "nominal_voltage", "bustype", "service_status",
+        "count", "code", "start", "notes", "custom"]
+    Class.declare("rt").add_property("y", "int32")
+    model.add_object("rt", "r")
+    assert model.to_json()["objects"]["r"]["y"] == "0" and model.get_property("r", "y") == "0"
+    assert item["voltage_A"] == "0+0i" and item["bustype"] == "0" and item["custom"] == "120 V"
+    assert "hidden_x" not in item and "target" not in item
+    model.globals.set("filesave_options", "ALLMINIMAL")
+    assert model.to_json()["objects"]["l1"] == {"id": "0", "class": "load", "phases": "AN",
+        "constant_power_A": "1+1j VA", "on_init": "python:a.b"}

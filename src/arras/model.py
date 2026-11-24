@@ -162,9 +162,12 @@ Caveats
   positive and no property can be added to the class.
 - Property values are stored as text. Objects list only the properties
   that were set; `get_property()` returns the class default for the others.
-- `write_json()` lists only the properties that were set, and leaves out
-  the class attributes that need a running gridlabd (`object_size`,
-  `profiler.*`) and the `types` section.
+- `write_json()` writes class defaults for the properties that are not set
+  (see `Model.to_json()`), so reading its output back stores those defaults
+  as set values. It leaves out the class attributes that need a running
+  gridlabd (`object_size`, `profiler.*`) and the `types` section. Set
+  values of properties that are not `PUBLIC` are written, though gridlabd
+  leaves such properties out.
 - A GLM or JSON read that fails keeps the items read before the error.
 - GLM support covers `clock`, `module`, `class` (properties, keywords,
   `parent`, event handlers), `object` (nested objects, `:ID`, `:..COUNT`,
@@ -259,6 +262,10 @@ DOUBLE_TYPES = ("double", "real", "float")
 NOSAVE_GLOBALS = ("savefile", "randomstate")
 """Public globals that `write_glm()` leaves out: `savefile` comes from the
 command line (`-o`) and `randomstate` follows from `randomseed`"""
+
+FSO_MINIMAL = 0x8000
+"""`filesave_options` bit that leaves default values out of JSON output
+(gridlabd `FSO_MINIMAL`)"""
 
 MAXINCLUDE = 32
 """Maximum depth of nested `#include` macros"""
@@ -948,7 +955,7 @@ class Model: # pylint: disable=too-many-instance-attributes,too-many-public-meth
             if missing is ModelError:
                 raise ModelError(f"class '{obj.oclass.name}' has no property '{key}'")
             return missing
-        return prop.default
+        return _default(prop)
 
     def get_property(self, name:str, prop:str) -> str|None:
         """Get a property value
@@ -960,8 +967,9 @@ class Model: # pylint: disable=too-many-instance-attributes,too-many-public-meth
 
         Returns
         -------
-        - `str`: the value set, else the class default (`None` when the class
-          gives none and for header properties that are not set)
+        - `str`: the value set, else the class default, else the type default
+          (`None` when there is none, and for header properties that are not
+          set)
 
         Exceptions
         ----------
@@ -1320,7 +1328,16 @@ class Model: # pylint: disable=too-many-instance-attributes,too-many-public-meth
             _logger.warning("global '%s' not set (%s)", name, err)
 
     def to_json(self) -> dict:
-        """The model as a dict in gridlabd's JSON format"""
+        """The model as a dict in gridlabd's JSON format
+
+        Each object lists its id, class, the header properties that are set,
+        the properties that are set, and then, as gridlabd does, the class
+        default (else the type default) of every other `PUBLIC` property of
+        its class and parents (own properties first), except properties with
+        no default and `enduse` and `method` properties. When the
+        `filesave_options` global has the `MINIMAL` bit (`FSO_MINIMAL`), the
+        defaults are left out.
+        """
         data: dict[str,Any] = {"application": "gridlabd", "version": self._version()}
         data["modules"] = {name: {"major": str(info["major"]), "minor": str(info["minor"])}
             for name, info in self.modules.items()}
@@ -1331,12 +1348,19 @@ class Model: # pylint: disable=too-many-instance-attributes,too-many-public-meth
         if self.filters:
             data["filters"] = dict(self.filters)
         data["objects"] = {}
+        minimal = self.globals.find("filesave_options").value & FSO_MINIMAL
         for name, obj in self.objects.items():
             item = {"id": obj["id"], "class": obj["class"]}
             for key in HEADER:
                 if key in obj and key not in item:
                     item[{"in_svc": "in", "out_svc": "out"}.get(key, key)] = obj[key]
             item.update({key: value for key, value in obj.items() if key not in HEADER})
+            if not minimal:
+                for prop in obj.oclass.properties(inherit=True):
+                    default = _default(prop)
+                    if prop.name not in item and prop.access == "PUBLIC" and default is not None \
+                            and prop.ptype not in ("enduse", "method"):
+                        item[prop.name] = default
             data["objects"][name] = item
         return data
 
@@ -1825,6 +1849,12 @@ def _parents(oclass:Class) -> list[Class]:
         oclass = oclass.parent
         result.append(oclass)
     return result
+
+def _default(prop:Property) -> str|None:
+    """Value of a property that is not set: the class default, else the type
+    default (gridlabd zeroes the memory of properties added by a GLM `class`
+    block, which have no default)"""
+    return prop.default if prop.default is not None else PROPERTY_TYPES[prop.ptype][1]
 
 def _lacks(oclass:Class, key:str) -> bool:
     """@private Check whether a class and its parents lack a property"""
