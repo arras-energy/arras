@@ -252,7 +252,7 @@ import subprocess
 from typing import Any, Callable
 
 from arras.exceptions import ArrasException
-import arras.exitcodes as exitcodes
+from arras import exitcodes
 
 _logger = logging.getLogger(__file__)
 
@@ -520,7 +520,7 @@ class Runner: # pylint: disable=too-many-instance-attributes
             self._save()
         return exitcodes.SUCCESS
 
-    def _commandline(self) -> dict[str,bool]:
+    def _commandline(self) -> dict[str,bool]: # pylint: disable=too-many-branches
         """Process the command line arguments in order"""
         from arras.model import ModelError # pylint: disable=import-outside-toplevel
         from arras.globals import GlobalsError # pylint: disable=import-outside-toplevel
@@ -660,7 +660,7 @@ class Runner: # pylint: disable=too-many-instance-attributes
             deferred = retry
             tries += 1
 
-    def _loop(self, names, passes, service, start, stop, limit, mts) -> None: # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-branches
+    def _loop(self, names, passes, service, start, stop, limit, mts) -> None: # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-branches,too-many-locals,too-many-statements
         globs = self.model.globals
         objects = self.model.objects
         counter = limit
