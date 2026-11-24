@@ -2,14 +2,16 @@
 
 Status: decisions recorded from the code as merged through #16, 2026-11-23;
 modules and solver dispatch (`arras.module`, #22) added 2026-11-23;
-internal item and heartbeat dispatch added 2026-11-23
+internal item and heartbeat dispatch added 2026-11-23;
+runner decisions revised for #45, 2026-11-24
 
 ## Purpose
 
 `arras` is the Python package of the Arras Energy release of HiPAS
 GridLAB-D. It provides:
 
-- the `arras` command, which runs the installed `gridlabd` simulator, and
+- the `arras` command and `arras.runner.Runner`, which solve the
+  quasi-steady time series of a model in Python, and
 - an independent Python model of the gridlabd core's data structures:
   global variables (`arras.globals`), object classes (`arras.oclass`),
   units (`arras.units`), models with GLM and JSON input and output
@@ -20,15 +22,18 @@ The Python model reads, checks, edits, and writes what gridlabd reads and
 writes, without running `gridlabd`. Users get the same values, text, and
 errors that gridlabd gives, or a documented difference.
 
-Excluded: the simulation main loop (advancing the clock, running the object
-synchronization passes, entering and leaving deltamode) and the gridlabd
-modules (`powerflow`, `residential`, ...). These stay in the C++ code of
+`arras.runner` models the main loop of the gridlabd core (clock advance,
+object synchronization passes, iteration, commit) and calls the objects'
+event handlers and the module solvers, heartbeats, and internal items of
+`arras.module` as the core does; it does not run `gridlabd` (since
+2026-11-24, #45, answering #25). `arras.module` models how the core combines
+the results of the solvers that modules export, the class heartbeat
+functions, and the internal items (random variables, schedules, loadshapes,
+transforms, enduses), with all of them written as Python callables
+(decisions 7.3, 7.8, 7.9). Excluded: the gridlabd modules (`powerflow`,
+`residential`, ...) themselves, deltamode, realtime mode, and multithreaded
+passes. These stay in the C++ code of
 [arras-energy/gridlabd](https://github.com/arras-energy/gridlabd).
-`arras.module` models how the core combines the results of the solvers
-that modules export, the class heartbeat functions, and the internal items
-(random variables, schedules, loadshapes, transforms, enduses), with all of
-them written as Python callables (decisions 7.3, 7.8, 7.9); it does not run
-them in a simulation (revised 2026-11-23, #22).
 The classes that modules publish come into `arras` from JSON that gridlabd
 writes.
 
@@ -49,7 +54,7 @@ PRs can cite "decision 4.3".
 
 | # | Decision |
 |---|---|
-| 1.1 | `arras` is an independent Python model of the gridlabd core. Apart from `arras.runner`, no module reads from or writes to a running `gridlabd` process or loads module libraries. |
+| 1.1 | `arras` is an independent Python model of the gridlabd core. No module reads from or writes to a running `gridlabd` process or loads module libraries. (Edited 2026-11-24, #45: `arras.runner` no longer runs `gridlabd`.) |
 | 1.2 | Where gridlabd's code and its documentation agree, `arras` reproduces the code's behavior: the same output strings, the same accepted inputs, and the same numbers. This includes parsing quirks that change results (see 5.4). |
 | 1.3 | Where gridlabd's code and its documentation disagree, `arras` follows the documentation. |
 | 1.4 | Every behavior that differs from gridlabd is listed in a numbered "Differences from gridlabd" section of the module docstring, with the gridlabd commit it was checked against, and called out for review in the PR that introduces it. |
@@ -65,10 +70,19 @@ PRs can cite "decision 4.3".
 
 | # | Decision |
 |---|---|
-| 2.1 | The `arras` command (`arras.main:main`) passes its arguments unchanged to `gridlabd.bin` through `arras.runner.Runner` and returns gridlabd's exit code. It does not parse the options itself; the option list in the package docstring is gridlabd's. |
-| 2.2 | `Runner` sets the `GLD_*` and `GLPATH` environment variables from `Runner.GRIDLABD_PATH` (`/usr/local/opt/gridlabd/current`) only when the caller's environment does not already set them. The executable defaults to `$GLD_BIN/gridlabd.bin` and can be replaced with the `exe` argument; all other keyword arguments go to `subprocess.run`. |
+| 2.1 | The `arras` command (`arras.main:main`) passes its arguments to `arras.runner.Runner`, prints the runner's output and error lines through the progress callback as they arrive, and returns the runner's exit code. `Runner` processes the arguments in order: model files, `-D`, `-o`, `-c`, `-C`, `-I`, `-q`, `-v`, `-w`, `--debug`; any other option fails with `ARGERR`. The package docstring lists only these options. (Edited 2026-11-24, #45: the command no longer runs `gridlabd.bin`.) |
+| 2.2 | `Runner.GRIDLABD_PATH` (`/usr/local/opt/gridlabd/current`) remains only as the default for the folder globals that `arras.globals` takes from `GLD_*` (3.6). `Runner` no longer sets environment variables or runs an executable; the `exe` and `subprocess.run` keyword arguments are removed. (Edited 2026-11-24, #45.) |
 | 2.3 | Exit codes in `arras.exitcodes` use gridlabd's values. An exception caught by `main()` returns `EXCEPTION` (255). |
 | 2.4 | An exception caught by `main()` prints one line, `EXCEPTION [arras/FILE@LINE]: MESSAGE`, to stderr. `arras.exceptions.DEBUG` re-raises instead, and `TRACE` adds a traceback. |
+| 2.5 | `Runner` reproduces the event-mode main loop of `GldExec::exec_start()` (`source/exec.cpp`): objects initialized in creation order with `init_max_defer` deferral rounds, then `Module.initall()`; at each iteration `Module.internalsyncall()` with the objects whose `heartbeat` header is greater than 0; on the first iteration of a time step object precommit then `Module.precommitall()`, whose result is posted as an event (the clock itself means no event); `Module.presyncall()` and presync top-down, sync bottom-up and `Module.syncall()`, `Module.postsyncall()` and postsync top-down, by rank (parents rank above children, `set_rank()`), equal ranks in creation order, with `Module.transformsyncall()` for non-schedule sources after each pass; hard and soft events merged as `sync_set()` does, with `stoptime+1` as a hard event when `stoptime` is set; `minimum_timestep` rounding of object hard events; iteration while the earliest event is the clock, up to `iteration_limit`; object commit then `Module.commitall()`, every object's `clock` set, then `Module.clockupdateall()`, posted as a hard event only when it lowers the next time; `in_svc`/`out_svc`; finalize then `Module.termall()` after the time series, also after a failure or stop. Object commit times other than `TS_INVALID` and 0 are ignored, as in `commit_all()`. Two core behaviors are fixed rather than reproduced (2.12, 2.13). (Edited 2026-11-24, #45: module solvers, internal items, and heartbeats added after #23 merged.) |
+| 2.6 | Object behavior comes only from event handlers (`docs/GLM/Object/Events.md`): an object's `on_<event>` property, else its class's. `python:MODULE.FUNCTION` calls `FUNCTION(name, t)`; other text runs as a shell command with `CLOCK`, `HOSTNAME`, `PORT`, and `OBJECT` set and its output lines captured. Class `PASSCONFIG` bits do not add objects to passes. For each module that the model loads and that has no solvers in `Module.registry`, a Python file `NAME.py` in a `pythonpath` folder or the working folder is imported and its `on_init(t)` ... `on_term(t)` functions become the module's solvers, wrapped as `python/python.cpp` does (exceptions and non-integer sync results give `TS_INVALID` or false with an error line). The module stays registered after the run. |
+| 2.7 | Errors during a run do not raise: `Runner` records `returncode` (`ARGERR`, `LDERR`, `INIERR`, `RUNERR`, `IOERR`, or `EXCEPTION` for an unexpected exception) and adds `ERROR [TIME]: text` to `stderr`. Only bad constructor arguments raise `RunnerError`. |
+| 2.8 | `stdout` and `stderr` are lists of lines. Handlers add lines with `Runner.current().output()` and `.error()`; verbose, warning, and debug lines follow the `verbose`, `warn`, `debug`, and `quiet` globals of the model. |
+| 2.9 | `background=True` runs the simulation in a daemon thread of the calling process; `running`, `wait()`, and `stop()` control it. A thread rather than a process keeps the model, its classes, and Python handlers shared with the caller without serialization. |
+| 2.10 | The progress callback is called after each committed time step and once at the end, with only those of the optional arguments `timestamp`, `percent`, `stdout`, `stderr` that its signature names (all with `**kwargs`); `stdout` and `stderr` hold the lines added since the previous call. Returning `False` stops the run; raising stops it with `RUNERR`. |
+| 2.11 | The model given with `-o` is written whenever the model was loaded, also after a failed run. |
+| 2.12 | Soft events alone end a run when `stoptime` is `NEVER`, as the comment in `exec_start()` intends. gridlabd's `clock_update_modules()` posts the next time as a hard event after every committed step, so its loop never stops on soft events; `Runner` posts the `clockupdate` result only when a solver lowers the next time. Listed as runner difference 8. (2026-11-24, #45.) |
+| 2.13 | A module `precommit` result is checked and used like a `presync` result: `TS_INVALID`, 0, or a time before the clock fails the run, and a later time is an event. gridlabd's `precommit_all()` tests `module_precommitall()` as a truth value, so only 0 fails and times are discarded. A Python module's `on_precommit` may return `True` (no event) or `False` (failure). Listed as runner difference 9. (2026-11-24, #45.) |
 
 ### 3. Global variables (`arras.globals`)
 
@@ -138,7 +152,7 @@ PRs can cite "decision 4.3".
 | 7.2 | A module's classes are not stored in the module: `Module.classes` lists the classes in `Class.registry` whose `module` is the module's name, so classes registered by `arras.model` or by the user appear without being added twice. `register_class()` creates a `Class` for the module. |
 | 7.3 | Solvers are Python callables attached to the hooks of gridlabd's `struct s_module_list` (`SOLVERS`): `init`, `precommit`, `presync`, `sync`, `postsync`, `commit`, `term`, `clockupdate`, and the deltamode hooks `deltamode_desired`, `preupdate`, `interupdate`, `deltaclockupdate`, `postupdate`. A hook is named by its `arras` name or by the symbol a module library exports (`on_sync`, `clock_update`, `deltaClockUpdate`). `on_term` and `term` share one hook. Solvers do not receive the `MODULE*` argument. |
 | 7.4 | The dispatchers (`initall()`, `precommitall()`, `presyncall()`, `syncall()`, `postsyncall()`, `commitall()`, `termall()`, `clockupdateall()`, `deltadesiredall()`, `preupdateall()`, `interupdateall()`, `deltaclockupdateall()`, `postupdateall()`) reproduce how `source/module.cpp`, `GldExec::clock_update_modules()`, and `source/deltamode.cpp` combine module results, including the earliest-by-absolute-time rule for soft (negative) times and `TS_INVALID`, which functions stop at the first failure, and which call every module. |
-| 7.5 | The dispatchers do not advance a clock or run object passes. Values that the core reads from globals inside these functions (`deltamode_allowed`, `deltamode_timestep`, `global_clock`, `global_deltaclock`, `global_delta_curr_clock`) are arguments; the defaults are gridlabd's (`allowed=False`, 10 ms). |
+| 7.5 | The dispatchers do not advance a clock or run object passes. Values that the core reads from globals inside these functions (`deltamode_allowed`, `deltamode_timestep`, `global_clock`, `global_deltaclock`, `global_delta_curr_clock`) are arguments; the defaults are gridlabd's (`allowed=False`, 10 ms). `arras.runner.Runner` calls the event-mode dispatchers from its main loop (2.5); deltamode is not run. (Edited 2026-11-24, #45.) |
 | 7.6 | Timestamps are `int` seconds and deltamode steps `int` nanoseconds, with gridlabd's constants (`TS_NEVER`, `TS_INVALID`, `TS_MAX`, `DT_INFINITY`, `DT_INVALID`, `DT_SECOND`, `SM_*`). |
 | 7.7 | Stricter than the core: a deltamode module (one with a `deltamode_desired` solver) without a `preupdate`, `interupdate`, or `postupdate` solver makes the dispatcher that needs it raise `ModuleError` (the core calls a null pointer); module names with whitespace, `.`, or `:` and versions outside 0 to 65535 are refused; a solver, heartbeat solver, or internal item that returns a non-`int` (or a `bool`) where a time is expected raises `ModuleError`; a transform needs an explicit source (`"UNKNOWN"` for the core's untyped transform). (Module docstring, differences 1–4.) |
 | 7.8 | Heartbeat solvers are attached per class by the class's module (`set_heartbeat()`), as a module sets `CLASS::heartbeat`. `heartbeatsyncall(objects)` takes the heartbeat objects from the caller (objects with `heartbeat > 0`, as `exec_init()` collects them) and does not read objects itself; an object whose class has no solver counts as `TS_NEVER`; parents' solvers are not used. |
@@ -173,7 +187,7 @@ published at https://arras-energy.github.io/arras rather than under
 src/arras/
   __init__.py      package docs (CLI options, Python API); re-exports
   main.py          main(args): `arras` command entry point
-  runner.py        Runner(*args, **kwargs): runs gridlabd.bin
+  runner.py        Runner(*args, model, background, progress): runs a simulation
   exitcodes.py     gridlabd exit codes
   exceptions.py    ArrasException, exception(): error output
   globals.py       Globals(values, **kwargs): global variables
@@ -186,7 +200,8 @@ src/arras/
     data/          gridlabd-written test inputs (case14.json)
 ```
 
-Dependencies between modules:
+Dependencies between modules (`runner` imports `model` when a `Runner`
+is created, because `globals` imports `runner` for `GRIDLABD_PATH`):
 
 ```mermaid
 flowchart LR
@@ -194,6 +209,9 @@ flowchart LR
   main --> exceptions
   main --> exitcodes
   globals --> runner
+  runner --> model
+  runner --> exitcodes
+  runner --> module
   oclass --> units
   model --> globals
   model --> oclass
@@ -210,6 +228,7 @@ flowchart LR
 | `Units` | `Units(file=None)` | unit list; `find()` returns `Unit`, `convert()` returns a number |
 | `Model` | `Model(file=None, globals=None, strict=True)` | globals, modules, classes, schedules, filters, objects |
 | `Module` | `Module(name, major=0, minor=0, **solvers)`, `Module.load(name)` | module registry entry, its solvers; its classes through `Class.registry` |
+| `Runner` | `Runner(*args, model=None, background=False, progress=None)` | the model run, exit code, output and error lines, clock, step count |
 
 A `Model` composes the others: it owns one `Globals`, registers its classes
 in the shared `Class.registry`, and checks units with the shared
@@ -226,7 +245,8 @@ Each module is checked against these gridlabd files (`master` 076e78a):
 | `units` | `source/unit.cpp`, `unit.h`, `runtime/unitfile.txt`; `docs/Command/Unitstest.md` |
 | `model` | `source/load.cpp`, `json.cpp`, `object.cpp`, `module.cpp`, `save.cpp`; `docs/GLM/Directive/` |
 | `module` | `source/module.h`, `module.cpp`, `exec.cpp` (`clock_update_modules()`, `syncall_internals()`, `sync_heartbeats()`, module calls in the sync passes), `deltamode.cpp`, `object.cpp` (`object_heartbeat()`), `random.cpp`, `schedule.cpp`, `loadshape.cpp`, `transform.cpp`, `transform.h`, `enduse.cpp`, `timestamp.h`, `timestamp.cpp`; `docs/GLM/Directive/Module.md` |
-| `exitcodes`, `runner` | gridlabd exit codes and install layout |
+| `exitcodes` | gridlabd exit codes |
+| `runner` | `source/exec.cpp`, `object.cpp`, `main.cpp`, `module.cpp`; `python/python.cpp` (`python_module_load()`, `python_event()`); `docs/GLM/Object/Events.md`, `docs/Module/Python.md` |
 
 ## Files and formats
 
@@ -242,7 +262,7 @@ Each module is checked against these gridlabd files (`master` 076e78a):
 | need | status |
 |---|---|
 | third-party packages | none; standard library only |
-| `gridlabd` install | only for the `arras` command (`Runner`); not for the Python API or tests |
+| `gridlabd` install | not needed (since #45); only gridlabd-written JSON for module classes |
 
 ## Known issues to handle
 
@@ -251,9 +271,6 @@ Each module is checked against these gridlabd files (`master` 076e78a):
 - `[project.urls]` in `pyproject.toml` point to `arras-energy/gridlabd` and
   `https://arras.energy/gridlabd`, not to this repository and its
   documentation site (#20).
-- `Runner` does not capture output unless the caller passes
-  `capture_output=True`, so `main()` prints nothing itself and gridlabd's
-  output goes straight to the terminal (#21).
 - The GLM that `write_glm()` produces has not yet been loaded with
   `gridlabd` (#16).
 - `arras.model.Model.modules` still holds each module as a `dict` of
@@ -266,7 +283,8 @@ Each module is checked against these gridlabd files (`master` 076e78a):
 ## Open questions
 
 1. Should any of the listed differences from gridlabd (3.11, 4.9, 6.4,
-   6.12, 7.7) match the core instead? Each PR asked; none has been reversed.
+   6.12, 7.7, 2.12, 2.13) match the core instead, or be fixed in the core
+   too? Each PR asked; none has been reversed.
 2. Should `Globals` use `arras.units` for `double` globals with units? It
    accepts only the declared unit now (#12).
 3. Should `publish()` log and continue for unit errors, as the core does,
@@ -275,6 +293,5 @@ Each module is checked against these gridlabd files (`master` 076e78a):
    solvers), with `Model.load_module()` calling `Module.load()`? Options:
    replace the `modules` dicts with `Module` objects, or keep the dicts and
    look modules up in `Module.registry` by name.
-5. Should `arras` model the main simulation loop (clock advance, object
-   sync passes, deltamode entry and exit) on top of the dispatchers, or
-   should that stay in gridlabd (Purpose)?
+5. Should `background=True` also offer a separate process, for
+   simulations whose handlers hold the GIL for long periods (2.9)?

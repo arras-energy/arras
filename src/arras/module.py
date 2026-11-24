@@ -175,10 +175,10 @@ Caveats
 - gridlabd calls a module's `on_term` and then its `term`; `arras` has one
   `term` hook, and both symbol names attach to it.
 - The dispatchers implement how the core combines module results; they do
-  not run the simulation. The main loop that advances the clock, runs the
-  object synchronization passes, and applies `deltamode_allowed`,
-  `deltamode_timestep`, and `global_delta_curr_clock` is not modeled, so
-  those values are arguments.
+  not run the simulation. `arras.runner.Runner` calls the event-mode
+  dispatchers from its main loop. Deltamode is not run, so
+  `deltamode_allowed`, `deltamode_timestep`, and `global_delta_curr_clock`
+  are arguments of the deltamode dispatchers.
 - `clockupdateall()` repeats until no solver lowers the time, as the core
   does; a solver that always returns an earlier time never ends the loop.
 - Random variables, schedules, loadshapes, transforms, and enduses are not
