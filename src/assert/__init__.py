@@ -101,13 +101,12 @@ Caveats
   deltamode.
 - See each class's module for its caveats and differences from gridlabd.
 
-Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
------------------------------------------------------------------
+Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16, with the assert fixes)
+----------------------------------------------------------------------------------
 
-1. The documentation gives `status` of `assert` as `{NONE=3, FALSE=2,
-   TRUE=1, INIT=0}`; the code publishes `{ERROR=3, FALSE=2, TRUE=1,
-   INIT=0, NONE=0}`, with `NONE` (or `INIT`) meaning the test is not run,
-   as the documentation describes `NONE`. `arras` follows the code.
+The package matches gridlabd's `module/assert` with the fixes listed in
+DESIGN.md decision 8.4, which are made in both code bases. See each
+class's module for the differences that remain.
 
 References
 ----------

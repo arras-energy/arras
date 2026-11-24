@@ -19,8 +19,8 @@ DATA = os.path.join(os.path.dirname(__file__), "data")
 TESTS = sorted(os.path.basename(x) for x in glob.glob(os.path.join(DATA, "test_*.glm")))
 
 ERRORS = {
-    "test_assert_hold_err.glm": "ERROR [2001-01-01 00:02:00 PST]: assert:1: assert:1: assert failed on 'test:0.random_value..",
-    "test_assert_start_err.glm": "ERROR [2001-01-01 00:31:00 PST]: assert:1: assert:1: assert failed on 'test:0.random_value..",
+    "test_assert_hold_err.glm": "ERROR [2001-01-01 00:02:00 PST]: assert:1: assert failed on 'test:0.random_value.' '+0.",
+    "test_assert_start_err.glm": "ERROR [2001-01-01 00:31:00 PST]: assert:1: assert failed on 'test:0.random_value.' '+0.",
     "test_complex_assert_angle_err.glm": "ERROR [2000-01-01 00:00:00 UTC]: Assert failed on meter:0: Angle of voltage_A (0) not within 0.010000 of given value 0.174533",
     "test_complex_assert_imaginary_err.glm": "ERROR [2000-01-01 00:00:00 UTC]: Assert failed on meter:0: imaginary part of voltage_A +0i not within 1.000000 of given value +10i",
     "test_complex_assert_magnitude_err.glm": "ERROR [2000-01-01 00:00:00 UTC]: Assert failed on meter:0: Magnitude of voltage_A (110) not within 1.000000 of given value 121",
@@ -56,7 +56,7 @@ def test_assert_objects_run():
         model.set_property(name, "status", "FALSE")
         runner = Runner(model=model)
         assert runner.returncode == exitcodes.RUNERR, name
-        assert runner.stderr[0].split("]: ")[1].startswith(f"{name}: {name}: assert failed on NOT '")
+        assert runner.stderr[0].split("]: ")[1].startswith(f"{name}: assert failed on NOT '")
         model.set_property(name, "status", "TRUE")
     assert Runner(model=model).returncode == exitcodes.SUCCESS
 

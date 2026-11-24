@@ -32,7 +32,8 @@ def test_to_double():
     ("(3+4j)", 3+4j),
     ("2+90d", 2j),
     ("1+0j kV", 1000+0j),
-    ("1.5 kV", 1.5+0j),  # sscanf() stops before the unit when there is no imaginary part
+    ("1.5 kV", 1500+0j),
+    ("(1.5) kV", 1.5+0j),  # Python notation takes no unit
 ])
 def test_to_complex(text, value):
     """Complex numbers, as convert_to_complex() reads them"""
@@ -109,6 +110,7 @@ class test {
     ('s "XX|YY";', 'target s; relation "=="; value "XX|YY";', True),
     ("b FALSE;", 'target b; relation "=="; value MAYBE;', False),
     ("o t;", 'target o; relation "=="; value "test:9";', False),
+    ("o t;", 'target o; relation "=="; value "test:0";', True),
     ('str "hello";', 'target str; relation "=="; value hello;', True),
     ('d "1,2";', 'target d; relation "=="; value 1;', False),
     ('l "3";', 'target l; relation "=="; value 3;', True),

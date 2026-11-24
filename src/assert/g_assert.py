@@ -63,17 +63,18 @@ object is expected to satisfy:
    is after `stop`, the test is not run.
 3. Without `part`, the value text and `within` text are converted to the
    target's type and compared as the core compares properties
-   (`property_compare_basic_str()`): real numbers (`double`; the real part
-   of a `complex`; the first member of an `enduse`, `randomvar`, or
-   `loadshape`) use `within` as the tolerance of `==` and `!=`
-   (`|x-value| <= within`) and as the upper bound of `inside` and
-   `outside`; integers, enumerations, sets, and timestamps compare their
-   low 32 bits as signed integers (`int16` as its unsigned 16 bits);
-   strings compare bytes (`strcmp()`), with the value cut to the size of
-   the `charN` type; `bool` and `object` support only `==` and `!=`.
-   `inside` is inclusive and `outside` is its negation. A value that
-   cannot be converted, or a relation the type does not support, makes the
-   comparison false with a warning.
+   (`property_compare_basic_str()`): real numbers (`double`; the first
+   member of an `enduse`, `randomvar`, or `loadshape`) use `within` as the
+   tolerance of `==` and `!=` (`|x-value| <= within`) and as the upper
+   bound of `inside` and `outside`; a `complex` supports only `==` and
+   `!=`, with `|x-value| <= |within|` (both parts compared; exact equality
+   when `within` is empty); integers, enumerations, sets, and timestamps
+   compare their full values as signed integers; strings compare bytes
+   (`strcmp()`), with the value cut to the size of the `charN` type;
+   `bool` and `object` support only `==` and `!=`. `inside` is inclusive
+   and `outside` is its negation. A value that cannot be converted
+   (including the name of an object that does not exist), or a relation
+   the type does not support, makes the comparison false with a warning.
 4. With `part`, `value` and `within` are read as numbers (`atof()`) and
    compared with the part of the target (see Parts) as real numbers.
 5. The outcome is `TRUE` when the comparison holds, else `FALSE`. When it
@@ -81,9 +82,11 @@ object is expected to satisfy:
    fails, unless `hold` is positive and the outcome has differed at every
    commit since the first commit at which it differed for less than
    `hold` seconds (strictly). A failure writes
-   `NAME: NAME: assert failed on [NOT ]'OBJECT.TARGET.PART.VALUE'
-   'RELATION' 'VALUE' 'WITHIN'` and returns `TS_INVALID`, which stops the
-   run with `arras.exitcodes.RUNERR`.
+   `NAME: assert failed on [NOT ]'OBJECT.TARGET.PART' 'X' 'RELATION'
+   'VALUE' 'WITHIN'`, where `X` is the target value (real and complex
+   numbers written with the `double_format` and `complex_format` globals
+   and the unit), and returns `TS_INVALID`, which stops the run with
+   `arras.exitcodes.RUNERR`.
 
 Parts
 -----
@@ -143,7 +146,7 @@ Examples
     >>> r.returncode
     5
     >>> print(r.stderr[0])
-    ERROR [2020-01-01 00:00:00 UTC]: assert:3: assert:3: assert failed on 'test:0.x..50 MW' '>' '51' '0'
+    ERROR [2020-01-01 00:00:00 UTC]: assert:3: assert failed on 'test:0.x.' '+50 MW' '>' '51' '0'
     >>> Class.reset()
 
 Caveats
@@ -153,28 +156,24 @@ Caveats
   `upper`. In `arras` they are separate properties; the one set last in
   the object is used. Model output lists both, and `Model.check()` reports
   `value` as a required property that is not set when only `lower` is set.
-- The target value in the failure message is the text the model holds,
-  which may include a unit.
 - `randomvar` and `loadshape` values are not updated by `arras` (see
   `arras.module`); their value is a number that the model holds (set by an
   event handler, for example), else 0.
 - An object `on_init` or `on_commit` handler replaces the class's, so the
   assert test is not run for that object.
 
-Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
------------------------------------------------------------------
+Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16, with the assert fixes)
+----------------------------------------------------------------------------------
 
-1. `object` parts are taken from the object that the property refers to.
-   gridlabd's `object_get_part()` reads the header fields from the address
-   of the reference itself, so its results do not depend on the object
-   referred to (`clock.days` is usually 0).
-2. A value that the core's conversion functions fail to convert without
-   reporting an error (they return 0, and the core compares an
-   uninitialized value) makes the comparison false with a warning.
-3. `group` supports only the header terms listed above; gridlabd's find
+The core and module fixes that `arras` matches are listed in DESIGN.md
+decision 8.4 (integer, enumeration, and complex comparisons, conversion
+errors, `object` parts, real `complex` values with a unit, and messages
+without a repeated object name). Remaining differences:
+
+1. `group` supports only the header terms listed above; gridlabd's find
    language also has `~` and `!~` matches, `latitude`, `longitude`,
    `clock`, `insvc`, and `outsvc` terms, and object property terms.
-4. The message flags are read when the object is initialized; gridlabd
+2. The message flags are read when the object is initialized; gridlabd
    applies `assert::message_flags` when the object is created.
 
 References
@@ -266,7 +265,7 @@ class Assert(AssertClass):
         start = to_timestamp(model, cls.get(model, name, "start") or "INIT")
         stop = to_timestamp(model, cls.get(model, name, "stop") or "NEVER")
         if status == AS_NONE:
-            object_verbose(name, flags, f"{name}: assert test is not being run")
+            object_verbose(name, flags, "assert test is not being run")
             return TS_NEVER
         if t < start:
             return start
@@ -283,16 +282,16 @@ class Assert(AssertClass):
                     keyword = next(k for k, v in model.objects[name].oclass.find_property("relation").keywords.items() if v == relation)
                     value = cls.get_alias(model, name, ("value", "lower"))
                     value2 = cls.get_alias(model, name, ("within", "upper"))
-                    object_error(name, flags, f"{name}: assert failed on {'' if status == AS_TRUE else 'NOT '}"
-                        f"'{target.owner}.{target.prop}.{cls.get(model, name, 'part')}.{target.text()}' "
+                    object_error(name, flags, f"assert failed on {'' if status == AS_TRUE else 'NOT '}"
+                        f"'{target.owner}.{target.prop}.{cls.get(model, name, 'part')}' '{target.to_string()}' "
                         f"'{keyword}' '{value}' '{value2}'")
                     return TS_INVALID
                 start_count += 1
                 if state.started == TS_NEVER:
                     state.started = t
-                    object_verbose(name, flags, f"{name}: assert {target.owner} started at {t} with hold for {hold:g} s")
+                    object_verbose(name, flags, f"assert {target.owner} started at {t} with hold for {hold:g} s")
             else:
-                object_verbose(name, flags, f"{name}: assert passed on {target.owner}")
+                object_verbose(name, flags, f"assert passed on {target.owner}")
         if start_count == 0:
             state.started = TS_NEVER
         return TS_NEVER

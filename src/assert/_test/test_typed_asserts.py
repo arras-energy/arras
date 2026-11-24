@@ -132,8 +132,10 @@ def test_once_false(run):
     ("i32 4;", "target i32; value 10; within 0; status ASSERT_NONE;", None),
     ("i32 13;", "target i32; value 10; within 0; within_mode WITHIN_RATIO;", "Assert failed on t: i32 13 not within 1 of given value 10"),
     ("i32 13;", "target i32; value 10; within 3; within_mode WITHIN_RATIO;", None),
-    # negative int32 values are read as unsigned 32-bit numbers
-    ("i32 -5;", "target i32; value -5; within 0;", "Assert failed on t: i32 -5 not within 0 of given value -5"),
+    ("i32 -5;", "target i32; value -5; within 0;", None),
+    ("i32 -5;", "target i32; value -8; within 2;", "Assert failed on t: i32 -5 not within 2 of given value -8"),
+    ("i64 37233473424;", "target i64; value 2; within 1;", "Assert failed on t: i64 37233473424 not within 1 of given value 2"),
+    ("i32 13;", "target i32; value 100000; within 100000; within_mode WITHIN_RATIO;", None),  # 10^10 does not overflow
     ("x 1;", "target x; value 1; within 1;", "Specified target x for t is not valid."),
 ])
 def test_int_assert(run, props, assertion, error):
@@ -146,18 +148,13 @@ def test_int_assert(run, props, assertion, error):
         assert runner.returncode == exitcodes.RUNERR
         assert last_error(runner) == error
 
-def test_int_assert_warning(run):
-    """A difference beyond 32 bits gives a warning"""
-    runner = check(run, "i32 -5;", "object int_assert { target i32; value -5; within 0; };")
-    assert "WARNING [2001-01-01 00:00:00 PST]: int_assert may be incorrect, difference range outside 32-bit abs() range" in runner.stderr
-
 def test_int_assert_negative_within(run):
-    """A negative within is read as a large unsigned number, so the
-    initialization check never fails; the tolerance is then its low 32
-    bits as an int, so the test always fails"""
+    """int_assert refuses a negative within"""
     runner = check(run, "i32 4;", "object int_assert { target i32; value 4; within -1; };")
-    assert runner.returncode == exitcodes.RUNERR
-    assert last_error(runner) == "Assert failed on t: i32 4 not within -1 of given value 4"
+    assert runner.returncode == exitcodes.INIERR
+    assert last_error(runner) == "init_int_assert(obj=1;unnamed): A negative value has been specified for within."
+    runner = check(run, "i32 4;", "object int_assert { target i32; value 4; within 0; };")
+    assert runner.returncode == exitcodes.SUCCESS
 
 def test_int_assert_verbose(run):
     """int_assert verbose messages carry the object name"""

@@ -197,6 +197,9 @@ def to_complex(text:str, unit:str|None=None, what:str="value") -> complex:
     real, rest = first
     second = scan_double(rest) if rest[:1] in "+-" or rest[:1].isspace() else None
     if second is None:
+        rest = rest.strip(" )")
+        if rest and not text.startswith("("):
+            return complex(convert_unit(real, rest.split()[0], unit, f"{what} '{text}'"), 0)
         return complex(real, 0)
     imag, rest = second
     if not rest or rest[0] not in "ijdr":
@@ -246,6 +249,10 @@ def to_timestamp(model:Any, text:str) -> int:
                 if datetime.datetime.fromtimestamp(ts, zone).tzname() == abbreviation:
                     return ts
     raise AssertError(f"'{text}' is not a valid timestamp") from error
+
+def _c_format(fmt:str) -> str:
+    """A C `printf` format as a Python `%` format (`%lg` is `%g`)"""
+    return re.sub(r"%([-+ #0-9.]*)l+([diouxXeEfgG])", r"%\1\2", fmt)
 
 def angle(value:complex) -> float:
     """Angle in radians (gridlabd `complex::Arg()`)"""
@@ -316,6 +323,26 @@ class Target:
         else:
             value = self.model.get_property(self.name, self.prop)
         return "" if value is None else str(value)
+
+    def to_string(self) -> str:
+        """Value as gridlabd's `gld_property::to_string()` writes it:
+        `double` and `complex` values with the `double_format` and
+        `complex_format` globals and the unit, others as text"""
+        globs = self.model.globals
+        unit = f" {self.unit}" if self.unit else ""
+        try:
+            if self.ptype == "double":
+                return _c_format(globs.get("double_format") or "%+lg") % self.double() + unit
+            if self.ptype == "complex":
+                text = self.text().strip()
+                notation = text[-1] if text[-1:] in "ij" else "i"
+                value = self.complex()
+                return _c_format(globs.get("complex_format") or "%+lg%+lg%c") % (value.real, value.imag, notation) + unit
+            if self.ptype == "timestamp" and self.text():
+                return globs.timestamp_to_string(to_timestamp(self.model, self.text()))
+        except (AssertError, TypeError, ValueError):
+            pass
+        return self.text()
 
     def double(self) -> float:
         """Value of a `double` property in its unit"""

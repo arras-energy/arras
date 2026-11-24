@@ -26,9 +26,10 @@ it:
   `randomvar` values. Runs are repeatable; the draws differ from gridlabd's.
 - In `test_assert.glm`, the `object_value` `clock.days` assert checks the
   clock of the object referred to (between 11323 and 11324 days) instead of
-  `0`: gridlabd's `object_get_part()` reads the header from the address of
-  the reference, so its autotest passes with `0` (see the `assert.g_assert`
-  Differences).
+  `0`: the original passed only because gridlabd's `object_get_part()` read
+  the header from the address of the reference. The gridlabd `assert-fixes`
+  branch fixes that function and makes the same change to its autotest
+  (DESIGN.md decision 8.4).
 - `test_complex_assert_real_err.glm` is unchanged: like the gridlabd file, it
   tests the magnitude, not the real part.
 

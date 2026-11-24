@@ -49,16 +49,22 @@ def ok(runner):
     # value and lower share storage: the one set last is used
     ("x 3;", 'target x; relation "=="; value 1; lower 3;', True),
     ("x 3;", 'target x; relation "=="; lower 3; value 1;', False),
-    # complex values compare their real part
-    ("z 120+50j;", 'target z; relation "=="; value 120;', True),
-    ("z 120+50j;", 'target z; relation "=="; value "120+0j";', True),
+    # complex values compare both parts: within bounds the magnitude of the difference
+    ("z 120+50j;", 'target z; relation "=="; value 120;', False),
+    ("z 120+50j;", 'target z; relation "=="; value "120+50j";', True),
+    ("z 120+50j;", 'target z; relation "=="; value "120.6+50.8j"; within 1;', True),
+    ("z 120+50j;", 'target z; relation "=="; value "120.6+50.9j"; within 1;', False),
+    ("z 120+50j;", 'target z; relation "!="; value 120;', True),
+    ("z 120+50j;", 'target z; relation "!="; value "120.6+50.8j"; within 1;', False),
+    ("z 120+50j;", 'target z; relation "=="; value "120+50j"; within "";', True),
+    ("z 120+50j;", 'target z; relation "!="; value "120+50j"; within "";', False),
     ("z 120+50j;", 'target z; relation ">"; value "121+0j";', False),
-    # integers compare their low 32 bits; int16 its unsigned 16 bits
+    # integers compare their full signed values
     ("i32 -5;", 'target i32; relation "<"; value 0;', True),
-    ("i64 4294967296;", 'target i64; relation "=="; value 0;', True),
-    ("i64 4294967296;", 'target i64; relation "<"; value 1;', True),
-    ("i16 -1;", 'target i16; relation "<"; value 0;', False),
-    ("i16 -1;", 'target i16; relation "=="; value 65535;', True),
+    ("i64 4294967296;", 'target i64; relation "=="; value 0;', False),
+    ("i64 4294967296;", 'target i64; relation ">"; value 4294967295;', True),
+    ("i16 -1;", 'target i16; relation "<"; value 0;', True),
+    ("i16 -1;", 'target i16; relation "=="; value 65535;', True),  # %hd stores 65535 as -1
     # strings compare bytes
     ('c32 "b";', 'target c32; relation ">"; value "a";', True),
     ('c32 "b";', 'target c32; relation "inside"; lower "a"; upper "c";', True),
@@ -68,7 +74,7 @@ def ok(runner):
     ("b TRUE;", 'target b; relation "<"; value 1;', False),
     ("o t;", 'target o; relation "=="; value t;', True),
     ("o t;", 'target o; relation "=="; value "test:0";', True),
-    ("o t;", 'target o; relation "!="; value nobody;', True),
+    ("o t;", 'target o; relation "!="; value nobody;', False),  # not found: conversion error
     ("", 'target o; relation "=="; value 0;', True),
     ("o t;", 'target o; relation ">"; value t;', False),
     # enumerations and sets
@@ -124,7 +130,7 @@ def test_failure_message(run):
     runner = check(run, "x 50; z 3+4j;", """
         object assert { name chk; target z; part mag; relation ">"; value 6; within 0.1; };""")
     assert runner.returncode == exitcodes.RUNERR
-    assert runner.stderr[0] == "ERROR [2001-01-01 00:00:00 PST]: chk: chk: assert failed on 't.z.mag.3+4j' '>' '6' '0.1'"
+    assert runner.stderr[0] == "ERROR [2001-01-01 00:00:00 PST]: chk: assert failed on 't.z.mag' '+3+4j V' '>' '6' '0.1'"
     assert runner.stderr[1] == "ERROR [2001-01-01 00:00:00 PST]: object chk commit failed"
 
 @pytest.mark.parametrize("status,expected,prefix", [
@@ -149,6 +155,16 @@ def test_conversion_warnings(run):
     assert "WARNING [2001-01-01 00:00:00 PST]: property type 'double' cannot compare to value '50 V'" in runner.stderr[0]
     runner = check(run, "x 50;", 'object assert { target x; relation "inside"; lower 1; upper "x"; };')
     assert "cannot compare to value 'x'" in runner.stderr[0]
+    runner = check(run, "o t;", 'object assert { target o; relation "=="; value nobody; };')
+    assert "cannot compare to value 'nobody' (object 'nobody' is not found)" in runner.stderr[0]
+    runner = check(run, "o t;", 'object assert { target o; relation "=="; value "test:9"; };')
+    assert "object 'test:9' is not found" in runner.stderr[0]
+    runner = check(run, 's "X";', 'object assert { target s; relation "=="; value "|"; };')
+    assert "is not a set value" in runner.stderr[0]
+    runner = check(run, "z 1+1j;", 'object assert { target z; relation "<"; value 2; };')
+    assert runner.stderr[0] == "WARNING [2001-01-01 00:00:00 PST]: property type 'complex' does not support comparison operations or parts"
+    runner = check(run, "x 50;", 'object assert { target x; relation "inside"; lower 1; upper "x"; };')
+    assert "cannot compare to value 'x'" in runner.stderr[0]
     runner = check(run, "b TRUE;", 'object assert { target b; relation "<"; value 1; };')
     assert runner.stderr[0] == "WARNING [2001-01-01 00:00:00 PST]: property type 'bool' does not support comparison operations or parts"
     runner = check(run, "z 1+1j;", 'object assert { target z; part foo; relation "<"; value 1; };')
@@ -161,7 +177,7 @@ def test_global_target(run):
     runner = run('object assert { target clock; relation ">"; value "2000-01-01 00:00:00"; };')
     assert ok(runner), runner.stderr
     runner = run('object assert { target clock; relation "<"; value "2000-01-01 00:00:00"; };')
-    assert "assert failed on 'global variable.clock..2001-01-01 00:00:00 PST'" in runner.stderr[0]
+    assert "assert failed on 'global variable.clock.' '2001-01-01 00:00:00 PST' '<'" in runner.stderr[0]
 
 def test_missing_target(run):
     """A target that does not exist fails the initialization"""
@@ -177,7 +193,7 @@ def test_group(run):
     runner = run(TEST + objects + 'object assert { group "class=test"; target x; relation "<="; value 2; };')
     assert ok(runner), runner.stderr
     runner = run(TEST + objects + 'object assert { group "class=test"; target x; relation "=="; value 1; };')
-    assert "assert failed on 'other.x..2'" in runner.stderr[0]
+    assert "assert failed on 'other.x.' '+2 MW' '=='" in runner.stderr[0]
     runner = run(TEST + objects + 'object assert { group "class=test AND groupid=special"; target x; relation "=="; value 2; };')
     assert ok(runner), runner.stderr
     runner = run(TEST + objects + 'object assert { group "isa=test; id<2"; target x; relation "=="; value 1; };')
@@ -239,7 +255,7 @@ object tick { name t; x 1; }
 def test_start_stop(run):
     """Tests run only from `start` to `stop`"""
     runner = run(HOURLY + 'object assert { parent t; target x; relation "=="; value 2; start "2001-01-01 02:00:00"; };', header=False)
-    assert runner.stderr[0].startswith("ERROR [2001-01-01 02:00:00 PST]: assert:1: assert:1: assert failed")
+    assert runner.stderr[0].startswith("ERROR [2001-01-01 02:00:00 PST]: assert:1: assert failed")
     runner = run(HOURLY + 'object assert { parent t; target x; relation "=="; value 2; start "2001-01-01 02:00:00 PST"; };', header=False)
     assert runner.stderr[0].startswith("ERROR [2001-01-01 02:00:00 PST]")
     runner = run(HOURLY + 'object assert { parent t; target x; relation "=="; value 2; stop "2000-12-31 23:00:00"; };', header=False)
@@ -254,8 +270,8 @@ def test_hold(run):
     assert runner.returncode == exitcodes.RUNERR
     lines = [x for x in runner.stderr if "assert:1" in x]
     assert lines[0] == "VERBOSE [INIT]: assert:1: group = ''"
-    assert lines[1] == "VERBOSE [2001-01-01 00:00:00 PST]: assert:1: assert:1: assert t started at 978336000 with hold for 5400 s"
-    assert lines[2].startswith("ERROR [2001-01-01 02:00:00 PST]: assert:1: assert:1: assert failed")
+    assert lines[1] == "VERBOSE [2001-01-01 00:00:00 PST]: assert:1: assert t started at 978336000 with hold for 5400 s"
+    assert lines[2].startswith("ERROR [2001-01-01 02:00:00 PST]: assert:1: assert failed")
 
 def test_verbose(run):
     """VERBOSE objects report passed tests and tests that are not run"""
@@ -267,8 +283,8 @@ def test_verbose(run):
     runner = run('module assert { message_flags VERBOSE; }' + TEST + """object test { name t; x 1;
         object assert { target x; relation "=="; value 1; };
         object assert { target x; relation "=="; value 2; status NONE; }; }""", "-v")
-    assert "VERBOSE [2001-01-01 00:00:00 PST]: assert:1: assert:1: assert passed on t" in runner.stderr
-    assert "VERBOSE [2001-01-01 00:00:00 PST]: assert:2: assert:2: assert test is not being run" in runner.stderr
+    assert "VERBOSE [2001-01-01 00:00:00 PST]: assert:1: assert passed on t" in runner.stderr
+    assert "VERBOSE [2001-01-01 00:00:00 PST]: assert:2: assert test is not being run" in runner.stderr
 
 def test_quiet(run):
     """QUIET objects write no error, but still fail"""
@@ -293,3 +309,12 @@ def test_enduse(run):
     runner = run(glm + 'object load { u "3"; object assert { target u; relation "=="; value 3; }; '
         'object assert { target u; part motorA.foo; relation "=="; value 0; }; }')
     assert "part motorA.foo is not defined for type enduse" in runner.stderr[0]
+
+def test_value_format(run):
+    """The failure message writes the target value as gridlabd does"""
+    runner = check(run, "ts '2001-07-04 12:34:56';", 'object assert { target ts; relation "=="; value 0; };')
+    assert "'t.ts.' '2001-07-04 12:34:56 PDT' '=='" in runner.stderr[0]
+    runner = run('#set double_format=%.3f\n' + TEST + 'object test { name t; x 1.5; object assert { target x; relation "=="; value 0; }; }')
+    assert "'t.x.' '1.500 MW' '=='" in runner.stderr[0]
+    runner = check(run, "z 1+2i;", 'object assert { target z; relation "=="; value 0; };')
+    assert "'t.z.' '+1+2i V' '=='" in runner.stderr[0]

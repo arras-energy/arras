@@ -40,28 +40,21 @@ Description
 
 Each `int_assert` object is expected to satisfy:
 
-1. `value` and `within` are `int32` properties stored by gridlabd in
-   64-bit members whose upper half stays zero, so the object uses their
-   32 bits as unsigned numbers: a negative `value` or `within` is read as
-   that number plus 2^32. As a result the initialization check for a
-   negative `within` (`A negative value has been specified for within.`)
-   never fails.
+1. A negative `within` fails the initialization with
+   `init_int_assert(obj=ID;NAME): A negative value has been specified for
+   within.`
 2. The `once` logic is that of `double_assert`.
 3. The target is the parent's `target` property (a global variable when
    the object has no parent). A target that is not found or is not an
    `int16`, `int32`, or `int64` fails with `Specified target TARGET for
    PARENT is not valid.`
 4. The tolerance is `within` (`WITHIN_VALUE`), or `value*within` but no
-   less than 1 (`WITHIN_RATIO`), kept to its low 32 bits as a signed
-   integer.
+   less than 1 (`WITHIN_RATIO`), computed in 64 bits.
 5. With `ASSERT_TRUE`, a target value `x` with `|x-value|` greater than the
    tolerance fails with `Assert failed on PARENT: TARGET x not within
    TOLERANCE of given value VALUE`; with `ASSERT_FALSE`, `|x-value|` less
-   than the tolerance fails with `... is within ...`. A difference of more
-   than 2^32-1 gives the warning `int_assert may be incorrect, difference
-   range outside 32-bit abs() range`. The numbers in the message are the
-   low 32 bits of each (gridlabd prints 64-bit values with `%i`). A failure
-   returns 0, which stops the run with `arras.exitcodes.RUNERR`.
+   than the tolerance fails with `... is within ...`. A failure returns 0,
+   which stops the run with `arras.exitcodes.RUNERR`.
 
 Examples
 --------
@@ -85,18 +78,12 @@ Examples
 Caveats
 -------
 
-- gridlabd reads `int16` and `int32` targets as 64-bit integers, which
-  includes the bytes after the property; `arras` uses the property value.
 - See the `once` caveat of `double_assert`.
 
-Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
------------------------------------------------------------------
+Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16, with the assert fixes)
+----------------------------------------------------------------------------------
 
-1. An object without a parent tests the global variable named `target`
-   and names it `global` in messages; gridlabd dereferences the missing
-   parent.
-2. The documentation gives `value` and `within` as `double`; the code
-   publishes `int32`, which `arras` follows.
+None.
 
 References
 ----------
@@ -110,7 +97,6 @@ from typing import Any
 
 from ._base import AssertClass
 from ._common import TS_NEVER, object_verbose, runner
-from ._compare import _int32
 from .double_assert import STATUS, ONCE, WITHIN_MODE, ASSERT_TRUE, ASSERT_FALSE, IN_ABS, IN_RATIO, once_check
 
 class IntAssert(AssertClass):
@@ -129,14 +115,13 @@ class IntAssert(AssertClass):
 
     @staticmethod
     def _member(model:Any, name:str, prop:str) -> int:
-        """An `int32` property read from its zero-extended 64-bit member"""
+        """Value of an `int32` property"""
         text = model.get_property(name, prop)
-        value = int(str(text), 0) if text not in (None, "") else 0
-        return value & 0xFFFFFFFF
+        return int(str(text), 0) if text not in (None, "") else 0
 
     @classmethod
     def init(cls, model:Any, name:str) -> bool:
-        if cls._member(model, name, "within") < 0: # never true, as in gridlabd
+        if cls._member(model, name, "within") < 0:
             return cls.init_failed(model, name, "A negative value has been specified for within.")
         return True
 
@@ -154,21 +139,18 @@ class IntAssert(AssertClass):
         mode = cls.keyword(model, name, "within_mode")
         limit = 0
         if mode == IN_RATIO:
-            limit = max(_int32(value * within), 1)
+            limit = max(value * within, 1)
         elif mode == IN_ABS:
-            limit = _int32(within)
+            limit = within
         x = prop.integer()
         status = cls.keyword(model, name, "status")
         if status in (ASSERT_TRUE, ASSERT_FALSE):
-            diff = x - value
-            if diff > 0xFFFFFFFF or diff < -0xFFFFFFFF:
-                runner().warning("int_assert may be incorrect, difference range outside 32-bit abs() range")
-            m = int(abs(float(diff)))
+            m = abs(x - value)
             if status == ASSERT_TRUE and m > limit:
-                runner().error(f"Assert failed on {pname}: {target} {_int32(x)} not within {limit} of given value {_int32(value)}")
+                runner().error(f"Assert failed on {pname}: {target} {x} not within {limit} of given value {value}")
                 return 0
             if status == ASSERT_FALSE and m < limit:
-                runner().error(f"Assert failed on {pname}: {target} {_int32(x)} is within {limit} of given value {_int32(value)}")
+                runner().error(f"Assert failed on {pname}: {target} {x} is within {limit} of given value {value}")
                 return 0
             object_verbose(name, flags, f"Assert passed on {pname}")
             return TS_NEVER

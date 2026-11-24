@@ -69,14 +69,12 @@ Caveats
 
 - The deltamode update function (`update_enum_assert()`) is not modeled.
 
-Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
------------------------------------------------------------------
+Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16, with the assert fixes)
+----------------------------------------------------------------------------------
 
-1. The failure message prints the two integers with `%g` as numbers;
-   gridlabd passes integers to `%g`, whose output is undefined.
-2. An object without a parent tests the global variable named `target`
-   and names it `global` in messages; gridlabd dereferences the missing
-   parent.
+None. An object without a parent tests the global variable named
+`target` and names it `global` in messages, as gridlabd does with the
+assert fixes.
 
 References
 ----------
@@ -90,7 +88,7 @@ from typing import Any
 
 from ._base import AssertClass
 from ._common import TS_NEVER, runner
-from ._compare import _int32
+from ._compare import _wrap
 from .double_assert import STATUS, ASSERT_TRUE, ASSERT_FALSE
 
 class EnumAssert(AssertClass):
@@ -114,19 +112,19 @@ class EnumAssert(AssertClass):
         if found is None:
             return 0
         pname, target, prop = found
-        x = _int32(prop.enumeration())
+        x = _wrap(prop.enumeration(), 32)
         text = model.get_property(name, "value")
         value = int(str(text), 0) if text not in (None, "") else 0
         status = cls.keyword(model, name, "status")
         if status == ASSERT_TRUE:
             if value != x:
-                runner().error("Assert failed on %s: %s=%g did not match %g" % (pname, target, x, value))
+                runner().error("Assert failed on %s: %s=%d did not match %d" % (pname, target, x, value))
                 return 0
             runner().verbose(f"Assert passed on {pname}")
             return TS_NEVER
         if status == ASSERT_FALSE:
             if value == x:
-                runner().error("Assert failed on %s: %s=%g did match %g" % (pname, target, x, value))
+                runner().error("Assert failed on %s: %s=%d did match %d" % (pname, target, x, value))
                 return 0
             runner().verbose(f"Assert passed on {pname}")
             return TS_NEVER

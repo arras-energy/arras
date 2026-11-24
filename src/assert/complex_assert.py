@@ -85,12 +85,12 @@ Caveats
 - See the `once` caveat of `double_assert`. The deltamode update function
   (`update_complex_assert()`) is not modeled.
 
-Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
------------------------------------------------------------------
+Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16, with the assert fixes)
+----------------------------------------------------------------------------------
 
-1. An object without a parent tests the global variable named `target`
-   and names it `global` in messages; gridlabd dereferences the missing
-   parent.
+None. An object without a parent tests the global variable named
+`target` and names it `global` in messages, as gridlabd does with the
+assert fixes.
 
 References
 ----------

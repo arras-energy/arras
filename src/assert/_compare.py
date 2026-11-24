@@ -1,7 +1,8 @@
 # pylint: disable=line-too-long
 """@private Property comparisons and parts
 
-Reproduces the comparison that the `assert` class asks of the gridlabd core:
+Reproduces the comparison that the `assert` class asks of the gridlabd core,
+with the fixes of DESIGN.md decision 8.4:
 `property_compare_basic_str()` and `property_compare_basic()`
 (`source/property.cpp`), the operators of `source/compare.cpp`, and the
 `get_part` functions of the property types (`complex_get_part()`,
@@ -61,14 +62,10 @@ def _ordered_op(op:int, x:Any, a:Any, b:Any) -> bool:
     inside = a <= x and b is not None and x <= b
     return inside if op == TCOP_IN else not inside
 
-def _int32(value:int) -> int:
-    """C `(signed)` cast of an integer: its low 32 bits, signed"""
-    value &= 0xFFFFFFFF
-    return value - (1 << 32) if value & 0x80000000 else value
-
-def _uint16(value:int) -> int:
-    """`(signed)*(uint16*)` of an `int16`: its low 16 bits, unsigned"""
-    return value & 0xFFFF
+def _wrap(value:int, bits:int) -> int:
+    """An integer stored in a signed integer of `bits` bits"""
+    value &= (1 << bits) - 1
+    return value - (1 << bits) if value >> (bits - 1) else value
 
 def _scan_int(text:str, what:str) -> int:
     """C `sscanf("%d")`: the leading integer
@@ -114,6 +111,8 @@ def _set_value(target:Target, text:str, what:str) -> int:
     if text[:1].isdigit():
         return _scan_int(text, what)
     keys = list(text) if target.charset and "|" not in text else [x for x in text.split("|") if x]
+    if not keys:
+        raise AssertError(f"{what}: '{text}' is not a set value")
     value = 0
     for key in keys:
         found = next((v for k, v in target.keywords.items() if (k[0] == key if target.charset and "|" not in text else k == key)), None)
@@ -137,8 +136,12 @@ def _bool_value(text:str, what:str) -> bool:
     return _scan_int(text, what) != 0
 
 def _object_value(model:Any, text:str) -> str|None:
-    """`convert_to_object()`: the object named, else `None` (`"0"` and
-    names not found give `None`, as in gridlabd)"""
+    """`convert_to_object()`: the object named, or `None` for `"0"`
+
+    Exceptions
+    ----------
+    - `AssertError`: no object has that name or `CLASS:ID`
+    """
     text = text.strip()
     if text == "0":
         return None
@@ -149,8 +152,10 @@ def _object_value(model:Any, text:str) -> str|None:
         for name, obj in model.objects.items():
             if str(obj.id) == oid and obj.oclass.name == cname:
                 return name
-        return None
-    return text if text in model.objects else None
+        raise AssertError(f"object '{text}' is not found")
+    if text not in model.objects:
+        raise AssertError(f"object '{text}' is not found")
+    return text
 
 def _timestamp_value(model:Any, text:str) -> int:
     """`convert_to_timestamp()`"""
@@ -167,21 +172,19 @@ def _converters(target:Target) -> tuple[str,Callable[[],Any],Callable[[str],Any]
     if ptype == "double":
         return "F", target.double, lambda s: to_double(s, target.unit, what)
     if ptype == "complex":
-        return "F", lambda: target.complex().real, lambda s: to_complex(s, target.unit, what).real
+        return "C", target.complex, lambda s: to_complex(s, target.unit, what)
     if ptype in ("enduse", "randomvar", "loadshape"):
         return "F", lambda: _structure(target)["value"], lambda s: to_double(s, None, what)
-    if ptype == "int16":
-        return "I", lambda: _uint16(target.integer()), lambda s: _uint16(_scan_int(s, what))
-    if ptype in ("int32", "int64"):
-        return "I", lambda: _int32(target.integer()), lambda s: _int32(_scan_int(s, what))
+    if ptype in ("int16", "int32", "int64"):
+        bits = int(ptype[3:])
+        return "I", target.integer, lambda s: _wrap(_scan_int(s, what), bits)
     if ptype == "enumeration":
-        return "I", lambda: _int32(target.enumeration()), lambda s: _int32(_keyword_value(target, s, what))
+        return "I", lambda: _wrap(target.enumeration(), 32), lambda s: _wrap(_keyword_value(target, s, what), 32)
     if ptype == "set":
-        return "I", lambda: _int32(_set_value(target, target.text(), what) if target.text() else 0), \
-            lambda s: _int32(_set_value(target, s, what))
+        return "I", lambda: _set_value(target, target.text(), what) if target.text() else 0, \
+            lambda s: _set_value(target, s, what)
     if ptype == "timestamp":
-        return "I", lambda: _int32(_timestamp_value(model, target.text() or "0")), \
-            lambda s: _int32(_timestamp_value(model, s))
+        return "I", lambda: _timestamp_value(model, target.text() or "0"), lambda s: _timestamp_value(model, s)
     if ptype in ("char8", "char32", "char256", "char1024"):
         size = int(ptype[4:])
         return "S", lambda: target.text().encode(), lambda s: _scan_char(s, size).encode()
@@ -224,12 +227,16 @@ def compare_with_string(target:Target, op:int, a:str, b:str|None) -> bool:
     except AssertError as err:
         runner().warning(f"property type '{target.ptype}' cannot compare to value '{b}' ({err})")
         return False
-    if kind in ("B", "O") and op not in (TCOP_EQ, TCOP_NE):
+    if kind in ("B", "O", "C") and op not in (TCOP_EQ, TCOP_NE):
         runner().warning(f"property type '{target.ptype}' does not support comparison operations or parts")
         return False
     x = value()
     if kind == "F":
         return _float_op(op, x, xa, xb)
+    if kind == "C":
+        if xb is None:
+            return (x == xa) == (op == TCOP_EQ)
+        return (abs(x - xa) <= abs(xb)) == (op == TCOP_EQ)
     return _ordered_op(op, x, xa, xb)
 
 def compare_part(target:Target, op:int, a:str, b:str|None, part:str) -> bool:

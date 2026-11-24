@@ -43,7 +43,7 @@ test_g_assert.py
 ----------------
 
 The `assert` class: comparisons of every property type (tolerances,
-`inside`/`outside`, units, the 32-bit and 16-bit integer quirks, strings,
+`inside`/`outside`, units, full-width integers, complex values, strings,
 `bool` and `object` relations, enumerations, sets, timestamps), every
 property part, the failure message, `status`, conversion warnings, global
 targets, missing targets, groups (terms, errors, empty groups), `start`,
@@ -57,7 +57,7 @@ test_typed_asserts.py
 tolerance modes, `ASSERT_TRUE`/`ASSERT_FALSE`/`ASSERT_NONE`, messages,
 `within` checks at initialization, the `once` logic (a handler changes
 `value` during the run), invalid targets, global targets, verbose messages,
-complex value forms, and the unsigned reading of `int_assert` values.
+complex value forms, and 64-bit `int_assert` arithmetic.
 
 test_helpers.py
 ---------------
