@@ -123,6 +123,10 @@ Python API
 -  `arras.model.Model`: gridlabd model (globals, modules, classes, schedules,
    filters, and objects keyed on name) with GLM and gridlabd JSON read/write,
    regex search, add/delete, and validated get/set of properties (see `arras.model`)
+-  `arras.module.Module`: modules with gridlabd's module list, the classes each
+   module registers, and the solvers that keep the clock synchronized, with
+   dispatchers that combine solver results as the gridlabd core does (see
+   `arras.module`)
 """
 
 import arras.exceptions as exception
@@ -133,8 +137,10 @@ import arras.main as main
 import arras.runner as runner
 import arras.units
 import arras.model
+import arras.module
 
 from arras.globals import Globals, GlobalsError
 from arras.oclass import Class, ClassError
 from arras.units import Units, Unit, UnitsError
 from arras.model import Model, ModelError, Object
+from arras.module import Module, ModuleError

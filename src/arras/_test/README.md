@@ -115,6 +115,33 @@ Run it alone with:
 
 Tests that write files write only to pytest's temporary folder.
 
+test_module.py
+--------------
+
+Fast, self-contained tests of `arras.module`:
+
+- the `TS_*`, `DT_*`, `SM_*`, and `SOLVERS` tables from gridlabd's
+  `source/timestamp.h`, `source/module.h`, and `source/deltamode.h`;
+- module registration (ids, duplicate names, name and version checks),
+  `load`, `find`, and `reset`;
+- `register_class` and `classes`, including classes registered directly in
+  `Class.registry`;
+- `set_solver`/`get_solver` by hook name and gridlabd symbol, replacing and
+  removing solvers, and constructor solvers;
+- the event-mode dispatchers: call order, the earliest-time rule with soft
+  times and `TS_INVALID`, the stop-at-first-failure and call-all rules,
+  and the repeat-until-stable `clockupdateall` loop;
+- the deltamode dispatchers: module selection by `deltamode_desired`,
+  `deltamode_allowed`, `DT_INFINITY`/`DT_INVALID`, the step minimum, mode
+  precedence, the next times passed to `deltaclockupdate` when staying in
+  and leaving deltamode, and the errors for missing solvers;
+- the module docstring examples (doctest).
+
+Each test starts and ends with empty module and class registries
+(`Module.reset()`, `Class.reset()`). Run it alone with:
+
+	pytest src/arras/_test/test_module.py
+
 test_units.py
 -------------
 
