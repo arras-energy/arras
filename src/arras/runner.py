@@ -83,7 +83,9 @@ expected to satisfy:
    header is greater than 0 are synchronized first
    (`Module.internalsyncall()`, a soft event; a time before the clock
    stops the run). On the first iteration of a time step the object
-   `on_precommit` handlers run, then the module `precommit` solvers. Then
+   `on_precommit` handlers run, then the module `precommit` solvers, whose
+   result is an event like a sync result (the clock itself means no event).
+   Then
    come the module `presync` solvers and the presync handlers top-down
    (parents before children), the sync handlers bottom-up (children before
    parents) and the module `sync` solvers, and the module `postsync`
@@ -107,12 +109,11 @@ expected to satisfy:
    a result of 0, or a false module result stops the run; other object
    commit results do not change the next time, as in `commit_all()`. The
    module `clockupdate` solvers may then lower the next time
-   (`Module.clockupdateall()`), and the result is posted as a hard event;
-   a result at or before the clock stops the run.
+   (`Module.clockupdateall()`); a lowered time is posted as a hard event,
+   and a lowered time at or before the clock stops the run.
 7. The run ends when the next time is after `stoptime` or is `TS_NEVER`,
-   or when it holds only soft events while `stoptime` is `NEVER` (which
-   happens only before the first committed step, see Caveats). `stoptime`
-   0 means `NEVER`.
+   or when it holds only soft events while `stoptime` is `NEVER`.
+   `stoptime` 0 means `NEVER`.
 8. Objects are synchronized and committed only while in service: before
    `in_svc` an object's next event is `in_svc`; after `out_svc` its
    handlers are not called.
@@ -155,7 +156,8 @@ its functions `on_init(t)`, `on_precommit(t)`, `on_presync(t)`,
 solvers of `Module.load(NAME)`, with `t` the clock:
 
 - `on_init` and `on_commit` return true or false;
-- `on_precommit` and the sync handlers return a time;
+- `on_precommit` returns a time, or `True` (no event) or `False` (failure);
+- the sync handlers return a time;
 - an exception, or a sync handler result that is not an integer, adds an
   error line and counts as `TS_INVALID` (or false), as gridlabd's Python
   module does.
@@ -243,12 +245,8 @@ Caveats
   synchronization code in `arras`, so their objects take part in a run only
   through handlers, and module behavior only through module solvers.
   Class `PASSCONFIG` bits do not add objects to passes.
-- Reproduced core behaviors: the `clockupdate` step posts the next time as
-  a hard event after every committed step, so soft events keep a run going
-  even when `stoptime` is `NEVER`; a module `precommit` result fails the
-  run only when it is 0 (`TS_INVALID` and times are not used, as
-  `precommit_all()` tests the result as a truth value); object commit
-  results other than `TS_INVALID` and 0 are ignored.
+- Reproduced core behavior: object commit results other than
+  `TS_INVALID` and 0 do not change the next time, as in `commit_all()`.
 - A background run is a thread of the calling Python process, not a
   separate process. Handlers and the progress callback run in that thread;
   do not change the model from another thread while it runs.
@@ -281,6 +279,18 @@ Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
 7. A Python module is found as `NAME.py` in `pythonpath` folders or the
    working folder, and is used only when the module has no solvers in
    `arras.module.Module.registry`.
+8. Soft events do not keep a run going when `stoptime` is `NEVER`: the
+   `clockupdate` step posts a hard event only when a solver lowers the next
+   time. gridlabd's `clock_update_modules()` posts the next time as a hard
+   event after every committed step, so its main loop never stops on soft
+   events alone, contrary to its comment that soft events are ignored when
+   stopping (`exec_start()`).
+9. A module `precommit` result is checked and used: `TS_INVALID`, 0, or a
+   time before the clock stops the run, and a later time is an event, as
+   for `presync`. gridlabd's `precommit_all()` tests the result of
+   `module_precommitall()` as a truth value, so only 0 fails and times are
+   discarded. A Python module's `on_precommit` may also return `True` (no
+   event) or `False` (failure), which gridlabd reads as the times 1 and 0.
 
 References
 ----------
@@ -807,8 +817,9 @@ class Runner: # pylint: disable=too-many-instance-attributes
                     result = self._time_event(name, "precommit")
                     if result is not None and result != TS_NEVER and result < self.clock:
                         raise _Failure(exitcodes.RUNERR, f"object {name} precommit failed (returned {result})")
-                if self._dispatch(exitcodes.RUNERR, "on_precommit", Module.precommitall, self.clock) == TS_ZERO:
-                    raise _Failure(exitcodes.RUNERR, "precommit failure")
+                result = self._dispatch(exitcodes.RUNERR, "on_precommit", Module.precommitall, self.clock)
+                if result != self.clock:
+                    self._post(result, "module on_precommit")
 
             # synchronization passes, with the module events around them
             for event, members in passes:
@@ -846,9 +857,10 @@ class Runner: # pylint: disable=too-many-instance-attributes
                 counter = limit
                 self.steps += 1
                 update = self._dispatch(exitcodes.RUNERR, "clock_update", Module.clockupdateall, self._step)
-                if update <= self.clock:
-                    raise _Failure(exitcodes.RUNERR, f"module clock_update returned {update}, not after the clock")
-                self._post(update, "module clock_update")
+                if update < self._step:
+                    if update <= self.clock:
+                        raise _Failure(exitcodes.RUNERR, f"module clock_update returned {update}, not after the clock")
+                    self._post(update, "module clock_update")
                 self._progress_update(start, stop)
                 self._report()
             else:
@@ -940,6 +952,10 @@ class Runner: # pylint: disable=too-many-instance-attributes
                 return bool(result)
             if hook == "term":
                 return None
+            if hook == "precommit" and isinstance(result, bool):
+                if not result:
+                    self.error(f"python {name}.on_{hook}({t}) returned False")
+                return TS_NEVER if result else TS_INVALID
             if not isinstance(result, int):
                 self.error(f"python {name}.on_{hook}({t}) returned an invalid type (expected int)")
                 return TS_INVALID

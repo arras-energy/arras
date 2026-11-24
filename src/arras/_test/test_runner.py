@@ -281,7 +281,11 @@ def test_soft_events():
     model.set_property("a", "on_sync", "python:test_runner.soft_three")
     runner = Runner(model=model)
     assert runner.returncode == exitcodes.SUCCESS
-    assert [t for _, _, t in LOG] == [START, START+H, START+2*H]
+    assert [t for _, _, t in LOG] == [START]
+    LOG.clear()
+    Module("m", clockupdate=lambda t: t)
+    assert Runner(model=model).steps == 1
+    assert [t for _, _, t in LOG] == [START]
 
 def test_stoptime_never():
     model = make('object thing { name "a"; on_sync "python:test_runner.three_steps"; }', stop="NEVER")
@@ -616,7 +620,9 @@ def test_module_events():
     ({"init": lambda: False}, exitcodes.INIERR, "module initialization failed"),
     ({"init": lambda: 1/0}, exitcodes.INIERR, "module on_init failed: ZeroDivisionError"),
     ({"commit": lambda t: False}, exitcodes.RUNERR, "model commit failed"),
-    ({"precommit": lambda t: 0}, exitcodes.RUNERR, "precommit failure"),
+    ({"precommit": lambda t: 0}, exitcodes.RUNERR, "module on_precommit failed"),
+    ({"precommit": lambda t: TS_INVALID}, exitcodes.RUNERR, "module on_precommit failed"),
+    ({"precommit": lambda t: t - 1}, exitcodes.RUNERR, "module on_precommit returned 1577836799, before the clock"),
     ({"clockupdate": lambda t: START}, exitcodes.RUNERR, "module clock_update returned 1577836800, not after the clock"),
     ({"term": lambda: 1/0}, exitcodes.RUNERR, "module on_term failed: ZeroDivisionError"),
     ])
@@ -626,13 +632,17 @@ def test_module_failures(solvers, code, message):
     assert runner.returncode == code
     assert message in runner.stderr[-1]
 
-def test_module_quirks():
-    Module("m", precommit=lambda t: TS_INVALID, term=logger("m.term"))
-    model = make('object thing { name "a"; on_sync "python:test_runner.always_now"; }')
+def test_module_precommit_events():
+    Module("m", precommit=lambda t: LOG.append(("m.precommit", t)) or t + 1200, term=logger("m.term"))
+    model = make('object thing { name "a"; }', stop="2020-01-01 00:40:00 UTC")
     runner = Runner(model=model)
-    assert runner.returncode == exitcodes.RUNERR
-    assert "convergence iteration limit" in runner.stderr[-1]
-    assert LOG == [("m.term",)]
+    assert runner.returncode == exitcodes.SUCCESS
+    assert [t for _, t in LOG[:-1]] == [START, START+1200, START+2400]
+    assert LOG[-1] == ("m.term",)
+    Module.reset()
+    LOG.clear()
+    Module("m", precommit=lambda t: LOG.append(("m.precommit", t)) or t)
+    assert Runner(model=model).steps == 1
 
 def test_clock_update():
     Module("m", clockupdate=lambda t: min(t, Runner.current().clock + 600))
@@ -744,6 +754,9 @@ def test_python_module_skipped(tmp_path, monkeypatch):
     ("def on_init(t):\n    return False\n", exitcodes.INIERR, "python {name}.on_init(1577836800) returned False"),
     ("def on_init(t):\n    raise ValueError('x')\n", exitcodes.INIERR, "python {name}.on_init(1577836800) failed: ValueError: x"),
     ("def on_commit(t):\n    return 0\n", exitcodes.RUNERR, "python {name}.on_commit(1577836800) returned False"),
+    ("def on_precommit(t):\n    return False\n", exitcodes.RUNERR, "python {name}.on_precommit(1577836800) returned False"),
+    ("def on_precommit(t):\n    return True\n", exitcodes.SUCCESS, "simulation ended"),
+    ("def on_precommit(t):\n    raise ValueError('x')\n", exitcodes.RUNERR, "module on_precommit failed"),
     ("def on_term(t):\n    raise ValueError('x')\n", exitcodes.SUCCESS, "python {name}.on_term(1577836800) failed: ValueError: x"),
     ("def on_sync(t:\n", exitcodes.INIERR, "{name}.py: python module import failed: SyntaxError"),
     ])
@@ -751,6 +764,6 @@ def test_python_module_failures(tmp_path, monkeypatch, source, code, message):
     name = f"pymod_fail_{abs(hash(source))}"
     (tmp_path / f"{name}.py").write_text(source)
     monkeypatch.chdir(tmp_path)
-    runner = Runner(model=pymodel(name, stop="2020-01-01 00:00:00 UTC"))
+    runner = Runner("-v", model=pymodel(name, stop="2020-01-01 00:00:00 UTC"))
     assert runner.returncode == code
     assert any(message.format(name=name) in line for line in runner.stderr), runner.stderr
