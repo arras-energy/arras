@@ -46,3 +46,29 @@ Run it alone with:
 
 `SHELL` tests run `echo`; `TMPFILE` and `FINDFILE` tests write only to
 pytest's temporary folder.
+
+test_oclass.py
+--------------
+
+Fast, self-contained tests of `arras.oclass`:
+
+- the `PROPERTY_TYPES` and `PASSCONFIG` tables from gridlabd's
+  `source/property.cpp` and `source/class.h`;
+- class registration (ids, duplicate names per module, name limits),
+  `find` (including `module.class`), `reset`, and GLM `declare` with
+  inheritance qualifiers;
+- `set_parent` for GLM and module classes, inheritance loops, the
+  `UNSAFE_OVERRIDE_OMIT` warnings, and `isa`;
+- `publish` (units, keywords, access, flags, defaults, reserved header
+  names) and `add_property` (type checks against existing and inherited
+  properties, unit and keyword rules, no additions after instantiation);
+- `find_property` through parents, deprecated notices, keyword order and
+  the `set` `CHARSET` flag, functions, and event handlers;
+- `modhelp`, `to_glm`/`saveall` with `glm_save_options`, `to_xml`/`saveall_xml`,
+  and `to_dict`;
+- the module docstring examples (doctest).
+
+Each test starts and ends with an empty class registry (`Class.reset()`).
+Run it alone with:
+
+	pytest src/arras/_test/test_oclass.py

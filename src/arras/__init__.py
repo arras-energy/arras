@@ -115,12 +115,17 @@ Python API
 ----------
 -  `arras.globals.Globals`: global variables with gridlabd defaults, get/set/create,
    and `${...}` pseudo-global and expansion evaluation (see `arras.globals`)
+-  `arras.oclass.Class`: object classes with gridlabd's class registry,
+   property declaration and inheritance, keywords, functions, event handlers,
+   and modhelp/GLM/XML output (see `arras.oclass`)
 """
 
 import arras.exceptions as exception
 import arras.exitcodes as exitcodes
 import arras.globals
+import arras.oclass
 import arras.main as main
 import arras.runner as runner
 
 from arras.globals import Globals, GlobalsError
+from arras.oclass import Class, ClassError
