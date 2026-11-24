@@ -77,6 +77,19 @@ See the [`arras.units` documentation](https://arras-energy.github.io/arras/arras
 
 Module classes come from JSON that gridlabd writes (`gridlabd -o FILE.json` or `gridlabd --modhelp=json MODULE`), read with `Model.load_classes()` or `Model.read_json()`. See the [`arras.model` documentation](https://arras-energy.github.io/arras/arras/model.html) for the value checks, the GLM directives supported, and the differences from gridlabd.
 
+`arras.Module` holds a GridLAB-D module: its version, the classes it registers, and the solvers that keep the simulation clock synchronized. Users attach Python callables to the hooks that gridlabd modules export (`on_sync`, `clock_update`, the deltamode functions, ...) and run the dispatchers, which call every loaded module in load order and combine the results as the gridlabd core does:
+
+```python
+>>> from arras import Module
+>>> tape = Module("tape", sync=lambda t: t + 3600)
+>>> recorder = tape.register_class("recorder", passconfig="BOTTOMUP")
+>>> powerflow = Module("powerflow", sync=lambda t: -(t + 60))
+>>> Module.syncall(946684800)
+-946684860
+```
+
+A negative time is a soft event; the earliest time by absolute value is kept. Class heartbeat solvers (`set_heartbeat()`) and the core's internal items (random variables, schedules, loadshapes, transforms, and enduses, added with `Module.add_internal()`) are combined the same way by `Module.internalsyncall()`, which gridlabd runs before each set of object passes. See the [`arras.module` documentation](https://arras-energy.github.io/arras/arras/module.html) for each solver's arguments and the dispatchers' rules.
+
 ## Testing
 
 ```bash

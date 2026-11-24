@@ -1,6 +1,8 @@
-# arras-energy/arras — package design (draft 1)
+# arras-energy/arras — package design (draft 2)
 
-Status: decisions recorded from the code as merged through #16, 2026-11-23
+Status: decisions recorded from the code as merged through #16, 2026-11-23;
+modules and solver dispatch (`arras.module`, #22) added 2026-11-23;
+internal item and heartbeat dispatch added 2026-11-23
 
 ## Purpose
 
@@ -10,16 +12,23 @@ GridLAB-D. It provides:
 - the `arras` command, which runs the installed `gridlabd` simulator, and
 - an independent Python model of the gridlabd core's data structures:
   global variables (`arras.globals`), object classes (`arras.oclass`),
-  units (`arras.units`), and models with GLM and JSON input and output
-  (`arras.model`).
+  units (`arras.units`), models with GLM and JSON input and output
+  (`arras.model`), and modules with the solvers that keep the clock
+  synchronized (`arras.module`).
 
 The Python model reads, checks, edits, and writes what gridlabd reads and
 writes, without running `gridlabd`. Users get the same values, text, and
 errors that gridlabd gives, or a documented difference.
 
-Excluded: the simulation itself (clock, synchronization passes, solvers)
-and the gridlabd modules (`powerflow`, `residential`, ...). These stay in
-the C++ code of [arras-energy/gridlabd](https://github.com/arras-energy/gridlabd).
+Excluded: the simulation main loop (advancing the clock, running the object
+synchronization passes, entering and leaving deltamode) and the gridlabd
+modules (`powerflow`, `residential`, ...). These stay in the C++ code of
+[arras-energy/gridlabd](https://github.com/arras-energy/gridlabd).
+`arras.module` models how the core combines the results of the solvers
+that modules export, the class heartbeat functions, and the internal items
+(random variables, schedules, loadshapes, transforms, enduses), with all of
+them written as Python callables (decisions 7.3, 7.8, 7.9); it does not run
+them in a simulation (revised 2026-11-23, #22).
 The classes that modules publish come into `arras` from JSON that gridlabd
 writes.
 
@@ -44,8 +53,8 @@ PRs can cite "decision 4.3".
 | 1.2 | Where gridlabd's code and its documentation agree, `arras` reproduces the code's behavior: the same output strings, the same accepted inputs, and the same numbers. This includes parsing quirks that change results (see 5.4). |
 | 1.3 | Where gridlabd's code and its documentation disagree, `arras` follows the documentation. |
 | 1.4 | Every behavior that differs from gridlabd is listed in a numbered "Differences from gridlabd" section of the module docstring, with the gridlabd commit it was checked against, and called out for review in the PR that introduces it. |
-| 1.5 | Each part of the gridlabd core is one module with one public class (`Globals`, `Class`, `Units`, `Model`). The public classes and their exceptions are re-exported from `arras/__init__.py`. |
-| 1.6 | Each module raises its own exception (`GlobalsError`, `ClassError`, `UnitsError`, `ModelError`), all derived from `arras.exceptions.ArrasException`. Arguments are checked early, and the exceptions are documented. |
+| 1.5 | Each part of the gridlabd core is one module with one public class (`Globals`, `Class`, `Units`, `Model`, `Module`). The public classes and their exceptions are re-exported from `arras/__init__.py`. (`Module` added 2026-11-23, #22.) |
+| 1.6 | Each module raises its own exception (`GlobalsError`, `ClassError`, `UnitsError`, `ModelError`, `ModuleError`), all derived from `arras.exceptions.ArrasException`. Arguments are checked early, and the exceptions are documented. (`ModuleError` added 2026-11-23, #22.) |
 | 1.7 | Docstrings are the user documentation (pdoc, published to https://arras-energy.github.io/arras). Each module docstring has Syntax, Arguments, a spec-style Description ("expected to satisfy: 1. ..."), Examples with real output, Caveats, Differences from gridlabd, and References to the gridlabd source files. |
 | 1.8 | Module docstring examples and the README examples run as doctests in the test suite. |
 | 1.9 | Tests are fast and self-contained: no network, no credentials, no gridlabd install; the suite finishes in seconds. Coverage is reported but has no threshold. |
@@ -121,6 +130,21 @@ PRs can cite "decision 4.3".
 | 6.13 | Time zone abbreviations (e.g. `PST`) in JSON globals that `Globals` cannot convert (3.9) leave the global at its default and log a warning. Object timestamps in that form are stored as given. |
 | 6.14 | Numbers written after unit conversion are rounded to 15 significant digits, so conversion errors such as `1500.0000000000002` do not appear. |
 
+### 7. Modules (`arras.module`)
+
+| # | Decision |
+|---|---|
+| 7.1 | `Module.registry` is shared by the whole Python process, in load order, as gridlabd's module list is shared by a run; load order is the order in which solvers are called. `Module(name)` refuses a loaded name; `Module.load(name)` returns the loaded module, as `module_load()` does. `Module.reset()` does not touch `Class.registry`. |
+| 7.2 | A module's classes are not stored in the module: `Module.classes` lists the classes in `Class.registry` whose `module` is the module's name, so classes registered by `arras.model` or by the user appear without being added twice. `register_class()` creates a `Class` for the module. |
+| 7.3 | Solvers are Python callables attached to the hooks of gridlabd's `struct s_module_list` (`SOLVERS`): `init`, `precommit`, `presync`, `sync`, `postsync`, `commit`, `term`, `clockupdate`, and the deltamode hooks `deltamode_desired`, `preupdate`, `interupdate`, `deltaclockupdate`, `postupdate`. A hook is named by its `arras` name or by the symbol a module library exports (`on_sync`, `clock_update`, `deltaClockUpdate`). `on_term` and `term` share one hook. Solvers do not receive the `MODULE*` argument. |
+| 7.4 | The dispatchers (`initall()`, `precommitall()`, `presyncall()`, `syncall()`, `postsyncall()`, `commitall()`, `termall()`, `clockupdateall()`, `deltadesiredall()`, `preupdateall()`, `interupdateall()`, `deltaclockupdateall()`, `postupdateall()`) reproduce how `source/module.cpp`, `GldExec::clock_update_modules()`, and `source/deltamode.cpp` combine module results, including the earliest-by-absolute-time rule for soft (negative) times and `TS_INVALID`, which functions stop at the first failure, and which call every module. |
+| 7.5 | The dispatchers do not advance a clock or run object passes. Values that the core reads from globals inside these functions (`deltamode_allowed`, `deltamode_timestep`, `global_clock`, `global_deltaclock`, `global_delta_curr_clock`) are arguments; the defaults are gridlabd's (`allowed=False`, 10 ms). |
+| 7.6 | Timestamps are `int` seconds and deltamode steps `int` nanoseconds, with gridlabd's constants (`TS_NEVER`, `TS_INVALID`, `TS_MAX`, `DT_INFINITY`, `DT_INVALID`, `DT_SECOND`, `SM_*`). |
+| 7.7 | Stricter than the core: a deltamode module (one with a `deltamode_desired` solver) without a `preupdate`, `interupdate`, or `postupdate` solver makes the dispatcher that needs it raise `ModuleError` (the core calls a null pointer); module names with whitespace, `.`, or `:` and versions outside 0 to 65535 are refused; a solver, heartbeat solver, or internal item that returns a non-`int` (or a `bool`) where a time is expected raises `ModuleError`; a transform needs an explicit source (`"UNKNOWN"` for the core's untyped transform). (Module docstring, differences 1–4.) |
+| 7.8 | Heartbeat solvers are attached per class by the class's module (`set_heartbeat()`), as a module sets `CLASS::heartbeat`. `heartbeatsyncall(objects)` takes the heartbeat objects from the caller (objects with `heartbeat > 0`, as `exec_init()` collects them) and does not read objects itself; an object whose class has no solver counts as `TS_NEVER`; parents' solvers are not used. |
+| 7.9 | Random variables, schedules, loadshapes, transforms, and enduses are internal items: Python callables `sync(t1)` added with `Module.add_internal()` and kept in `Module.internals` in creation order (transforms with their `TRANSFORMSOURCE` bits, schedules with an `interpolated` flag). Their values, shapes, and transform arithmetic (including schedule skew) are the callables' job. |
+| 7.10 | `randomvarsyncall()`, `schedulesyncall()`, `loadshapesyncall()`, `transformsyncall()`, `endusesyncall()`, `heartbeatsyncall()`, and `internalsyncall()` reproduce the single-thread paths of the core functions: absolute-time minimum returned as a soft time for random variables and heartbeats, signed minimum for the others, the schedule and loadshape next-time caches (shared by the process, cleared by `Module.reset()`), the interpolated-schedule override, and `syncall_internals()`'s soft-event combination, `minimum_timestep` rounding, and the zero-terminated `earliest_timestamp()` list. Link and instance times, which `arras` does not model, are arguments. |
+
 ## Conventions inherited
 
 From the Eudoxys package guidelines
@@ -157,6 +181,7 @@ src/arras/
   units.py         Units(file), Unit: unit manager
   unitfile.txt     copy of gridlabd runtime/unitfile.txt
   model.py         Model(file, globals, strict), Object: models, GLM/JSON I/O
+  module.py        Module(name, major, minor, **solvers): modules, solver dispatch
   _test/           pytest tests, one test_<module>.py per module
     data/          gridlabd-written test inputs (case14.json)
 ```
@@ -173,6 +198,7 @@ flowchart LR
   model --> globals
   model --> oclass
   model --> units
+  module --> oclass
 ```
 
 ## Contracts
@@ -183,6 +209,7 @@ flowchart LR
 | `Class` | `Class(name, module=None, passconfig=0)`, `Class.declare(name, parent)` | class registry entry and its properties |
 | `Units` | `Units(file=None)` | unit list; `find()` returns `Unit`, `convert()` returns a number |
 | `Model` | `Model(file=None, globals=None, strict=True)` | globals, modules, classes, schedules, filters, objects |
+| `Module` | `Module(name, major=0, minor=0, **solvers)`, `Module.load(name)` | module registry entry, its solvers; its classes through `Class.registry` |
 
 A `Model` composes the others: it owns one `Globals`, registers its classes
 in the shared `Class.registry`, and checks units with the shared
@@ -198,6 +225,7 @@ Each module is checked against these gridlabd files (`master` 076e78a):
 | `oclass` | `source/class.cpp`, `class.h`, `property.cpp`, `property.h`, `unit.cpp`, `load.cpp`, `cmdarg.cpp`; `docs/GLM/Directive/Class.md`, `docs/Command/Modhelp.md` |
 | `units` | `source/unit.cpp`, `unit.h`, `runtime/unitfile.txt`; `docs/Command/Unitstest.md` |
 | `model` | `source/load.cpp`, `json.cpp`, `object.cpp`, `module.cpp`, `save.cpp`; `docs/GLM/Directive/` |
+| `module` | `source/module.h`, `module.cpp`, `exec.cpp` (`clock_update_modules()`, `syncall_internals()`, `sync_heartbeats()`, module calls in the sync passes), `deltamode.cpp`, `object.cpp` (`object_heartbeat()`), `random.cpp`, `schedule.cpp`, `loadshape.cpp`, `transform.cpp`, `transform.h`, `enduse.cpp`, `timestamp.h`, `timestamp.cpp`; `docs/GLM/Directive/Module.md` |
 | `exitcodes`, `runner` | gridlabd exit codes and install layout |
 
 ## Files and formats
@@ -228,6 +256,9 @@ Each module is checked against these gridlabd files (`master` 076e78a):
   output goes straight to the terminal (#21).
 - The GLM that `write_glm()` produces has not yet been loaded with
   `gridlabd` (#16).
+- `arras.model.Model.modules` still holds each module as a `dict` of
+  `major` and `minor`; `Model.load_module()` does not yet create or use an
+  `arras.module.Module` (see open question 4).
 - Assumption: `Runner.GRIDLABD_PATH` defaults to
   `/usr/local/opt/gridlabd/current`; override it with the `GLD_*`
   environment variables or by assigning the class attribute.
@@ -235,8 +266,15 @@ Each module is checked against these gridlabd files (`master` 076e78a):
 ## Open questions
 
 1. Should any of the listed differences from gridlabd (3.11, 4.9, 6.4,
-   6.12) match the core instead? Each PR asked; none has been reversed.
+   6.12, 7.7) match the core instead? Each PR asked; none has been reversed.
 2. Should `Globals` use `arras.units` for `double` globals with units? It
    accepts only the declared unit now (#12).
 3. Should `publish()` log and continue for unit errors, as the core does,
    instead of raising (#14)?
+4. Should `Model` hold `Module` objects (so a model's modules carry their
+   solvers), with `Model.load_module()` calling `Module.load()`? Options:
+   replace the `modules` dicts with `Module` objects, or keep the dicts and
+   look modules up in `Module.registry` by name.
+5. Should `arras` model the main simulation loop (clock advance, object
+   sync passes, deltamode entry and exit) on top of the dispatchers, or
+   should that stay in gridlabd (Purpose)?
