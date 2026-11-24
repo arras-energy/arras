@@ -432,6 +432,27 @@ def test_glm_file_and_include(model, tmp_path):
     with pytest.raises(ModelError, match=r"\(text\)\(1\): #include file 'none.glm' is not found"):
         model.read_glm("#include <none.glm>\n")
 
+def test_include_search(model, tmp_path, monkeypatch):
+    work, user = tmp_path / "work", tmp_path / "user"
+    for folder in (work, user / "include", user / "share", tmp_path / "glpath"):
+        folder.mkdir(parents=True)
+    (user / "include" / "inc.glm").write_text("object node { name from_include; }\n")
+    (user / "share" / "shared.glm").write_text("object node { name from_share; }\n")
+    (tmp_path / "glpath" / "old.glm").write_text("object node { name from_glpath; }\n")
+    monkeypatch.chdir(work)
+    monkeypatch.setenv("ARRAS_USERDIR", str(user))
+    monkeypatch.setenv("GLPATH", str(tmp_path / "glpath"))
+    model.read_glm("#include <inc.glm>\n#include <shared.glm>\n")
+    assert list(model.objects) == ["from_include", "from_share"]
+    model.read_glm("#include <old.glm>\n")
+    assert "from_glpath" in model.objects
+    monkeypatch.delenv("GLPATH")
+    with pytest.raises(ModelError, match="#include file 'old.glm' is not found"):
+        model.read_glm("#include <old.glm>\n")
+    (work / "shared.glm").write_text("object node { name from_work; }\n")
+    model.read_glm("#include <shared.glm>\n")
+    assert "from_work" in model.objects
+
 def test_glm_macros(model, caplog):
     with caplog.at_level(logging.INFO):
         model.read_glm("#print hello ${randomseed}\n#warning careful\n")

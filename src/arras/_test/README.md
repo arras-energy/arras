@@ -21,7 +21,25 @@ summary on its page and uploads `coverage.xml` and `htmlcov/` as the
 `.github/workflows/deploy-pages.yml` publishes that report at
 https://arras-energy.github.io/arras/coverage/, where `badge.json` feeds the
 README badge. The tests use no
-network and no credentials, and finish in about a second.
+network and no credentials, and finish in about a second. Tests that use
+the user folder point `ARRAS_USERDIR` at a temporary folder, so nothing is
+written to `~/.arras`.
+
+test_folders.py
+---------------
+
+Fast, self-contained tests of `arras.folders`:
+
+- the package folder holds the files installed with `arras`;
+- the user folder from `ARRAS_USERDIR` and `~/.arras`, its subfolders, and
+  folder creation only with `create=True`;
+- the working folder, the `GLPATH` list, and the search order (working
+  folder, user `share` folder, `GLPATH` folders, package folder);
+- the module docstring examples (doctest).
+
+Run it alone with:
+
+	pytest src/arras/_test/test_folders.py
 
 test_globals.py
 ---------------
@@ -30,7 +48,8 @@ Fast, self-contained tests of `arras.globals`:
 
 - defaults: the 160 globals of gridlabd's `source/globals.cpp` `map[]` table,
   their order, aliases, types, access, keyword tables, default strings, and
-  folder defaults taken from `GLD_*`, `GLTEMP`, and `PYTHONPATH`;
+  folder defaults taken from `arras.folders` (not `GLD_*` or `GLTEMP`) and
+  `PYTHONPATH`;
 - `set`/`get` conversion for each property type, the `NAME=VALUE` form,
   `strictnames`, units, date formats, time zones, and relative timestamps;
 - `create`, `push`, the container protocol, `dump`, and `saveall`;
@@ -95,8 +114,10 @@ Fast, self-contained tests of `arras.model`:
   conversion, transforms and filters, `strict=False`, and `check()`;
 - GLM reading: a sample model with nested objects, `:..COUNT` and
   `:FIRST..LAST`, `inherit`, `@NAME`, multi-line and structured values,
-  every supported directive and macro, `#include`, `Model.module_loader`,
-  and the error message and line number for each kind of bad input;
+  every supported directive and macro, `#include` and its search of the
+  working folder, the user `include` and `share` folders, and `GLPATH`,
+  `Model.module_loader`, and the error message and line number for each
+  kind of bad input;
 - GLM and JSON writing, and reading the output back into the same objects;
 - `load_classes` from `--modhelp=json` style data, JSON globals, filters,
   and errors;
@@ -158,7 +179,7 @@ Fast, self-contained tests of `arras.units`:
 
 - loading the bundled copy of gridlabd's `runtime/unitfile.txt`: constants,
   scalar prefixes, primary and derived units, and the `unitfile.txt` search
-  in the working folder and `GLPATH`;
+  in the working folder, the user `share` folder, and `GLPATH`;
 - the unit parameters that gridlabd's `unit.cpp` computes, including the
   parsing behaviors that `arras.units` reproduces (see its Caveats);
 - prefixed and compound units derived on request, and lookup errors;
@@ -201,7 +222,7 @@ Fast, self-contained tests of `arras.runner` and `arras.main`:
   codes, the reproduced precommit and commit rules, `clockupdate`, the
   deltamode warning, internal items and transforms, and heartbeats;
 - Python module event handlers loaded by `module NAME;` from the working
-  folder or `pythonpath`, modules that already have solvers, and handler
+  folder, `pythonpath`, or the user `lib` folder, modules that already have solvers, and handler
   failures;
 - the module docstring examples (doctest).
 

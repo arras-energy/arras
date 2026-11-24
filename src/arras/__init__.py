@@ -40,6 +40,10 @@ Python API
    heartbeat solvers, and the core's internal items (random variables,
    schedules, loadshapes, transforms, enduses), with dispatchers that combine
    their results as the gridlabd core does (see `arras.module`)
+-  `arras.folders`: the package folder (files installed with `arras`), the
+   user folder (`ARRAS_USERDIR`, else `~/.arras`: files installed at runtime
+   and shared by all models), and the working folder (project files), and
+   the file search across them (see `arras.folders`)
 -  `arras.runner.Runner`: quasi-steady time-series simulation of a model,
    in the foreground or in a background thread with a progress callback
    (see `arras.runner`)
@@ -47,6 +51,7 @@ Python API
 
 import arras.exceptions as exception
 import arras.exitcodes as exitcodes
+import arras.folders
 import arras.globals
 import arras.oclass
 import arras.main as main

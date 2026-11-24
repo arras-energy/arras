@@ -739,6 +739,16 @@ def test_python_module_pythonpath(tmp_path):
     assert runner.steps == 4
     assert runner.stderr == ["ERROR [INIT]: pymod_path.py: on_presync is not callable"]
 
+def test_python_module_userdir(tmp_path, monkeypatch):
+    folder = tmp_path / "user" / "lib"
+    folder.mkdir(parents=True)
+    (folder / "pymod_shared.py").write_text("def on_sync(t):\n    return t + 600\n")
+    monkeypatch.setenv("ARRAS_USERDIR", str(tmp_path / "user"))
+    monkeypatch.chdir(tmp_path)
+    runner = Runner(model=pymodel("pymod_shared"))
+    assert runner.returncode == exitcodes.SUCCESS, runner.stderr
+    assert runner.steps == 4
+
 def test_python_module_skipped(tmp_path, monkeypatch):
     (tmp_path / "pymod_user.py").write_text(PYMOD)
     monkeypatch.chdir(tmp_path)

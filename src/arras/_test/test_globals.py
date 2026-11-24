@@ -1,12 +1,15 @@
 """Tests of arras.globals"""
 
 import os
+import sys
 import doctest
+import sysconfig
 import re
 import datetime
 
 import pytest
 
+import arras.folders
 import arras.globals
 from arras.globals import Globals, Globalvar, GlobalsError, TS_NEVER, \
     geocode_encode, geocode_decode
@@ -86,23 +89,33 @@ def test_aliases(g):
     g.set("curl_options","x")
     assert g.get("wget_options") == "x"
 
-def test_folder_defaults_from_environment(monkeypatch):
-    monkeypatch.setenv("GLD_ETC","/opt/etc")
-    monkeypatch.setenv("GLD_BIN","/opt/bin")
+def test_folder_defaults(monkeypatch, tmp_path):
+    for name in ("GLD_ETC","GLD_BIN","GLD_LIB","GLD_VAR","GLD_INC"):
+        monkeypatch.setenv(name,"/opt/gridlabd")
+    monkeypatch.setenv("ARRAS_USERDIR",str(tmp_path / "user"))
     monkeypatch.setenv("PYTHONPATH","/opt/py")
     g = Globals()
-    assert g.get("datadir") == "/opt/etc"
-    assert g.get("bindir") == "/opt/bin"
-    assert g.get("pythonexec") == "/opt/bin/python3"
-    assert g.get("configpath") == "/opt/etc/solver_py.conf"
+    user = str(tmp_path / "user")
+    assert g.get("datadir") == f"{user}/share"
+    assert g.get("libdir") == f"{user}/lib"
+    assert g.get("incdir") == f"{user}/include"
+    assert g.get("vardir") == f"{user}/var"
+    assert g.get("configpath") == f"{user}/share/solver_py.conf"
+    assert g.get("logfile") == f"{user}/var/arras-log"
+    assert g.get("pidfile_dir") == f"{user}/var/pid"
+    assert g.get("bindir") == sysconfig.get_path("scripts")
+    assert g.get("pythonexec") == sys.executable
     assert g.get("pythonpath") == "/opt/py"
+    assert not (tmp_path / "user").exists()
+    assert "gridlabd" not in "".join(g.get(x) for x in ("datadir","bindir","libdir","incdir","vardir","configpath","logfile","pidfile_dir","tmp"))
 
 def test_tmp_default(monkeypatch):
     monkeypatch.setenv("GLTEMP","/scratch")
-    assert Globals().get("tmp") == "/scratch"
-    monkeypatch.delenv("GLTEMP")
+    monkeypatch.delenv("ARRAS_USERDIR",raising=False)
     monkeypatch.setenv("HOME","/home/user")
-    assert Globals().get("tmp") == "/home/user/.gridlabd/tmp"
+    assert Globals().get("tmp") == "/home/user/.arras/tmp"
+    monkeypatch.setenv("ARRAS_USERDIR","/shared/arras")
+    assert Globals().get("tmp") == "/shared/arras/tmp"
 
 def test_constructor_overrides():
     g = Globals({"version.branch":"develop"}, threadcount=4, quiet="TRUE")
@@ -318,10 +331,22 @@ def test_range_bad_step(g):
         g.get("RANGE,1,2,0")
 
 def test_findfile(g, tmp_path, monkeypatch):
-    (tmp_path / "weather.tmy3").write_text("")
-    monkeypatch.setenv("GLPATH",str(tmp_path))
-    assert g.get("FINDFILE weather.tmy3") == str(tmp_path / "weather.tmy3")
-    path = str(tmp_path / "weather.tmy3")
+    (tmp_path / "share").mkdir()
+    (tmp_path / "share" / "weather.tmy3").write_text("")
+    monkeypatch.setenv("ARRAS_USERDIR",str(tmp_path))
+    monkeypatch.setenv("GLPATH",str(tmp_path / "glpath"))
+    assert g.get("FINDFILE weather.tmy3") == str(tmp_path / "share" / "weather.tmy3")
+    assert g.get("FINDFILE unitfile.txt") == os.path.join(arras.folders.PACKAGEDIR,"unitfile.txt")
+    (tmp_path / "glpath").mkdir()
+    (tmp_path / "glpath" / "glpath.txt").write_text("")
+    assert g.get("FINDFILE glpath.txt") == str(tmp_path / "glpath" / "glpath.txt")
+    work = tmp_path / "work"
+    work.mkdir()
+    (work / "weather.tmy3").write_text("")
+    g.set("workdir",str(work))
+    assert g.get("FINDFILE weather.tmy3") == str(work / "weather.tmy3")
+    g.set("workdir",".")
+    path = str(tmp_path / "share" / "weather.tmy3")
     assert g.get(f"FINDFILE {path}") == path
     assert g.get("FINDFILE missing.tmy3") == ""
     assert g.get("FINDFILE /missing.tmy3") == ""

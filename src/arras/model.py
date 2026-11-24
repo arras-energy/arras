@@ -191,6 +191,9 @@ Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
    objects; gridlabd has no object deletion or renaming in GLM.
 3. Values that end at a newline without `;` are refused. gridlabd ends a
    value at the newline and then expects `;`.
+4. `#include` searches the folder of the including file, the working
+   folder, the user `include` and `share` folders, the `GLPATH` folders,
+   and the `arras` package folder (`arras.folders`).
 
 References
 ----------
@@ -214,6 +217,7 @@ import logging
 import datetime
 from typing import Any, Callable, Iterable
 
+import arras.folders
 from arras.exceptions import ArrasException
 from arras.globals import Globals, GlobalsError, TS_NEVER
 from arras.oclass import Class, ClassError, Property, PROPERTY_TYPES, FLAGS, ACCESS, EVENTS
@@ -1500,9 +1504,10 @@ class Model: # pylint: disable=too-many-instance-attributes,too-many-public-meth
             name = name[1:-1]
         if depth >= MAXINCLUDE:
             raise ModelError(f"{where}: #include nesting is too deep")
-        folders = [os.path.dirname(filename) if filename != "(text)" else "", os.getcwd()]
-        folders += os.environ.get("GLPATH", "").split(os.pathsep)
-        for folder in folders:
+        search = [os.path.dirname(filename) if filename != "(text)" else ""]
+        path = arras.folders.search_path()
+        search += path[:1] + [arras.folders.userdir("include")] + path[1:]
+        for folder in search:
             path = os.path.join(folder, name)
             if os.path.isfile(path):
                 return self._preprocess(self._read_file(path), path, depth+1, stack)

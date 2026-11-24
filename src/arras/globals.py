@@ -60,7 +60,7 @@ Pseudo-globals
 | `SHELL COMMAND` | output of a shell command, newlines replaced by spaces |
 | `PYTHON EXPRESSION` | `repr()` of a Python expression |
 | `RANGE<d>START,STOP,STEP` | values from START to STOP separated by `d` (space, `,`, `;`, or `:`) |
-| `FINDFILE NAME` | full path of NAME found in the working folder or `GLPATH`, else empty |
+| `FINDFILE NAME` | full path of NAME found in `arras.folders.search_path()`, else empty |
 | `FILENAME SPEC`, `FILEPATH SPEC`, `FILETYPE SPEC` | name, folder, or extension of a path, or of `$GLOBAL` |
 | `FIND CRITERIA` | names of objects matching CRITERIA (see `object_finder`) |
 | `GEOCODE LAT,LON[#RES]`, `GEOCODE OBJECT[#RES]`, `GEOCODE HASH[.lat|.lon]` | geohash encode and decode |
@@ -125,11 +125,13 @@ Caveats
 - Values that `gridlabd` fixes at build or run time (`version*`,
   `command_line`, `execdir`, `exename`, `modelname`, `origin`,
   `gitbranch`) start empty or are taken from the installed `arras`
-  package version. Folder globals (`datadir`, `bindir`, `libdir`,
-  `vardir`, `incdir`) are read from `GLD_ETC`, `GLD_BIN`, `GLD_LIB`,
-  `GLD_VAR`, and `GLD_INC` when set, as `gridlabd` does, else from the
-  `arras.runner.Runner.GRIDLABD_PATH` install folder. Override any of them
-  in the constructor.
+  package version. Folder globals come from `arras.folders`, not from a
+  gridlabd install: `datadir`, `libdir`, `incdir`, `vardir`, and `tmp` are
+  the `share`, `lib`, `include`, `var`, and `tmp` subfolders of the user
+  folder (`ARRAS_USERDIR`, else `~/.arras`); `bindir` is the folder where
+  Python installs scripts such as `arras`, and `pythonexec` is the running
+  Python. The default values name folders without creating them. Override
+  any of them in the constructor.
 - `set()` does not check `access`, matching `global_setvar()`; the access
   value is recorded for users who need it.
 - Random numbers come from Python's `random` module seeded by
@@ -171,6 +173,16 @@ disagree, `Globals` follows the documentation:
    entry (its `pof_keys` table is not attached), so its value prints as an
    empty string.
 
+The folder globals do not depend on a gridlabd install (see
+`arras.folders`):
+
+8. `datadir`, `bindir`, `libdir`, `vardir`, `incdir`, `pythonexec`,
+   `configpath`, `logfile`, `pidfile_dir`, and `tmp` default to folders of
+   the user folder and the running Python. `GLD_ETC`, `GLD_BIN`,
+   `GLD_LIB`, `GLD_VAR`, `GLD_INC`, and `GLTEMP` are not read.
+9. `${FINDFILE NAME}` searches the working folder, the user `share`
+   folder, the `GLPATH` folders, and the `arras` package folder.
+
 References
 ----------
 
@@ -191,11 +203,12 @@ import math
 import random
 import logging
 import datetime
+import sysconfig
 import subprocess
 from typing import Any, Callable, Iterator
 
 from arras.exceptions import ArrasException
-from arras.runner import Runner
+from arras import folders
 
 _logger = logging.getLogger(__file__)
 
@@ -304,18 +317,9 @@ def _browser() -> str:
     return {"WINDOWS":"iexplore", "MACOSX":"safari"}.get(_platform(), "firefox")
 
 def _tmp() -> str:
-    """Default `tmp` per gridlabd `buildtmp()`"""
-    if os.getenv("GLTEMP"):
-        return os.environ["GLTEMP"]
-    home = os.getenv("HOMEPATH" if _platform() == "WINDOWS" else "HOME")
-    if home:
-        if _platform() == "WINDOWS":
-            return f"{os.getenv('HOMEDRIVE','')}{home}\\Local Settings\\Temp\\gridlabd"
-        return f"{home}/.gridlabd/tmp"
-    tmp = os.getenv("TMP") or os.getenv("TEMP") or "/tmp"
-    user = os.getenv("USERNAME" if _platform() == "WINDOWS" else "USER")
-    sep = os.sep
-    return f"{tmp}{sep if user else ''}{user or ''}{sep}gridlabd"
+    """Default `tmp`: the `tmp` folder of the user folder (gridlabd uses
+    `~/.gridlabd/tmp` in `buildtmp()`)"""
+    return folders.userdir("tmp")
 
 def _version() -> tuple[int,int,int,int]:
     """Version numbers from the installed `arras` package"""
@@ -331,9 +335,7 @@ def _defaults() -> list[tuple]:
     """Global variable table: `(name, type, default, access, description,
     keywords)` in gridlabd `map[]` order. An alias is given as
     `(name, "alias", target, ...)`."""
-    path = Runner.GRIDLABD_PATH
-    etc = os.getenv("GLD_ETC")
-    bindir = os.getenv("GLD_BIN")
+    userdir = folders.userdir
     major, minor, patch, build = _version()
     K = _KEYS # pylint: disable=invalid-name
     P, R, X = "PUBLIC", "REFERENCE", "PROTECTED" # pylint: disable=invalid-name
@@ -475,15 +477,15 @@ def _defaults() -> list[tuple]:
         ("progress", "double", 0.0, R, "computed progress based on clock, start, and stop times", None),
         ("server_keepalive", "bool", False, P, "flag to keep server alive after simulation is complete", None),
         ("pythonpath", "char1024", os.getenv("PYTHONPATH",""), P, "folder to append to python module search path", None),
-        ("pythonexec", "char1024", f"{bindir}/python3" if bindir else f"{path}/bin/python3", R, "python executable used to build gridlabd", None),
-        ("datadir", "char1024", etc or f"{path}/share/gridlabd", R, "folder in which share data is stored", None),
-        ("bindir", "char1024", bindir or f"{path}/bin", R, "folder in which share data is stored", None),
-        ("vardir", "char1024", os.getenv("GLD_VAR") or f"{path}/var/gridlabd", R, "folder in which share data is stored", None),
-        ("libdir", "char1024", os.getenv("GLD_LIB") or f"{path}/lib/gridlabd", R, "folder in which share data is stored", None),
-        ("incdir", "char1024", os.getenv("GLD_INC") or f"{path}/include", R, "folder in which share data is stored", None),
-        ("logfile", "char1024", "/tmp/gridlabd-log", R, "daemon logfile name", None),
-        ("pidfile_dir", "char1024", "/tmp/gridlabd-pid", R, "folder in which share data is stored", None),
-        ("configpath", "char1024", f"{etc}/solver_py.conf" if etc else f"{path}/var/gridlabd", R, "folder in which share data is stored", None),
+        ("pythonexec", "char1024", sys.executable, R, "python executable used to build gridlabd", None),
+        ("datadir", "char1024", userdir("share"), R, "folder in which share data is stored", None),
+        ("bindir", "char1024", sysconfig.get_path("scripts"), R, "folder in which share data is stored", None),
+        ("vardir", "char1024", userdir("var"), R, "folder in which share data is stored", None),
+        ("libdir", "char1024", userdir("lib"), R, "folder in which share data is stored", None),
+        ("incdir", "char1024", userdir("include"), R, "folder in which share data is stored", None),
+        ("logfile", "char1024", userdir("var","arras-log"), R, "daemon logfile name", None),
+        ("pidfile_dir", "char1024", userdir("var","pid"), R, "folder in which share data is stored", None),
+        ("configpath", "char1024", userdir("share","solver_py.conf"), R, "folder in which share data is stored", None),
         ("json_complex_format", "set", 0, P, "JSON complex number format", K["jcf"]),
         ("rusage_file", "char1024", "gridlabd-rusage.csv", P, "file in which resource usage data is collected", None),
         ("rusage_rate", "int64", 0, P, "rate at which resource usage data is collected (in seconds)", None),
@@ -1224,9 +1226,7 @@ class Globals: # pylint: disable=too-many-instance-attributes
     def _findfile(self, spec:str) -> str:
         if os.path.isabs(spec):
             return spec if os.path.exists(spec) else ""
-        folders = [self.getvalue("workdir") or "."] + \
-            [x for x in os.getenv("GLPATH","").split(os.pathsep) if x]
-        for folder in folders:
+        for folder in folders.search_path(self.getvalue("workdir") or "."):
             path = os.path.join(folder,spec)
             if os.path.exists(path):
                 return os.path.abspath(path)
