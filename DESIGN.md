@@ -219,13 +219,13 @@ Each module is checked against these gridlabd files (`master` 076e78a):
 ## Known issues to handle
 
 - `pyproject.toml` reads dependencies from `requirements.txt`, which is not
-  in the repository.
+  in the repository (#19).
 - `[project.urls]` in `pyproject.toml` point to `arras-energy/gridlabd` and
   `https://arras.energy/gridlabd`, not to this repository and its
-  documentation site.
+  documentation site (#20).
 - `Runner` does not capture output unless the caller passes
   `capture_output=True`, so `main()` prints nothing itself and gridlabd's
-  output goes straight to the terminal.
+  output goes straight to the terminal (#21).
 - The GLM that `write_glm()` produces has not yet been loaded with
   `gridlabd` (#16).
 - Assumption: `Runner.GRIDLABD_PATH` defaults to
