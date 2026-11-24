@@ -118,6 +118,8 @@ Python API
 -  `arras.oclass.Class`: object classes with gridlabd's class registry,
    property declaration and inheritance, keywords, functions, event handlers,
    and modhelp/GLM/XML output (see `arras.oclass`)
+-  `arras.units.Units`: unit manager that reads gridlabd's `unitfile.txt`,
+   derives compound units, and converts values between units (see `arras.units`)
 """
 
 import arras.exceptions as exception
@@ -126,6 +128,8 @@ import arras.globals
 import arras.oclass
 import arras.main as main
 import arras.runner as runner
+import arras.units
 
 from arras.globals import Globals, GlobalsError
 from arras.oclass import Class, ClassError
+from arras.units import Units, Unit, UnitsError

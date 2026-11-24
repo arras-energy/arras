@@ -72,3 +72,26 @@ Each test starts and ends with an empty class registry (`Class.reset()`).
 Run it alone with:
 
 	pytest src/arras/_test/test_oclass.py
+
+test_units.py
+-------------
+
+Fast, self-contained tests of `arras.units`:
+
+- loading the bundled copy of gridlabd's `runtime/unitfile.txt`: constants,
+  scalar prefixes, primary and derived units, and the `unitfile.txt` search
+  in the working folder and `GLPATH`;
+- the unit parameters that gridlabd's `unit.cpp` computes, including the
+  parsing behaviors that `arras.units` reproduces (see its Caveats);
+- prefixed and compound units derived on request, and lookup errors;
+- every conversion of gridlabd's `unit_test()` (`gridlabd --unitstest`),
+  forward and back, plus other conversions, complex values, and mismatched
+  units;
+- unit file syntax and error reporting with file and line number;
+- the module docstring examples (doctest).
+
+Run it alone with:
+
+	pytest src/arras/_test/test_units.py
+
+Tests that write unit files write only to pytest's temporary folder.

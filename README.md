@@ -44,6 +44,19 @@ See the [`arras.globals` documentation](https://arras-energy.github.io/arras/arr
 
 See the [`arras.oclass` documentation](https://arras-energy.github.io/arras/arras/oclass.html) for the rules each method follows.
 
+`arras.Units` is the GridLAB-D unit manager. It reads the same `unitfile.txt` that `gridlabd` uses, derives compound units such as `m/s` on request, and converts values between units with the same dimensions:
+
+```python
+>>> from arras import Units
+>>> units = Units()
+>>> round(units.convert(212,"degF","degC"),3)
+99.999
+>>> round(units.convert(1,"kWh","Btu"),3)
+3412.969
+```
+
+See the [`arras.units` documentation](https://arras-energy.github.io/arras/arras/units.html) for the unit file syntax and the gridlabd parsing behaviors it reproduces.
+
 ## Testing
 
 ```bash
