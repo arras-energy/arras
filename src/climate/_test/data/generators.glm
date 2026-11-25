@@ -1,0 +1,12 @@
+// generators module class standing in for the generators module used by the gridlabd autotests:
+// a solar object gets its Insolation from a climate class function (climate_test_solar.insolation)
+class solar {
+	double Insolation[W/sf];
+	double tilt_angle[deg];
+	double orientation_azimuth[deg];
+	double shading_factor[pu];
+	enumeration {DEFAULT=0, FIXED_AXIS=1} orientation;
+	enumeration {DEFAULT=0, SOLPOS=1} SOLAR_TILT_MODEL;
+	object weather;
+	on_sync "python:climate_test_solar.insolation";
+}

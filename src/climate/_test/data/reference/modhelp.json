@@ -1,0 +1,723 @@
+{
+    "application": "gridlabd",
+    "version": "4.3.17",
+    "modules": {
+        "climate": {
+            "major": "4",
+            "minor": "3"
+        }
+    },
+    "header": {
+        "id": {
+            "type": "int32",
+            "access": "PROTECTED"
+        },
+        "class": {
+            "type": "string",
+            "access": "PROTECTED"
+        },
+        "groupid": {
+            "type": "char32",
+            "access": "PROTECTED"
+        },
+        "name": {
+            "type": "string",
+            "access": "PROTECTED"
+        },
+        "next": {
+            "type": "object",
+            "access": "PROTECTED"
+        },
+        "parent": {
+            "type": "object",
+            "access": "PROTECTED"
+        },
+        "child_count": {
+            "type": "int32",
+            "access": "PROTECTED"
+        },
+        "rank": {
+            "type": "int32",
+            "access": "PROTECTED"
+        },
+        "clock": {
+            "type": "timestamp",
+            "access": "PROTECTED"
+        },
+        "valid_to": {
+            "type": "timestamp",
+            "access": "PROTECTED"
+        },
+        "schedule_skew": {
+            "type": "int64",
+            "access": "PROTECTED"
+        },
+        "latitude": {
+            "type": "double",
+            "access": "PROTECTED"
+        },
+        "longitude": {
+            "type": "double",
+            "access": "PROTECTED"
+        },
+        "in_svc": {
+            "type": "timestamp",
+            "access": "PROTECTED"
+        },
+        "out_svc": {
+            "type": "timestamp",
+            "access": "PROTECTED"
+        },
+        "rng_state": {
+            "type": "int32",
+            "access": "PROTECTED"
+        },
+        "heartbeat": {
+            "type": "int64",
+            "access": "PROTECTED"
+        },
+        "guid": {
+            "type": "int64",
+            "access": "PROTECTED"
+        },
+        "profiler.presync": {
+            "type": "int32",
+            "access": "PROTECTED"
+        },
+        "profiler.sync": {
+            "type": "int32",
+            "access": "PROTECTED"
+        },
+        "profiler.postsync": {
+            "type": "int32",
+            "access": "PROTECTED"
+        },
+        "profiler.init": {
+            "type": "int32",
+            "access": "PROTECTED"
+        },
+        "profiler.heartbeat": {
+            "type": "int32",
+            "access": "PROTECTED"
+        },
+        "profiler.precommit": {
+            "type": "int32",
+            "access": "PROTECTED"
+        },
+        "profiler.commit": {
+            "type": "int32",
+            "access": "PROTECTED"
+        },
+        "profiler.finalize": {
+            "type": "int32",
+            "access": "PROTECTED"
+        },
+        "event.init": {
+            "type": "string",
+            "access": "PROTECTED"
+        },
+        "event.precommit": {
+            "type": "string",
+            "access": "PROTECTED"
+        },
+        "event.presync": {
+            "type": "string",
+            "access": "PROTECTED"
+        },
+        "event.sync": {
+            "type": "string",
+            "access": "PROTECTED"
+        },
+        "event.postsync": {
+            "type": "string",
+            "access": "PROTECTED"
+        },
+        "event.commit": {
+            "type": "string",
+            "access": "PROTECTED"
+        },
+        "event.finalize": {
+            "type": "string",
+            "access": "PROTECTED"
+        },
+        "flags": {
+            "type": "int64",
+            "access": "PROTECTED"
+        }
+    },
+    "classes": {
+        "climate.climate": {
+            "solar_elevation": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "rad",
+                "description": "solar elevation angle in radians"
+            },
+            "solar_azimuth": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "rad",
+                "description": "solar azimuth angle in radians"
+            },
+            "solar_zenith": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "rad",
+                "description": "solar zenith angle in radians"
+            },
+            "city": {
+                "type": "char256",
+                "access": "PUBLIC",
+                "description": "weather data city name"
+            },
+            "tmyfile": {
+                "type": "char1024",
+                "access": "PUBLIC",
+                "flags": "REQUIRED",
+                "description": "weather data file name"
+            },
+            "temperature": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "degF",
+                "default": "59.0 degF",
+                "description": "current temperature"
+            },
+            "humidity": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "pu",
+                "default": "75%",
+                "description": "current humidity"
+            },
+            "solar_flux": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "W/sf",
+                "description": "current solar irradiance (9 orientiations)"
+            },
+            "solar_direct": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "W/sf",
+                "description": "solar direct irradiance"
+            },
+            "solar_diffuse": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "W/sf",
+                "description": "solar diffuse irradiance"
+            },
+            "solar_global": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "W/sf",
+                "description": "solar global flux irradiance"
+            },
+            "extraterrestrial_global_horizontal": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "W/sf",
+                "description": "solar global extraterrestrial irradiance"
+            },
+            "extraterrestrial_direct_normal": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "W/sf",
+                "default": "1367 W/m^2",
+                "description": "solar direct normal extraterrestrial irradiance"
+            },
+            "pressure": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "mbar",
+                "default": "1013.25 mbar",
+                "description": "current air pressure"
+            },
+            "wind_speed": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "m/s",
+                "description": "current wind speed"
+            },
+            "wind_dir": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "rad",
+                "description": "current direction in radians"
+            },
+            "wind_gust": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "m/s",
+                "description": "current wind gusts"
+            },
+            "record.low": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "degF",
+                "description": "record low temperature observed"
+            },
+            "record.low_day": {
+                "type": "int32",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "description": "day of year for record low observation"
+            },
+            "record.high": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "degF",
+                "description": "record high temperature observed"
+            },
+            "record.high_day": {
+                "type": "int32",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "description": "day of year for record high observation"
+            },
+            "record.solar": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "W/sf",
+                "description": "record high solar irradiance observed"
+            },
+            "rainfall": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "in/h",
+                "description": "rainfall observed"
+            },
+            "snowdepth": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "in",
+                "description": "snow depth observed"
+            },
+            "interpolate": {
+                "type": "enumeration",
+                "access": "PUBLIC",
+                "keywords": {
+                    "QUADRATIC": "0x2",
+                    "LINEAR": "0x1",
+                    "NONE": "0x0"
+                },
+                "flags": "OUTPUT",
+                "default": "NONE",
+                "description": "the interpolation mode used on the climate data"
+            },
+            "solar_horiz": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "description": "solar flux on horizontal surface"
+            },
+            "solar_north": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "description": "solar flux on north surface"
+            },
+            "solar_northeast": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "description": "solar flux on northeast surface"
+            },
+            "solar_east": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "description": "solar flux on east surface"
+            },
+            "solar_southeast": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "description": "solar flux on southeast surface"
+            },
+            "solar_south": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "description": "solar flux on south surface"
+            },
+            "solar_southwest": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "description": "solar flux on southwest surface"
+            },
+            "solar_west": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "description": "solar flux on west surface"
+            },
+            "solar_northwest": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "description": "solar flux on northwest surface"
+            },
+            "solar_raw": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "W/sf",
+                "description": "raw solar flux"
+            },
+            "ground_reflectivity": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "pu",
+                "default": "0.3 pu",
+                "description": "ground reflectivity observed"
+            },
+            "reader": {
+                "type": "object",
+                "access": "PUBLIC",
+                "description": "weather reader object"
+            },
+            "forecast": {
+                "type": "char1024",
+                "access": "PUBLIC",
+                "description": "forecasting specifications"
+            },
+            "cloud_model": {
+                "type": "enumeration",
+                "access": "PUBLIC",
+                "keywords": {
+                    "CUMULUS": "0x1",
+                    "NONE": "0x0"
+                },
+                "flags": "OUTPUT",
+                "default": "NONE",
+                "description": "the cloud model to use"
+            },
+            "cloud_opacity": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "pu",
+                "default": "1.0 pu",
+                "description": "cloud opacity factor"
+            },
+            "opq_sky_cov": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "pu",
+                "description": "cloud sky coverage factor"
+            },
+            "cloud_speed_factor": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "pu",
+                "default": "1.0 pu",
+                "description": "cloud speed factor"
+            },
+            "solar_cloud_direct": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "W/sf",
+                "description": "cloud direct irradiance"
+            },
+            "solar_cloud_diffuse": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "W/sf",
+                "description": "cloud diffuse irradiance"
+            },
+            "solar_cloud_global": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "W/sf",
+                "description": "cloud global irradiance"
+            },
+            "cloud_alpha": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "pu",
+                "default": "400 pu",
+                "description": "cloud alpha"
+            },
+            "cloud_num_layers": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "pu",
+                "default": "40 pu",
+                "description": "number of cloud layers"
+            },
+            "cloud_aerosol_transmissivity": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "pu",
+                "default": "0.95 pu",
+                "description": "cloud aerosal transmissivity"
+            },
+            "heat_index": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "degF",
+                "description": "heat index based on temperature and humidity"
+            }
+        },
+        "climate.weather": {
+            "temperature": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "degF",
+                "default": "0.0 degF",
+                "description": "dry-bulb air temperature"
+            },
+            "humidity": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "%",
+                "default": "0%",
+                "description": "relative humidity"
+            },
+            "solar_direct": {
+                "type": "double",
+                "access": "PUBLIC",
+                "unit": "W/sf",
+                "default": "0.0 W/sf",
+                "description": "direct solar flux"
+            },
+            "solar_diffuse": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "W/sf",
+                "default": "0.0 W/sf",
+                "description": "diffuse solar flux"
+            },
+            "solar_global": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "W/sf",
+                "default": "0.0 W/sf",
+                "description": "global solar flux"
+            },
+            "global_horizontal_extra": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "W/sf",
+                "default": "0.0 W/sf",
+                "description": "horizontal surface solar flux"
+            },
+            "wind_speed": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "mph",
+                "default": "0.0 mph",
+                "description": "wind speed"
+            },
+            "wind_dir": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "deg",
+                "default": "0.0 deg",
+                "description": "wind direction"
+            },
+            "opq_sky_cov": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "pu",
+                "default": "0.0 pu",
+                "description": "opaque sky cover"
+            },
+            "tot_sky_cov": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "pu",
+                "default": "0.0 pu",
+                "description": "total sky cover"
+            },
+            "rainfall": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "in/h",
+                "default": "0.0 in/h",
+                "description": "rainfall rate"
+            },
+            "snowdepth": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "in",
+                "default": "0.0 in",
+                "description": "depth of snow on the ground"
+            },
+            "pressure": {
+                "type": "double",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "unit": "mbar",
+                "default": "0.0 mbar",
+                "description": "air pressure"
+            },
+            "month": {
+                "type": "int16",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "description": "current month"
+            },
+            "day": {
+                "type": "int16",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "description": "current day"
+            },
+            "hour": {
+                "type": "int16",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "description": "current hour"
+            },
+            "minute": {
+                "type": "int16",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "description": "current minute"
+            },
+            "second": {
+                "type": "int16",
+                "access": "PUBLIC",
+                "flags": "OUTPUT",
+                "description": "current second"
+            }
+        },
+        "climate.csv_reader": {
+            "index": {
+                "type": "int32",
+                "access": "REFERENCE",
+                "description": "reader line index"
+            },
+            "city_name": {
+                "type": "char32",
+                "access": "PUBLIC",
+                "description": "name of city"
+            },
+            "state_name": {
+                "type": "char32",
+                "access": "PUBLIC",
+                "description": "name of state/province"
+            },
+            "lat_deg": {
+                "type": "double",
+                "access": "PUBLIC",
+                "description": "latitude degrees"
+            },
+            "lat_min": {
+                "type": "double",
+                "access": "PUBLIC",
+                "description": "latitude minutes"
+            },
+            "long_deg": {
+                "type": "double",
+                "access": "PUBLIC",
+                "description": "longitude degrees"
+            },
+            "long_min": {
+                "type": "double",
+                "access": "PUBLIC",
+                "description": "longitude minutes"
+            },
+            "low_temp": {
+                "type": "double",
+                "access": "REFERENCE",
+                "description": "lowest temperature"
+            },
+            "high_temp": {
+                "type": "double",
+                "access": "REFERENCE",
+                "description": "highest temperature"
+            },
+            "peak_solar": {
+                "type": "double",
+                "access": "REFERENCE",
+                "description": "peak solar flux"
+            },
+            "elevation": {
+                "type": "int32",
+                "access": "PUBLIC",
+                "description": "elevation"
+            },
+            "status": {
+                "type": "enumeration",
+                "access": "REFERENCE",
+                "keywords": {
+                    "ERROR": "0x2",
+                    "OPEN": "0x1",
+                    "INIT": "0x0"
+                },
+                "description": "reader status"
+            },
+            "timefmt": {
+                "type": "char32",
+                "access": "PUBLIC",
+                "description": "time format"
+            },
+            "timezone": {
+                "type": "char32",
+                "access": "PUBLIC",
+                "description": "timezone"
+            },
+            "timezone_offset": {
+                "type": "double",
+                "access": "PUBLIC",
+                "description": "timezone offset"
+            },
+            "columns": {
+                "type": "char256",
+                "access": "PUBLIC",
+                "description": "column names"
+            },
+            "filename": {
+                "type": "char256",
+                "access": "PUBLIC",
+                "description": "filename"
+            }
+        }
+    }
+}
