@@ -1,4 +1,4 @@
-# arras-energy/arras — package design (draft 2)
+# arras-energy/arras — package design (draft 3)
 
 Status: decisions recorded from the code as merged through #16, 2026-11-23;
 modules and solver dispatch (`arras.module`, #22) added 2026-11-23;
@@ -8,7 +8,8 @@ folders without a gridlabd install (`arras.folders`, decision 1.12, #47), 2026-1
 gridlabd modules as Python packages and the `assert` module (decisions 1.13, 6.15, group 8, #49), 2026-11-24;
 the `climate` module (group 9, #51), 2026-11-24;
 the `tape` module, `Runner.setexitcode()`, and `method` properties in GLM (decisions 2.14, 6.16, group 10, #53), 2026-11-24;
-the `pypower` module and the vendored PYPOWER solver (group 11, #55), 2026-11-24
+the `pypower` module and the vendored PYPOWER solver (group 11, #55), 2026-11-24;
+the `powerflow` module, first step: `powerflow_object`, `node`, `link`, and the three-phase PYPOWER solver (group 12, #58), 2026-11-25
 
 ## Purpose
 
@@ -23,8 +24,8 @@ GridLAB-D. It provides:
   (`arras.model`), and modules with the solvers that keep the clock
   synchronized (`arras.module`); and
 - gridlabd modules implemented in Python, each a top-level package under
-  `src/` (`assert`, `climate`, `tape`, and `pypower`, decision groups 8
-  to 11).
+  `src/` (`assert`, `climate`, `tape`, `pypower`, and `powerflow`,
+  decision groups 8 to 12).
 
 The Python model reads, checks, edits, and writes what gridlabd reads and
 writes, without running `gridlabd`. Users get the same values, text, and
@@ -42,7 +43,8 @@ transforms, enduses), with all of them written as Python callables
 `residential`, ...) themselves, deltamode, realtime mode, and multithreaded
 passes. These stay in the C++ code of
 [arras-energy/gridlabd](https://github.com/arras-energy/gridlabd), except
-the modules ported to Python packages (1.13).
+the modules ported to Python packages (1.13); `powerflow` is being ported
+class by class, starting at the base of its class hierarchy (group 12).
 The classes that modules publish come into `arras` from JSON that gridlabd
 writes.
 
@@ -252,6 +254,21 @@ published at https://arras-energy.github.io/arras rather than under
 | 11.9 | Error messages are written as `gl_error()` writes them and end the run with `RUNERR` without stopping it (`Runner.setexitcode()`, 2.14), as `tape` does (10.6). |
 | 11.10 | The tests port every gridlabd autotest in `module/pypower/autotest/` (25) to `src/pypower/_test/data/`, with the changes listed in its README: cases converted to GLM by `make_cases.py` (gridlabd's `py2glm.py` conversion), IANA time zones, global units converted, `#for` loops expanded, the `#on_exit` checks made by the tests, and the weather and player files trimmed to the times run. The recordings that gridlabd wrote are compared line for line (except the first row `arras`'s recorders add, 10.4). Without a gridlabd build in the session, published properties were checked against the C++ source. |
 
+### 12. The `powerflow` module (`src/powerflow/`, #58)
+
+| # | Decision |
+|---|---|
+| 12.1 | The package reproduces gridlabd's `module/powerflow` class by class, from the base of its class hierarchy up. The first step (2026-11-25) has the classes `powerflow_object` (abstract), `node`, and `link`, in registration order, `node` and `link` inheriting from `powerflow_object` (`Class.set_parent()`, gridlabd `PT_INHERIT`), with the published property names, types, units, keywords (in reverse publication order, 8.1), defaults (including the values the `create()` functions set), flags, access, descriptions, pass configurations, and readiness levels, and their initialization checks with gridlabd's messages; and the module globals in gridlabd's creation order (`powerflow::message_flags`, those of `init()`, then those of the class constructors). One module per class, the three-phase solver in `solver.py`, the module solvers in `_module.py`, and private helpers in `_common.py` and `_base.py`. |
+| 12.2 | The classes still to be ported are behavior classes that derive from `powerflow.node.Node` or `powerflow.link.Link` and are added to `powerflow._common.BEHAVIORS`; an object's behavior is that of the nearest class in its class's inheritance chain that has one, so GLM classes that inherit from a powerflow class work. A link class gives its admittance through `Link.series_impedance()` and `shunt_admittance()` (series elements) or `Link.admittance()` (the blocks `Yff`, `Yft`, `Ytf`, `Ytt`, for transformers and regulators), with `admittance_key()` naming the values it depends on (the module caches each link's blocks by key). |
+| 12.3 | gridlabd's Newton-Raphson solver (`solver_nr.cpp`) is replaced by the vendored PYPOWER 5.1.16 (`pypower._pypower`, 11.2). PYPOWER solves single-phase networks from a bus admittance matrix, so the module gives it a three-phase network in phase coordinates: one solver bus per node phase (base voltage: the node's nominal voltage; base power 1 MVA), each closed link's full 3x3 admittance blocks (with the mutual coupling between phases), and constant-impedance loads in the matrix. Constant-power and constant-current loads (wye on phase voltages, delta on phase-to-phase voltages; constant-current loads turn with the voltage angle and scale with its magnitude, as gridlabd's `NR_current_update()` computes them) are recomputed at the voltages of each solution and PYPOWER is called again until they change by less than 1e-8 per unit. Unbalanced flows are therefore solved without a sequence reduction; the tests check them against an independent solution. |
+| 12.4 | `powerflow::solver_method` keeps gridlabd's keywords `FBS`, `GS`, `NR` and adds `FD_XB`, `FD_BX` (PYPOWER `fdpf()`), and `DC` (`dcpf()`). The default is `NR` (gridlabd: `FBS`). `FBS` is deprecated: the module warns once per run and solves with NR, so links do not set FBS ranks or parents. `GS` stays an error, as in gridlabd. The fast-decoupled methods build B' and B'' phase by phase from the same-phase terms of the admittance matrix (PYPOWER's decoupling assumes angles near zero, while phases are 120 degrees apart), with the XB and BX conventions of `makeB()`; only the iteration is simplified, the solution is the full three-phase one. `DC` solves each phase with the self reactances of the links (the diagonal of each series impedance), voltage magnitudes at their initial values, the loads evaluated at the initial voltages, and no losses or reactive flows. |
+| 12.5 | The network is solved in the module's `sync` solver, after the objects' syncs (gridlabd solves it in the swing node's sync, which has the highest rank, so the order is the same). The time step iterates when a node voltage changed by more than the node's `maximum_voltage_error`. A solution that reaches `NR_iteration_limit` keeps the voltages reached and iterates the time step, as gridlabd's `node::sync()` does when `solver_nr()` returns a negative count; a solution that cannot be used (singular, not finite) follows `convergence_error_handling` as gridlabd's bad-computation branch does (`COLLAPSE` is an error, "not yet supported", then `FATAL`). |
+| 12.6 | Node load properties are loads, positive when they draw power, as gridlabd's code uses them, although their descriptions say "in = positive"; the descriptions are published unchanged (1.3 does not apply: the description text is not documentation of the sign). A node with phase `D` takes `power_A` ... `power_C` (and the current and shunt forms) as phase-to-phase loads `AB`, `BC`, `CA`; the `_AN` and `_AB` forms are wye and delta whatever the connection. `prerotated_current_X` (deltamode) is not used. |
+| 12.7 | These gridlabd defects are fixed in `arras` (2026-11-25) and listed under Differences from gridlabd (1.4): `node.shunt_AB` ... `shunt_CN` are their own values (gridlabd publishes them at the addresses of `power_AB` ... `power_CN`); a `link` of the base class is a `powerflow::default_resistance` resistance on each phase (gridlabd inverts the base class's zero `b_mat`). Not yet filed in gridlabd. |
+| 12.8 | Where gridlabd's behavior is undefined or not reproduced, the package defines it and lists it (1.4): a bus not connected to a `SWING` or `SWING_PQ` node fails the run with the names of the unsupplied buses; `SWING_PQ` nodes are reference buses; child nodes (a node whose parent is a node) are folded into the top node of their parent chain, as gridlabd's NR does with children and grandchildren; split-phase (`S`) nodes initialize but the solver refuses them until the triplex classes are ported; `powerflow::fault_impedance` and `ground_impedance` are `char256` globals holding the complex value as text, because `arras.globals` has no `complex` globals. |
+| 12.9 | Not modeled in this step: deltamode, faults and reliability (`fault_check`, `restoration`), frequency measurement, GFA, DER violation tests, violation recording, `service_status`, link ratings and limit checks, the matrix dumps, the solver profiler, the external LU solver, and `solver_py`. Their globals and properties are published so that models that set them load. |
+| 12.10 | gridlabd's powerflow autotests all use classes that are not ported yet, so the tests use a stand-in line class registered by the tests (`test_line`, IEEE 13-node feeder configuration 601) and compare the node voltages of unbalanced feeders with an independent fixed-point solution of the nodal equations written in the tests (no PYPOWER). The autotests are to be ported with the classes they use. The `arras` model tests that use `powerflow` as the name of a stand-in module (`src/arras/_test/test_model.py`) do not call the package's entry point. |
+
 ## Module layout
 
 ```
@@ -344,6 +361,18 @@ src/pypower/       gridlabd pypower module (decision group 11), entry point pypo
   _pypower/        PYPOWER 5.1.16 (vendored, BSD license; README lists the changes)
   _test/           pytest tests
     data/          gridlabd pypower autotests ported to arras; cases, make_cases.py, gridlabd outputs
+
+src/powerflow/     gridlabd powerflow module, first step (decision group 12), entry point powerflow:load
+  __init__.py      package docs; load(model), classes(), init(name,t)
+  powerflow_object.py PowerflowObject: class powerflow_object (abstract)
+  node.py          Node: class node; voltages, child nodes
+  link.py          Link: class link; admittance of link classes, flows
+  solver.py        Network, solve(): three-phase network solved by PYPOWER (NR, FD_XB, FD_BX, DC)
+  _module.py       ModuleState; module solvers; network of the model's nodes and links
+  _common.py       constants, messages, state, values, BEHAVIORS
+  _base.py         PowerflowClass: registration
+  _test/           pytest tests; conftest.py (test_line stand-in, independent reference solution)
+    data/          unbalanced_feeder.glm
 ```
 
 Dependencies between modules (`runner` imports `model` when a `Runner`
@@ -385,9 +414,14 @@ flowchart LR
   pypower --> oclass
   pypower --> runner
   pypower --> tape
+  powerflow --> model
+  powerflow --> module
+  powerflow --> oclass
+  powerflow --> runner
+  powerflow --> pypower
 ```
 
-`model` reaches `assert`, `climate`, `tape`, and `pypower` only through the `arras.modules` entry point
+`model` reaches `assert`, `climate`, `tape`, `pypower`, and `powerflow` only through the `arras.modules` entry point
 (6.15), so `arras` does not import the module packages.
 
 ## Contracts
@@ -421,6 +455,7 @@ Each module is checked against these gridlabd files (`master` 076e78a):
 | `runner` | `source/exec.cpp`, `object.cpp`, `main.cpp`, `module.cpp`; `python/python.cpp` (`python_module_load()`, `python_event()`); `docs/GLM/Object/Events.md`, `docs/Module/Python.md` |
 | `tape` | `module/tape/` (all files and `autotest/`), `module/tape_file/tape_file.cpp`, `source/aggregate.cpp`, `convert.cpp` (`convert_from_double()`, `convert_from_complex()`, `convert_from_set()`), `output.cpp` (`output_error()`), `exec.cpp` (`exec_setexitcode()`), `third_party/jsonCpp/jsoncpp.cpp`; `docs/Module/Tape.md`, `docs/Module/Tape/` |
 | `pypower` | `module/pypower/` (all files and `autotest/`), `converters/py2glm.py`, `source/gridlabd.h` (`gld_object` messages, `get_distance()`), `complex.h` (notations), `convert.cpp` (`convert_to_complex()`), `globals.cpp` (`global_create()`), `exec.cpp` (`init_all()`, the pass order); PYPOWER 5.1.16; `docs/Module/Pypower.md`, `docs/Module/Pypower/` |
+| `powerflow` | `module/powerflow/` (`init.cpp`, `powerflow.h`, `powerflow_object.cpp`, `powerflow_object.h`, `node.cpp`, `node.h`, `link.cpp`, `link.h`, `solver_nr.cpp`), `source/convert.cpp` (`convert_from_set()`); PYPOWER 5.1.16 (`newtonpf.py`, `fdpf.py`, `dcpf.py`, `makeB.py`); `docs/Module/Powerflow.md` |
 | `assert` | `module/assert/` (all files and `autotest/`), `source/gridlabd.h` (`INIT_MMF()`, `gld_object`, `gld_property`, `INIT_CATCHALL()`), `property.cpp`, `compare.cpp`, `convert.cpp`, `timestamp.cpp`, `object.cpp`, `enduse.cpp`, `random.cpp`, `find.cpp`; `docs/Module/Assert.md`, `docs/Module/Assert/` |
 
 ## Files and formats
@@ -436,7 +471,7 @@ Each module is checked against these gridlabd files (`master` 076e78a):
 
 | need | status |
 |---|---|
-| third-party packages | numpy and scipy, for the vendored PYPOWER of `pypower` (11.2); `arras`, `assert`, `climate`, and `tape` use the standard library only |
+| third-party packages | numpy and scipy, for the vendored PYPOWER of `pypower` (11.2), which `powerflow` also uses (12.3); `arras`, `assert`, `climate`, and `tape` use the standard library only |
 | `gridlabd` install | not needed (since #45); only gridlabd-written JSON for module classes |
 
 ## Known issues to handle
@@ -513,3 +548,11 @@ Each module is checked against these gridlabd files (`master` 076e78a):
     gridlabd writes an error and goes on (2.14), so that every module
     package ends a run with `RUNERR` after an error message as gridlabd
     does?
+11. Should the `powerflow` defects fixed in `arras` (12.7) be filed and
+    fixed in gridlabd, and should gridlabd get the `FD_XB`, `FD_BX`, and
+    `DC` solver methods and the `NR` default (12.4)?
+12. In which order should the remaining powerflow classes be ported?
+    Proposed: `line` and its configurations (`overhead_line`,
+    `underground_line`, conductors, spacing), `switch`/`fuse`, `load`,
+    `meter`, `capacitor`, `transformer`, `regulator`, then the triplex
+    classes, each with the autotests it makes portable.

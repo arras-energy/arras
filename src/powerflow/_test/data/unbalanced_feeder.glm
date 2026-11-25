@@ -1,0 +1,46 @@
+// Unbalanced 4.16 kV feeder of two configuration-601 line sections (see README.md);
+// test_line is the stand-in line class that conftest.py registers
+clock {
+	timezone "UTC";
+	starttime "2020-01-01 00:00:00";
+	stoptime "2020-01-01 00:00:00";
+}
+module powerflow {
+	solver_method NR;
+}
+object node {
+	name n0;
+	phases ABCN;
+	nominal_voltage 2401.7771;
+	bustype SWING;
+}
+object test_line {
+	name l01;
+	phases ABCN;
+	from n0;
+	to n1;
+	length 2000;
+}
+object node {
+	name n1;
+	phases ABCN;
+	nominal_voltage 2401.7771;
+	power_A 200000+100000j;
+	power_B 120000+60000j;
+	power_C 50000+30000j;
+}
+object test_line {
+	name l12;
+	phases ABCN;
+	from n1;
+	to n2;
+	length 2500;
+}
+object node {
+	name n2;
+	phases ABCN;
+	nominal_voltage 2401.7771;
+	power_AB 100000+40000j;
+	current_C 15+5j;
+	shunt_B 0.002+0.0005j;
+}
