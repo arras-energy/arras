@@ -87,8 +87,9 @@ The `climate` object calls `CsvReader.open()` when it initializes and
    effect changes. While `t0` is before `next_ts`, nothing changes. On
    the first call it finds the last sample before `t0` in the year of
    `t0` (skipping February 29 in other years), or the last sample of the
-   file when `t0` is before the first, and the time of the next sample;
-   later calls move to the next sample, wrapping to the first sample of
+   file when `t0` is before the first, and the time of the next sample
+   (the first sample of the next year when every sample of the year is
+   before `t0`); later calls move to the next sample, wrapping to the first sample of
    the next year. Sample times are local times with the time zone of
    `t0`. A file with one sample keeps its values and moves `next_ts` a
    year ahead.
@@ -120,10 +121,9 @@ Examples
 Caveats
 -------
 
-- Values are copied to the `climate` object as numbers, without unit
-  conversion, as gridlabd copies them (for example, a `humidity` column
-  of 0.05 is a climate `humidity` of 0.05 pu, and `wind_speed` in the
-  file's units is the climate `wind_speed` in m/s).
+- Column values are in the units of the `weather` properties (`humidity`
+  in %, `wind_speed` in mph, ...); the `climate` object converts them to
+  its own units (see `climate.climate`).
 - `status`, `low_temp`, `high_temp`, and `peak_solar` are published but
   never set, as in gridlabd.
 - The file is read once; changing `filename` during a run has no effect.
@@ -137,6 +137,10 @@ Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
    sample; gridlabd passes `short` pointers to any format.
 3. Times are read with `arras.globals.Globals.timestamp_from_string()`,
    which accepts only IANA time zone names (#41).
+4. When the run starts after the last sample of the year, that sample is
+   in effect and the first sample of the next year comes next. gridlabd
+   takes the second sample of the same year as the next one, an event in
+   the past, which stops the run with an error.
 
 References
 ----------
@@ -456,6 +460,10 @@ class CsvReader:
                     i -= 1
                     break
                 i += 1
+            if i == count:
+                # every sample of the year is before t0: the last one is in
+                # effect and the first one of the next year comes next
+                i = count - 1
             state.index = i
             values = samples[i] if -1 < i < count else samples[count-1]
             year = now.year + (1 if i+1 == count else 0)

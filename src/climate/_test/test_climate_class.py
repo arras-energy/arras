@@ -154,11 +154,11 @@ def test_cloud_events(data, helpers, monkeypatch): # pylint: disable=unused-argu
     r = helpers.run('object climate { name y; tmyfile "WA-Yakima_Air_Terminal.tmy3"; cloud_model CUMULUS; }',
         start="2006-06-01 12:00:00", stop="2006-06-01 12:05:00")
     assert r.returncode == 0 and r.steps == 6
-    # without a file the presync result is 0, which stops the run, as in gridlabd
+    # without a file the cloud model still asks for an event every minute
+    # (gridlabd's presync returns 0 and stops the run)
     r = helpers.run('object climate { name c; tmyfile ""; cloud_model CUMULUS; }',
         start="2006-06-01 12:00:00", stop="2006-06-01 12:02:00")
-    assert r.returncode == exitcodes.RUNERR
-    assert errors(r)[-1] == "object c stopped its clock (its presync handler returned 0)"
+    assert r.returncode == 0 and r.steps == 3
 
 def test_csv_with_cloud(data, helpers, monkeypatch): # pylint: disable=unused-argument
     """With a CSV file and the cloud model, the earlier event is used"""

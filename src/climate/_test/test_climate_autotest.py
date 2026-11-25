@@ -16,6 +16,7 @@ import climate.cloud
 from arras import exitcodes
 from arras.model import Model
 from arras.runner import Runner
+from arras.oclass import Class
 
 DATA = os.path.join(os.path.dirname(__file__), "data")
 TESTS = sorted(os.path.basename(x) for x in glob.glob(os.path.join(DATA, "test_*.glm")))
@@ -73,17 +74,21 @@ def _hourly(helpers, file):
 
 def test_csvreader_exercise(data, helpers): # pylint: disable=unused-argument
     """test_csvreader_exercise_5_1_2.glm gives the 24 hourly samples of
-    weather.csv, then keeps the last until the sample of the next year"""
+    weather.csv, then keeps the last until the sample of the next year;
+    humidity is converted from % (the `weather` unit) to pu"""
+    convert = Class.get_units().convert
     with open("weather.csv", encoding="utf-8") as fh:
-        samples = [tuple(float(x) for x in line.split(",")[1:3]) for line in fh if line[0].isdigit()]
+        rows = [line.split(",")[1:3] for line in fh if line[0].isdigit()]
+    samples = [(float(t), convert(float(h), "%", "pu")) for t, h in rows]
     assert len(samples) == 24
-    assert _hourly(helpers, "test_csvreader_exercise_5_1_2.glm") == samples + [samples[-1]]
+    actual = _hourly(helpers, "test_csvreader_exercise_5_1_2.glm")
+    assert [pytest.approx(x, rel=1e-14) for x in actual] == samples + [samples[-1]]
 
 def test_csvreader_dst(data, helpers): # pylint: disable=unused-argument
     """test_csvreader_dst.glm starts before the first sample of
     weather_dst.csv (July 1), so the last sample is used all day, as in
-    gridlabd"""
-    assert _hourly(helpers, "test_csvreader_dst.glm") == [(23.0, 0.1)] * 25
+    gridlabd (humidity 0.1% is 0.001 pu)"""
+    assert _hourly(helpers, "test_csvreader_dst.glm") == [(23.0, 0.001)] * 25
 
 def test_single_house_insolation(data, helpers): # pylint: disable=unused-argument
     """The solar object of test_singleHouseSolarInverter.glm gets the

@@ -217,9 +217,20 @@ def test_csv_one_sample(folder, helpers):
     assert r.returncode == 0
     assert r.model.get_property("c", "temperature") == "77.0"
     assert r.steps == 4
-    # after the sample in the year of the start, the event is in the past, as in gridlabd
-    r = helpers.run(reader_glm("w.csv"), start="2001-06-16 00:00:00")
-    assert r.returncode == exitcodes.RUNERR
+    # a start after the sample of its year keeps the sample and moves to the
+    # next year's (gridlabd's next event is in the past, a run error)
+    r = helpers.run(reader_glm("w.csv"), start="2001-06-16 00:00:00", stop="2003-06-17 00:00:00")
+    assert r.returncode == 0 and r.steps == 3
+    assert r.model.get_property("c", "temperature") == "77.0"
+
+def test_csv_start_after_samples(folder, helpers):
+    """A run that starts after the last sample of the year uses the last
+    sample until the first sample of the next year"""
+    (folder / "w.csv").write_text("temperature\n1:01:00,50\n1:01:01,60\n")
+    m = helpers.model(reader_glm("w.csv"), start="2001-01-01 01:30:00", stop="2002-01-01 01:00:00")
+    runner, rows = helpers.sample(m, "c", ["temperature"])
+    assert runner.returncode == 0
+    assert [values[0] for _, values in sorted(rows.items())] == ["60.0", "50.0", "60.0"]
 
 def test_csv_no_samples(folder, helpers):
     """A file without samples fails at the first presync"""

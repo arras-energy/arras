@@ -45,11 +45,17 @@ def test_load_twice():
     assert second.globals.get("climate::library_path") == "/data/weather"
     assert first.globals.get("climate::library_path") != "/data/weather"
 
+DIFFERENCES = {("climate", "wind_dir"): {"unit": "deg", "description": "current direction in degrees"}}
+"""Published property attributes that differ from gridlabd on purpose
+(see the Differences of `climate.climate`)"""
+
 def test_modhelp():
-    """`modhelp()` prints what `gridlabd --modhelp climate` prints"""
+    """`modhelp()` prints what `gridlabd --modhelp climate` prints, except
+    the `wind_dir` unit"""
     Model().read_glm("module climate;\n")
     with open(os.path.join(os.path.dirname(__file__), "data", "reference", "modhelp.txt"), encoding="utf-8") as fh:
-        expected = fh.read().split("\n\n")
+        expected = fh.read().replace("double wind_dir[rad]; // (OUTPUT) current direction in radians",
+            "double wind_dir[deg]; // (OUTPUT) current direction in degrees").split("\n\n")
     actual = [Class.find(name, module="climate").modhelp().strip() + "\n" for name in ("climate", "csv_reader", "weather")]
     assert [x.strip() for x in actual] == [x.strip() for x in expected]
 
@@ -64,7 +70,7 @@ def test_properties():
         expected = {key: value for key, value in data[f"climate.{name}"].items() if isinstance(value, dict)}
         assert [x.name for x in oclass.properties()] == list(expected)
         for prop in oclass.properties():
-            info = expected[prop.name]
+            info = {**expected[prop.name], **DIFFERENCES.get((name, prop.name), {})}
             assert prop.ptype == info["type"], prop
             assert prop.unit == info.get("unit"), prop
             assert prop.access == info["access"], prop

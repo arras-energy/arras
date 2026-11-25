@@ -17,6 +17,11 @@ these changes:
 | `test_singleHouseSolarInverter.glm` | only the climate object and the solar object kept, the solar object declared by `generators.glm`; the feeder, houses, and inverter need the `powerflow`, `residential`, and `generators` modules |
 | `test_solar_opt.glm` | the climate object of the missing `../WA-Yakima.glm` replaced by one reading the Yakima TMY3 file; the intrinsic C++ functions of its `solar` class replaced by Python handlers (`climate_test_solar.opt_*`); `#set tmp`, `#setenv`, `#set force_compile`, and the recorder file name macros removed; the expected energies changed from 135.2 and 99.2 MWh (made with a TMY2 file that is not in gridlabd's repository) to 133.7 and 98.9 MWh, computed from the climate values that gridlabd gives for the TMY3 file |
 
+The humidity column of `weather.csv` and `weather_dst.csv` holds fractions
+(0.05 to 0.16), but `weather.humidity` is in %, so `arras` reads them as
+0.05% to 0.16% (0.0005 to 0.0016 pu); gridlabd copies them as 0.05 to 0.16
+pu (decision 9.9). The files are unchanged.
+
 The players `cloud_insolation.player` and `cloud_insolation_tmy3.player`
 are not copied, because their values come from gridlabd's random cloud
 patterns.

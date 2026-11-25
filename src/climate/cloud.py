@@ -61,8 +61,7 @@ Caveats
   cloud patterns differ from gridlabd's for the same `randomseed`.
 - gridlabd's wind shift accumulators are local variables reset at each
   update, so a shift shorter than one pixel is lost; this is reproduced.
-- The wind direction is read in degrees, as the TMY data holds it, even
-  though `wind_dir` is published in radians.
+- The wind direction is read in degrees, the unit of `wind_dir`.
 
 Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
 -----------------------------------------------------------------

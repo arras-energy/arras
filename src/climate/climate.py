@@ -44,7 +44,7 @@ Properties
 | `extraterrestrial_direct_normal` | `double[W/sf]` | `1367 W/m^2` | solar direct normal extraterrestrial irradiance |
 | `pressure` | `double[mbar]` | `1013.25 mbar` | current air pressure |
 | `wind_speed` | `double[m/s]` | `0.0` | current wind speed |
-| `wind_dir` | `double[rad]` | `0.0` | current direction in radians |
+| `wind_dir` | `double[deg]` | `0.0` | current direction in degrees |
 | `wind_gust` | `double[m/s]` | `0.0` | current wind gusts |
 | `record.low` | `double[degF]` | `0.0` | record low temperature observed |
 | `record.low_day` | `int32` | `0` | day of year for record low observation |
@@ -110,7 +110,9 @@ satisfy:
    `longitude`, and `timezone_offset`, with the same checks as for TMY
    files.
 4. **Presync.** With a CSV file, the values of the sample in effect are
-   copied from the reader and the solar zenith and the flux on the nine
+   taken from the reader, converted from the units of the `weather`
+   properties to those of the `climate` properties (`humidity` from % to
+   pu, `wind_speed` from mph to m/s), and the solar zenith and the flux on the nine
    surfaces are computed at the current solar time; the result is the
    reader's soft event. With a TMY file, the record of the current local
    hour is used, one hour earlier for TMY3 data (two during daylight
@@ -130,7 +132,8 @@ satisfy:
    pattern over the `solar` objects (see `climate.cloud`). Each presync
    at a new time computes the clear-sky transmissivity from the pressure
    and the solar zenith and moves the pattern with the wind; the result
-   is then the earlier of a hard event 60 s later and the file's event.
+   is then the earlier of a hard event 60 s later and the file's event,
+   or the hard event alone without a file.
 7. A time at or before `INIT` gives `NEVER`; without a file or cloud
    model the result is `NEVER`.
 
@@ -189,9 +192,11 @@ Caveats
 - `solar_flux` is an array of nine values in gridlabd, of which a
   property reads and writes the first (the horizontal surface, the same
   value as `solar_horiz`). `solar_flux()` gives all nine.
-- Values are stored in the units of the data, whatever the published
-  unit: `wind_dir` holds degrees (published as radians), and CSV values
-  are copied without conversion. This is gridlabd's behavior.
+- `wind_dir` is in degrees, the unit of the weather data; gridlabd
+  publishes it in radians (see Differences).
+- Without a weather file the cloud model asks for events, but builds no
+  cloud pattern (the initialization ends before it), so the class
+  functions raise `ClimateError` when the cloud model is on.
 - The CSV path does not update `heat_index`, and computes the solar time
   and flux with the day of the year counted from 0 (the zenith from 1),
   as gridlabd does.
@@ -214,7 +219,19 @@ Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
    one flag, set by the last TMY file opened by any object.
 4. Hours that a TMY file does not give have zero values; gridlabd leaves
    them uninitialized.
-5. See `climate.cloud`, `climate.csv_reader`, and `climate.tmy` for the
+5. `wind_dir` is published in degrees. gridlabd publishes it in radians
+   but stores the degrees of the weather data in it, so a model that reads
+   it in radians, or converts it, gets the wrong angle. The values are the
+   same; only the unit differs.
+6. CSV values are converted from the units of the `weather` properties to
+   those of the `climate` properties: `humidity` from % to pu (a file value
+   of 50 is 0.5 pu) and `wind_speed` from mph to m/s. gridlabd copies the
+   numbers, so its `humidity` is 100 times larger and its `wind_speed` the
+   mph value labeled m/s.
+7. With the cloud model and no weather file, the presync result is a hard
+   event a minute later. gridlabd's result is 0, which stops the run with
+   an error.
+8. See `climate.cloud`, `climate.csv_reader`, and `climate.tmy` for the
    differences of the cloud model and the readers.
 
 gridlabd's documentation of the class (`docs/Module/Climate/Climate.md`)
@@ -350,7 +367,7 @@ class Climate:
         ("extraterrestrial_direct_normal[W/sf]", "double", _out("solar direct normal extraterrestrial irradiance", "1367 W/m^2")),
         ("pressure[mbar]", "double", _out("current air pressure", "1013.25 mbar")),
         ("wind_speed[m/s]", "double", _out("current wind speed")),
-        ("wind_dir[rad]", "double", _out("current direction in radians")),
+        ("wind_dir[deg]", "double", _out("current direction in degrees")),
         ("wind_gust[m/s]", "double", _out("current wind gusts")),
         ("record.low[degF]", "double", _out("record low temperature observed")),
         ("record.low_day", "int32", _out("day of year for record low observation")),
@@ -549,15 +566,7 @@ class Climate:
         if t0 > TS_ZERO and st.reader_type == RT_CSV and st.reader is not None:
             csv_rv, sample = CsvReader.get_data(model, st.reader, t0)
             if sample is not None:
-                values.update({
-                    "temperature": sample["temperature"], "humidity": sample["humidity"],
-                    "solar_direct": sample["solar_direct"], "solar_diffuse": sample["solar_diffuse"],
-                    "solar_global": sample["solar_global"],
-                    "extraterrestrial_global_horizontal": sample["global_horizontal_extra"],
-                    "wind_speed": sample["wind_speed"], "wind_dir": sample["wind_dir"],
-                    "opq_sky_cov": sample["opq_sky_cov"], "rainfall": sample["rainfall"],
-                    "snowdepth": sample["snowdepth"], "pressure": sample["pressure"],
-                })
+                values.update(csv_values(sample))
                 st.tot_sky_cov = sample["tot_sky_cov"]
             now = local_datetime(model, t0)
             if now is None:
@@ -614,6 +623,8 @@ class Climate:
             return tmy_rv if st.tmy is not None else TS_NEVER
         if st.reader_type == RT_CSV:
             return cloud_rv if cloud_rv <= abs(csv_rv) else csv_rv
+        if st.tmy is None:
+            return cloud_rv
         return cloud_rv if cloud_rv <= abs(tmy_rv) else tmy_rv
 
     @classmethod
@@ -781,6 +792,28 @@ def _read_records(file:TmyReader, found:str, tmyfile:str, latitude:float, longit
         while len(_RECORDS) >= RECORDS_CACHED:
             del _RECORDS[next(iter(_RECORDS))]
         _RECORDS[key] = result
+    return result
+
+CSV_VALUES = {"temperature": "temperature", "humidity": "humidity", "solar_direct": "solar_direct",
+    "solar_diffuse": "solar_diffuse", "solar_global": "solar_global",
+    "extraterrestrial_global_horizontal": "global_horizontal_extra", "wind_speed": "wind_speed",
+    "wind_dir": "wind_dir", "opq_sky_cov": "opq_sky_cov", "rainfall": "rainfall",
+    "snowdepth": "snowdepth", "pressure": "pressure"}
+"""Climate property set by each CSV sample value (a `weather` property)"""
+
+def csv_values(sample:dict[str,Any]) -> dict[str,float]:
+    """Climate property values of a CSV sample, converted from the units of
+    the `weather` properties to those of the `climate` properties (for
+    example, `humidity` from % to pu and `wind_speed` from mph to m/s)"""
+    weather = Class.find("weather", module=MODULE)
+    site = Class.find(Climate.NAME, module=MODULE)
+    units = Class.get_units()
+    result = {}
+    for prop, key in CSV_VALUES.items():
+        source = weather.find_property(key).unit
+        target = site.find_property(prop).unit
+        value = sample[key]
+        result[prop] = units.convert(value, source, target) if source != target else value
     return result
 
 def heat_index(temperature:float, humidity:float) -> float:

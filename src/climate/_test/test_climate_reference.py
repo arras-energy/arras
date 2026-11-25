@@ -12,6 +12,7 @@ import shutil
 import pytest
 
 import climate_test_files as files
+from arras.oclass import Class
 
 TMY = [
     # reference, file, interpolate, start, stop, interval
@@ -54,11 +55,21 @@ def test_tmy(case, folder, helpers): # pylint: disable=unused-argument
     assert len(expected) > 40
     assert helpers.mismatches(expected, rows, columns) == []
 
+CSV_UNITS = {"humidity": ("%", "pu"), "wind_speed": ("mph", "m/s")}
+"""CSV values that `arras` converts from the `weather` unit to the
+`climate` unit; gridlabd copies the numbers"""
+
 @pytest.mark.parametrize("case", CSV, ids=[x[0] for x in CSV])
 def test_csv(case, folder, helpers): # pylint: disable=unused-argument
-    """CSV samples, solar position, and flux match gridlabd"""
+    """CSV samples, solar position, and flux match gridlabd, with humidity
+    and wind speed converted to the climate units"""
     name, file, options, start, stop, interval, zone = case
     columns, expected = helpers.reference(name)
+    units = Class.get_units()
+    for column, (source, target) in CSV_UNITS.items():
+        index = columns.index(column)
+        for values in expected.values():
+            values[index] = units.convert(values[index], source, target)
     m = helpers.model(f"""object csv_reader {{ name reader; filename "{file}"; {options} }}
 object climate {{ name site; tmyfile "{file}"; reader reader; }}""", start=start, stop=stop, timezone=zone)
     helpers.add_ticker(m, interval)
