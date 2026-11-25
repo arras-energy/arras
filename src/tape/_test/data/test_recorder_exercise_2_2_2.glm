@@ -1,0 +1,21 @@
+// Exercise 2.2.2
+
+module tape;
+#include "residential.glm"
+
+clock {
+	timezone America/Los_Angeles;
+	starttime '2001-01-01 00:00:00';
+	stoptime '2002-01-01 00:00:00';
+}
+
+object house {
+	object waterheater {
+		object recorder {
+			property actual_load;
+			file "exercise_2_2_2.csv";
+			interval -1;
+			limit 100;
+		};
+	};
+}

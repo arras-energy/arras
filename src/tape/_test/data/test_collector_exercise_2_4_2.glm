@@ -1,0 +1,18 @@
+clock {
+	timezone America/Los_Angeles;
+	starttime '2005-01-01 00:00:00';
+	stoptime '2005-01-08 00:00:00';  //one week
+}
+
+#include "residential.glm"
+object house:..10 {
+}
+module tape;
+
+object collector {
+	file exercise_2_4_2.csv;
+	group "class=house";
+	property "avg(air_temperature),std(air_temperature),max(air_temperature),min(air_temperature)";
+	interval 3600;
+	limit 768;
+}

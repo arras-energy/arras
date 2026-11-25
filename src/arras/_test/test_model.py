@@ -725,3 +725,13 @@ def test_json_defaults(model):
     model.globals.set("filesave_options", "ALLMINIMAL")
     assert model.to_json()["objects"]["l1"] == {"id": "0", "class": "load", "phases": "AN",
         "constant_power_A": "1+1j VA", "on_init": "python:a.b"}
+
+def test_method_properties():
+    """A `method` property given more than once in a GLM object block keeps
+    every value; `set_property()` replaces it"""
+    m = Model()
+    m.read_glm("class rec { method property; double x; }\nobject rec { name r; property a; property \"b,c\"; x 1; x 2; }\n")
+    assert m.get_property("r", "property") == "a,b,c"
+    assert m.get_property("r", "x") == "2"
+    m.set_property("r", "property", "d")
+    assert m.get_property("r", "property") == "d"

@@ -1,0 +1,105 @@
+// powerflow classes standing in for the powerflow module used by the gridlabd
+// autotests (arras has no powerflow module): the properties that the tests
+// set or record, with the types and units powerflow publishes; the objects
+// have no behavior, so their values stay as set
+class node {
+	set {A=1, B=2, C=4, N=8, S=112, G=128, D=256} phases;
+	enumeration {PQ=0, PV=1, SWING=2, SWING_PQ=3} bustype;
+	double nominal_voltage[V];
+	complex voltage_A[V];
+	complex voltage_B[V];
+	complex voltage_C[V];
+}
+class meter {
+	set {A=1, B=2, C=4, N=8, S=112, G=128, D=256} phases;
+	enumeration {PQ=0, PV=1, SWING=2, SWING_PQ=3} bustype;
+	double nominal_voltage[V];
+	complex voltage_A[V];
+	complex voltage_B[V];
+	complex voltage_C[V];
+	double measured_real_energy[Wh];
+}
+class triplex_meter {
+	set {A=1, B=2, C=4, N=8, S=112, G=128, D=256} phases;
+	enumeration {PQ=0, PV=1, SWING=2, SWING_PQ=3} bustype;
+	double nominal_voltage[V];
+	complex voltage_1[V];
+	complex voltage_2[V];
+	complex voltage_12[V];
+	double measured_real_energy[Wh];
+}
+class load {
+	set {A=1, B=2, C=4, N=8, S=112, G=128, D=256} phases;
+	double nominal_voltage[V];
+	complex voltage_A[V];
+	complex voltage_B[V];
+	complex voltage_C[V];
+	complex constant_power_A[VA];
+	complex constant_power_B[VA];
+	complex constant_power_C[VA];
+}
+class transformer_configuration {
+	enumeration {UNKNOWN=0, WYE_WYE=1, DELTA_DELTA=2, DELTA_GWYE=3, SINGLE_PHASE=4, SINGLE_PHASE_CENTER_TAPPED=5} connect_type;
+	enumeration {UNKNOWN=0, POLETOP=1, PADMOUNT=2, VAULT=3} install_type;
+	double primary_voltage[V];
+	double secondary_voltage[V];
+	double power_rating[kVA];
+	double powerA_rating[kVA];
+	double powerB_rating[kVA];
+	double powerC_rating[kVA];
+	complex impedance[Ohm];
+	double resistance[Ohm];
+	double reactance[Ohm];
+}
+class transformer {
+	set {A=1, B=2, C=4, N=8, S=112, G=128, D=256} phases;
+	object from;
+	object to;
+	object configuration;
+	complex power_out[VA];
+	double power_out_real[W];
+}
+class overhead_line_conductor {
+	double geometric_mean_radius[ft];
+	double resistance[Ohm/mile];
+}
+class line_spacing {
+	double distance_AB[ft];
+	double distance_BC[ft];
+	double distance_AC[ft];
+	double distance_AN[ft];
+	double distance_BN[ft];
+	double distance_CN[ft];
+}
+class line_configuration {
+	object conductor_A;
+	object conductor_B;
+	object conductor_C;
+	object conductor_N;
+	object spacing;
+}
+class overhead_line {
+	set {A=1, B=2, C=4, N=8, S=112, G=128, D=256} phases;
+	object from;
+	object to;
+	double length[ft];
+	object configuration;
+}
+class triplex_line_conductor {
+	double resistance[Ohm/mile];
+	double geometric_mean_radius[ft];
+}
+class triplex_line_configuration {
+	object conductor_1;
+	object conductor_2;
+	object conductor_N;
+	double insulation_thickness[in];
+	double diameter[in];
+}
+class triplex_line {
+	set {A=1, B=2, C=4, N=8, S=112, G=128, D=256} phases;
+	object from;
+	object to;
+	double length[ft];
+	object configuration;
+}

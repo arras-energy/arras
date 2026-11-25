@@ -1,0 +1,18 @@
+//Exercise 2.1.2
+
+module tape;
+#include "residential.glm"
+
+clock {
+	timezone America/Los_Angeles;
+	starttime '2001-01-01 00:00:00';
+	stoptime '2001-01-29 00:00:00';
+}
+
+object house {
+	object player {
+		property heating_setpoint, cooling_setpoint;
+		file "exercise_2_1_1.player";
+		loop 27;
+	};
+}

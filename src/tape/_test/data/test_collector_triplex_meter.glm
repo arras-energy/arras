@@ -1,0 +1,30 @@
+clock {
+	timezone America/New_York;
+	starttime "2020-01-01 00:00:00";
+	stoptime "2020-01-03 00:00:00";
+}
+module tape;
+#include "residential.glm"
+#include "powerflow.glm"
+
+object triplex_meter {     
+	name trip_swing;     
+	phases CS;     
+	bustype SWING;
+	nominal_voltage 120;
+	groupid "meters";
+};
+
+object house {
+	name house_1;
+	parent trip_swing;
+	floor_area 2227;
+};
+
+object collector{
+	property sum(measured_real_energy[kWh]);
+	group "groupid = meters";
+	interval -1;
+	file "test_file.csv";
+	flush 0;
+};

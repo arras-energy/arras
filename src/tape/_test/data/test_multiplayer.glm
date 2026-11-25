@@ -1,0 +1,52 @@
+clock
+{
+	timezone "America/Los_Angeles";
+	starttime "2020-01-01 00:00:00";
+	stoptime "2020-01-01 04:00:00";
+}
+
+class test
+{
+	double x;
+	double y[s];
+	int32 n;
+}
+
+module tape
+{
+	csv_header_type NAME;
+}
+
+object test
+{
+	object multiplayer 
+	{
+		file "test_multiplayer.csv";
+		indexname "datetime";
+		property x;
+		property y[min],n;
+		on_error IGNORE;
+	};
+	object recorder
+	{
+		file test_multiplayer_record_1.csv;
+		property x,y,n;
+		interval -1;
+	};
+}
+
+object test
+{
+	object multiplayer 
+	{
+		file "test_multiplayer.csv";
+		indexname "datetime";
+		on_error WARN;
+	};
+	object recorder
+	{
+		file test_multiplayer_record_2.csv;
+		property x,y,n;
+		interval -1;
+	};
+}
