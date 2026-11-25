@@ -49,7 +49,8 @@ It also checks: the OPF of case 14 (the autotest's asserts hold gridlabd's
 voltages to 0.001 pu) and its case files; the bus demand of the
 powerplant autotest (gridlabd's recording keeps the voltages of the first
 solution all day, so voltages are not compared); the OPF dispatch
-autotest (its first assert fails, which gridlabd allows); the controllers
+autotest (generator outputs unchanged; its voltage asserts depend on the
+numerical libraries and may fail, which gridlabd allows); the controllers
 of `test_case14_controller` (49 steps, the SCADA historian); the loads,
 powerlines, autosizing, and shunts of their autotests.
 
