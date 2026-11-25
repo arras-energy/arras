@@ -44,9 +44,8 @@ Description
 A shaper is expected to satisfy:
 
 1. The shape file is read when the shaper first synchronizes (presync).
-   Each line gives a value to the hours, days (numbers as written), months
-   (numbers as written, from 0), and weekdays (0 is Sunday) its fields
-   select (`*`, numbers, `A-B` spans that wrap, `;` to end a span); the
+   Each line gives a value to the hours (0 to 23), days of the month (1 to
+   31), months (1 to 12), and weekdays (0 is Sunday) its fields select (`*`, numbers, `A-B` spans that wrap, `;` to end a span); the
    minute field must be `*`. At the `}` of a block the values are scaled
    so the peak is 255, and the shape's scale is `peak/255/sum`.
 2. With `events` 0, the property of every object of `group` gets
@@ -81,13 +80,6 @@ Examples
     0.666667
     >>> Class.reset()
 
-Caveats
--------
-
-- As in gridlabd, months are indexed from 0 while the file's numbers are
-  used as written (month `1` is February), and days from the day of the
-  month (day 0 is never used).
-
 Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
 -----------------------------------------------------------------
 
@@ -96,7 +88,10 @@ Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
    of the next change, returns 0, and the run fails.
 2. Local time is that of the model's time zone; gridlabd uses the time
    zone of the process (`localtime()`).
-3. Day 31 has no shape (gridlabd reads past the end of its array).
+3. Months are numbered 1 to 12 and days 1 to 31, as in cron. gridlabd
+   uses the file's numbers as array indexes that it reads from 0: its
+   month `1` is February (and `12` is lost), its day 0 is never used, and
+   it reads past the end of its array for day 31.
 4. Random draws come from Python's generator seeded with `randomseed` and
    the object id, so queue events differ from gridlabd's.
 
@@ -176,7 +171,7 @@ class Shaper(TapeClass):
     @staticmethod
     def _shape(model:Any, st:ShaperState, t0:int) -> int:
         local = localtime(model, t0)
-        return st.shape.get((local.month - 1, local.day, (local.weekday() + 1) % 7, local.hour), 0)
+        return st.shape.get((local.month, local.day, (local.weekday() + 1) % 7, local.hour), 0)
 
     @classmethod
     def read(cls, model:Any, st:ShaperState, t0:int, target:dict[str,Any]) -> int:

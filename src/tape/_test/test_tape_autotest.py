@@ -80,10 +80,10 @@ def test_player_buffer(helpers):
     assert runner.model.get_property("load4", "constant_power_C") == "22.12820806729023+79.78912749199718j"
 
 @pytest.mark.parametrize("file, rows", [
-    ("test_histogram_basic.glm", ["2000-01-01 00:00:10 EST,6,8,10,7,14,20,"]),
-    ("test_histogram_count_int.glm", ["2000-01-01 00:00:00 EST,0,0,0,0,0,0,"] + [f"2000-01-01 00:0{t//60}:{t%60:02d} EST,6,8,10,7,14,20," for t in range(10, 100, 10)]),
-    ("test_histogram_enum.glm", [f"2000-01-01 00:0{t//60}:{t%60:02d} EST,20,0,0," for t in range(10, 110, 10)]),
-    ("test_histogram_set.glm", [f"2000-01-01 00:0{t//60}:{t%60:02d} EST,20,0,0," for t in range(10, 110, 10)]),
+    ("test_histogram_basic.glm", ["2000-01-01 00:00:10 EST,6,8,10,7,14,20"]),
+    ("test_histogram_count_int.glm", ["2000-01-01 00:00:00 EST,0,0,0,0,0,0"] + [f"2000-01-01 00:0{t//60}:{t%60:02d} EST,6,8,10,7,14,20" for t in range(10, 100, 10)]),
+    ("test_histogram_enum.glm", [f"2000-01-01 00:0{t//60}:{t%60:02d} EST,20,0,0" for t in range(10, 110, 10)]),
+    ("test_histogram_set.glm", [f"2000-01-01 00:0{t//60}:{t%60:02d} EST,20,0,0" for t in range(10, 110, 10)]),
 ])
 def test_histograms(helpers, file, rows):
     """Histogram counts of value bins (2400 V to 4800 V in steps of 200 V,
@@ -144,18 +144,18 @@ def test_collectors(helpers):
     """Collector aggregates over groups by class and by group id"""
     autotest(helpers, "test_collector_exercise_2_4_2.glm")
     rows = data_rows(helpers, "exercise_2_4_2.csv")
-    assert len(rows) == 7*24 - 1
-    assert rows[0] == "2005-01-01 01:00:00 PST,+0,+0,+0,+0"
+    assert len(rows) == 7*24 + 1
+    assert rows[0] == "2005-01-01 00:00:00 PST,+0,+0,+0,+0" and rows[-1].startswith("2005-01-08 00:00:00 PST,")
     autotest(helpers, "test_collector_multiple_properties.glm")
     rows = data_rows(helpers, "test_collector_multiple_properties.csv")
-    assert len(rows) == 7*24 - 1 and len(rows[0].split(",")) == 9
+    assert len(rows) == 7*24 + 1 and len(rows[0].split(",")) == 9
 
 def test_recorders_multiple_properties(helpers):
     """Recorders and multi-recorders with several `property` lines record
     every property"""
     autotest(helpers, "test_recorder_multiple_properties.glm")
     rows = data_rows(helpers, "test_recorder_multiple_properties.csv")
-    assert len(rows) == 7*24 and len(rows[0].split(",")) == 3
+    assert len(rows) == 7*24 + 1 and len(rows[0].split(",")) == 3
     autotest(helpers, "test_multi_recorder_multiple_properties_long.glm")
     rows = data_rows(helpers, "test_multi_recorder_multiple_properties.csv")
-    assert len(rows) == 7*24 and len(rows[0].split(",")) == 1 + 12*14
+    assert len(rows) == 7*24 + 1 and len(rows[0].split(",")) == 1 + 12*14

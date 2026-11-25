@@ -192,3 +192,20 @@ def test_multiplayer_complex_and_globals(helpers):
     assert m.get_property("t", "z") == "1000.0+2000.0j VA"
     assert m.globals.get("g") == "5"
     assert runner.returncode == exitcodes.SUCCESS, runner.stderr
+
+def test_loop_header(helpers):
+    """A looping player skips its CSV header when it starts again"""
+    helpers.write("in.player", "timestamp,power\n2020-01-01 00:00:00,1\n+1h,2\n")
+    m = helpers.model(LOAD + 'object load { name "L"; object player { file "in.player"; loop 1; }; }', stop="2020-01-01 04:00:00")
+    m.globals.set("warn", "TRUE")
+    runner = Runner(model=m)
+    assert runner.stderr == []
+    assert m.get_property("L", "power") == "2"
+
+def test_shaper_calendar(helpers):
+    """Shaper months are 1 to 12 and days 1 to 31, as in cron"""
+    helpers.write("shape.txt", "shape {\n* * 31 12 *,2\n* * 1-30 1-11 *,1\n}\n")
+    m = helpers.model('class load { double power; }\nobject load { name "L"; }\nobject shaper { file "shape.txt"; group "class=load"; property "power"; }',
+        start="2020-12-31 12:00:00")
+    Runner(model=m)
+    assert round(float(m.get_property("L", "power")), 4) == round(2/3, 4)

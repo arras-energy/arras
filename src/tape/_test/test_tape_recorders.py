@@ -35,14 +35,14 @@ def record(helpers, props:str, glm:str="", stop:str="2020-01-01 00:30:00", **kwa
     return helpers.run(TICK + LOAD + f'object load {{ name "L"; current 1+1j; status ON; phases AB; n 3; when "2020-01-01 00:00:00"; label "x y"; object recorder {{ name "r"; file "out.csv"; property "{props}"; {glm} }}; }}', stop=stop, **kwargs)
 
 def test_intervals(helpers):
-    """Interval -1 (on change), 0 (every pass; as in gridlabd, not at the
-    first time), and positive (sampled)"""
+    """Interval -1 (on change), 0 (every pass, from the first time), and
+    positive (sampled)"""
     record(helpers, "power", "interval -1;")
     assert rows(helpers, "out.csv")[1:] == [f"2020-01-01 00:{m:02d}:00 UTC,+{m}" for m in (0, 10, 20, 30)]
     record(helpers, "power", "interval 0;")
-    assert rows(helpers, "out.csv")[1:] == [f"2020-01-01 00:{m:02d}:00 UTC,+{m}" for m in (10, 20, 30)]
+    assert rows(helpers, "out.csv")[1:] == [f"2020-01-01 00:{m:02d}:00 UTC,+{m}" for m in (0, 10, 20, 30)]
     record(helpers, "power", "interval 1200;", stop="2020-01-01 01:00:00")
-    assert rows(helpers, "out.csv")[1:] == ["2020-01-01 00:00:00 UTC,+0", "2020-01-01 00:20:00 UTC,+20", "2020-01-01 00:40:00 UTC,+40"]
+    assert rows(helpers, "out.csv")[1:] == ["2020-01-01 00:00:00 UTC,+0", "2020-01-01 00:20:00 UTC,+20", "2020-01-01 00:40:00 UTC,+40", "2020-01-01 01:00:00 UTC,+0"]
 
 def test_types(helpers):
     """Values of each type as `gl_get_value()` writes them"""
@@ -80,9 +80,10 @@ def test_property_errors(helpers, props, message):
     assert any(message in x for x in runner.stderr), runner.stderr
 
 def test_trigger_limit_format(helpers):
-    """A trigger delays the file; a limit ends it; seconds as timestamps"""
+    """A trigger delays the file; a limit of 1 allows one row; seconds as
+    timestamps"""
     record(helpers, "power", "interval -1; trigger \">+15\"; limit 1; format TRUE;", stop="2020-01-01 01:00:00")
-    assert rows(helpers, "out.csv") == ["timestamp,power", "1577838000,+20", "1577838600,+30"]
+    assert rows(helpers, "out.csv") == ["timestamp,power", "1577838000,+20"]
     record(helpers, "power", 'interval -1; strftime_format "%H:%M";', stop="2020-01-01 00:10:00")
     assert rows(helpers, "out.csv")[1:] == ["00:00,+0", "00:10,+10"]
 
@@ -114,7 +115,7 @@ def test_multifile(helpers):
         record(helpers, "power", 'interval 600; multifile "multi.csv";', stop="2020-01-01 00:30:00")
     text = helpers.lines("multi.csv")
     assert text[9:] == ["# property.. power", "# repetition 1", "# timestamp,power(0),power(1)", "2020-01-01 00:00:00 UTC,+0,+0",
-        "2020-01-01 00:10:00 UTC,+10,+10", "2020-01-01 00:20:00 UTC,+20,+20"]
+        "2020-01-01 00:10:00 UTC,+10,+10", "2020-01-01 00:20:00 UTC,+20,+20", "2020-01-01 00:30:00 UTC,+30,+30"]
     runner = record(helpers, "power", 'interval -1; multifile "multi.csv";')
     assert runner.returncode == exitcodes.RUNERR
 
@@ -152,7 +153,7 @@ def test_aggregates(helpers, prop, value):
     runner = helpers.run(LOAD + f'object load {{ power 1; t -2; current 3+4j; }}\nobject load {{ power 2; }}\nobject load {{ power 3; }}\nobject collector {{ group "class=load"; property "{prop}"; file "out.csv"; interval 600; }}',
         stop="2020-01-01 00:20:00")
     assert runner.returncode == exitcodes.SUCCESS, runner.stderr
-    assert rows(helpers, "out.csv")[1] == f"2020-01-01 00:10:00 UTC,{value}"
+    assert rows(helpers, "out.csv")[1] == f"2020-01-01 00:00:00 UTC,{value}"
 
 @pytest.mark.parametrize("prop, group, message", [
     ("nothing(power)", "class=load", "does not use a known aggregator"),
@@ -175,15 +176,16 @@ def test_aggregate_errors(helpers, prop, group, message):
     assert any(message in x for x in runner.stderr), runner.stderr
 
 def test_collector_options(helpers):
-    """Collector default file name and limit; a trigger never opens the
-    file, as in gridlabd; `TYPE:FILE`"""
+    """Collector default file name, limit, trigger, and `TYPE:FILE`"""
     runner = helpers.run(TICK + LOAD + 'object load { name "L"; }\nobject collector { group "class=load"; property "max(power)"; interval -1; limit 1; }',
         stop="2020-01-01 01:00:00")
     assert runner.returncode == exitcodes.SUCCESS, runner.stderr
-    assert rows(helpers, "class_load.txt") == ["timestamp,max(power)", "2020-01-01 00:10:00 UTC,+10", "2020-01-01 00:20:00 UTC,+20"]
+    assert rows(helpers, "class_load.txt") == ["timestamp,max(power)", "2020-01-01 00:00:00 UTC,+0"]
     runner = helpers.run(TICK + LOAD + 'object load { }\nobject collector { group "class=load"; property "max(power)"; interval 600; trigger ">+15"; file "t.csv"; }',
         stop="2020-01-01 01:00:00")
-    assert runner.returncode == exitcodes.SUCCESS and not os.path.exists("t.csv")
+    assert runner.returncode == exitcodes.SUCCESS
+    assert rows(helpers, "t.csv") == ["timestamp,max(power)", "2020-01-01 00:20:00 UTC,+20", "2020-01-01 00:30:00 UTC,+30",
+        "2020-01-01 00:40:00 UTC,+40", "2020-01-01 00:50:00 UTC,+50"]
     runner = helpers.run(LOAD + 'object load { }\nobject collector { group "class=load"; property "max(power)"; file "memory:x"; }', stop="2020-01-01 00:10:00")
     assert runner.stderr[0].endswith("unable to locate tape_memory.so")
 
@@ -191,8 +193,8 @@ def test_histogram_bins(helpers):
     """Auto-sized bins, a parent, and complex parts"""
     helpers.run(LOAD + 'object load { power 5; current 3+4j; object histogram { property "power"; min 0; max 10; bin_count 2; filename "a.csv"; samplerate 0; countrate 0; }; '
         'object histogram { property "current.mag"; bins "[0-5],(5-10]"; filename "b.csv"; samplerate 0; countrate 0; limit 2; }; }', stop="2020-01-01 00:00:00", header="FULL")
-    assert rows(helpers, "a.csv") == ["[0.000000..5.000000),[5.000000..10.000000]", "2020-01-01 00:00:00 UTC,0,1,"]
-    assert rows(helpers, "b.csv") == ["2020-01-01 00:00:00 UTC,1,0,"]
+    assert rows(helpers, "a.csv") == ["[0.000000..5.000000),[5.000000..10.000000]", "2020-01-01 00:00:00 UTC,0,1"]
+    assert rows(helpers, "b.csv") == ["2020-01-01 00:00:00 UTC,1,0"]
 
 @pytest.mark.parametrize("glm, message", [
     ('property "power"; bins "1-2";', "Histogram has no parent and no group"),
@@ -243,3 +245,29 @@ def test_group_recorder_warnings(helpers):
     assert runner.returncode == exitcodes.SUCCESS, runner.stderr
     assert any("no group defined" in x for x in runner.stderr)
     assert any("auto-generating 'group_recorder-2.csv'" in x for x in runner.stderr)
+
+def test_end_of_run(helpers):
+    """When the run ends, pending samples are written and files are closed
+    with their end lines"""
+    helpers.run(TICK + LOAD + 'object load { name "L"; }\n'
+        'object collector { group "class=load"; property "max(power)"; interval 1200; file "c.csv"; }\n'
+        'object multi_recorder { property "L:power"; interval 1200; file "m.csv"; }\n'
+        'object histogram { group "class=load"; property "power"; bins "0..100"; samplerate 600; countrate 1200; limit 10; filename "h.csv"; }\n'
+        'object group_recorder { group "class=load"; property "power"; file "g.csv"; interval 1200; }', stop="2020-01-01 00:40:00", header="FULL")
+    for file, last in (("c.csv", "2020-01-01 00:40:00 UTC,+40"), ("m.csv", "2020-01-01 00:40:00 UTC,+40")):
+        text = helpers.lines(file)
+        assert text[-2:] == [last, "# end of tape"], file
+    assert helpers.lines("h.csv")[-1] == "# end of tape"
+    assert helpers.lines("g.csv")[-2:] == ["2020-01-01 00:40:00 UTC,+40", "# end of file"]
+
+def test_multi_recorder_line_units_all(helpers):
+    """`line_units ALL` writes each property's own unit"""
+    helpers.run(LOAD + 'object load { name "L"; power 2; object multi_recorder { property "power,L:current"; file "out.csv"; line_units ALL; }; }')
+    assert rows(helpers, "out.csv")[1] == "2020-01-01 00:00:00 UTC,+2 kW,+0+0i A"
+
+def test_group_recorder_flush_interval(helpers):
+    """A positive `flush_interval` flushes the file"""
+    m = helpers.model(TICK + LOAD + 'object load { }\nobject group_recorder { group "class=load"; property "power"; file "g.csv"; interval 600; flush_interval 1200; }', stop="2020-01-01 01:00:00")
+    seen = []
+    Runner(model=m, progress=lambda timestamp: seen.append(len(helpers.lines("g.csv"))))
+    assert seen[:3] == [2, 2, 4]

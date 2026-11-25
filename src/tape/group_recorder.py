@@ -57,7 +57,9 @@ A group recorder is expected to satisfy:
    units only when `print_units` is true; a complex value is written as
    the part `complex_part` selects (`%f`) unless it is `NONE`.
 4. The timestamp is the local date and time, or seconds when `format` is
-   true. After `limit` rows the file ends with `# end of file`.
+   true. After `limit` rows, or when the run ends, the file ends with
+   `# end of file`. A positive `flush_interval` flushes the file at the
+   first commit `flush_interval` seconds after the last flush.
 
 Examples
 --------
@@ -80,12 +82,8 @@ Examples
     timestamp,L1,L2
     2020-01-01 00:00:00 UTC,1.414214,2.000000
     2020-01-01 01:00:00 UTC,1.414214,2.000000
+    # end of file
     >>> Class.reset()
-
-Caveats
--------
-
-- As in gridlabd, `flush_interval` greater than 0 does not flush.
 
 Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
 -----------------------------------------------------------------
@@ -98,6 +96,10 @@ Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
    writes no row (it writes only when reading the values fails twice).
 3. The default file name has no padding; gridlabd's `%256s-%16i` pads the
    class name and the id with spaces.
+4. A positive `flush_interval` flushes the file; gridlabd keeps the time
+   of the flush but does not flush.
+5. A file still open when the run ends gets `# end of file`; gridlabd
+   leaves it to the process exit, without the line.
 
 References
 ----------
@@ -330,6 +332,7 @@ class GroupRecorder(TapeClass):
         if st.flush_interval > 0:
             if st.last_flush + st.flush_interval <= t1:
                 st.last_flush = t1
+                st.fp.flush()
         elif st.flush_interval < 0 and (st.write_count + 1) % (-st.flush_interval) == 0:
             st.fp.flush()
         limit = int(model.get_property(name, "limit") or 0)
@@ -342,9 +345,10 @@ class GroupRecorder(TapeClass):
 
     @classmethod
     def finalize(cls, model:Any, name:str, t:int) -> None: # pylint: disable=unused-argument
-        """Close the file when the run ends (gridlabd closes it when the
-        process exits)"""
+        """Close the file with the end-of-file line when the run ends
+        (gridlabd leaves it to the process exit)"""
         st = get_state(model, name)
         if st is not None and st.fp is not None:
+            st.fp.write("# end of file\n")
             st.fp.close()
             st.fp = None

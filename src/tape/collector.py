@@ -53,13 +53,12 @@ of properties of its parent, and is expected to satisfy:
    letters, digits, `-`, and `.` replaced by `_`, and the extension `txt`.
    `FILE` may also be `TYPE:FILE[:FLAGS]`; only the `file` type is
    supported.
-4. The file has the header that `tape::csv_data_only` selects; it is
-   closed when the run ends, without an `# end of tape` line unless the
-   limit closed it, as in gridlabd.
-5. As in gridlabd, nothing is sampled before the file is opened (the
-   interval is not known until then), so the first row is that of the
-   second sample, and a trigger, which compares the values sampled before
-   the file opens, never opens the file.
+4. The file has the header that `tape::csv_data_only` selects; when the
+   run ends, the last sample of a positive `interval` is written and the
+   file is closed with `# end of tape` (unless `csv_data_only` is set).
+5. Sampling starts at the first time, before the file opens, so the
+   first row is the first sample and a trigger compares the values sampled
+   at each time. Recording stops after `limit` rows.
 
 Examples
 --------
@@ -80,7 +79,9 @@ Examples
     0
     >>> print(open(csv).read(), end="")
     timestamp,sum(power),max(power[W])
+    2020-01-01 00:00:00 UTC,+4,+3000
     2020-01-01 01:00:00 UTC,+4,+3000
+    2020-01-01 02:00:00 UTC,+4,+3000
     >>> Class.reset()
 
 Caveats
@@ -92,9 +93,17 @@ Caveats
 Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
 -----------------------------------------------------------------
 
-1. A collector waiting for its trigger asks for no event; gridlabd adds
-   `TS_NEVER` to the clock, which overflows.
-2. An aggregate that divides by zero (`avg` of no object in service,
+1. A collector samples from the first time: it reads its `interval` when
+   it is created. gridlabd reads it only when the file opens, so before
+   that it samples nothing: its first row is its second sample, and a
+   trigger, which compares values that were never sampled, never opens
+   the file (and gridlabd then adds `TS_NEVER` to the clock, which
+   overflows).
+2. `limit` rows are written; gridlabd writes `limit`+1.
+3. When the run ends, the last sample of a positive `interval` is
+   written and the file is closed with `# end of tape`; gridlabd loses the
+   last sample and leaves the file to the process exit, without the line.
+4. An aggregate that divides by zero (`avg` of no object in service,
    `std` of one) is `nan`, or an infinity of the sign of the numerator;
    gridlabd writes what the C library gives.
 
@@ -129,7 +138,7 @@ class CollectorState: # pylint: disable=too-many-instance-attributes,too-few-pub
         self.trigger = model.get_property(name, "trigger") or ""
         self.limit = int(model.get_property(name, "limit") or 0)
         self.flush = int(model.get_property(name, "flush") or 0)
-        self.interval = TS_NEVER
+        self.interval = int(to_double(model.get_property(name, "interval") or "-1", "s"))
         self.last_ts = -1
         self.last_value = ""
         self.samples = 0
@@ -217,7 +226,7 @@ class Collector(TapeClass):
     def write(cls, model:Any, st:CollectorState) -> None:
         """`collector_write()`: write the last sample"""
         ts = strtime(model, st.last_ts)
-        if (0 < st.limit < st.samples) or not _file.write_row(model, st, ts, st.last_value):
+        if (0 < st.limit <= st.samples) or not _file.write_row(model, st, ts, st.last_value):
             cls.close(model, st)
             st.status = TS_DONE
         else:
@@ -280,9 +289,11 @@ class Collector(TapeClass):
 
     @classmethod
     def finalize(cls, model:Any, name:str, t:int) -> None: # pylint: disable=unused-argument
-        """Close the file when the run ends (gridlabd closes it when the
-        process exits, without an end-of-tape line)"""
+        """Write the last sample of a positive interval and close the file
+        with the end-of-tape line (gridlabd leaves it to the process exit)"""
         st = get_state(model, name)
-        if st is not None and st.fp is not None:
-            st.fp.close()
-            st.fp = None
+        if st is not None:
+            if st.status == TS_OPEN and st.interval > 0 and st.last_value:
+                cls.write(model, st)
+                st.last_value = ""
+            cls.close(model, st)

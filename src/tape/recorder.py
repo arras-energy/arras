@@ -51,10 +51,10 @@ Description
 A recorder is expected to satisfy:
 
 1. It samples in the postsync pass. With `interval` 0 it writes a row at
-   every pass; with `interval` -1 it writes a row when the values differ
+   each time, from the first; with `interval` -1 it writes a row when the values differ
    from the last row written (once per time); with a positive `interval`
    it samples every `interval` seconds and writes each sample when the
-   clock passes its time. An `interval` less than -1 is an error; one
+   clock passes its time, and the last sample when the run ends. An `interval` less than -1 is an error; one
    shorter than `minimum_timestep` is raised to it with a warning.
 2. Each row is `TIME,VALUE[,...]`. `TIME` is the local date and time
    (`gl_strtime()`), `strftime_format` when given, or seconds when
@@ -100,6 +100,7 @@ Examples
     timestamp,power,power[W],current
     2020-01-01 00:00:00 UTC,+1.5,+1500 W,+2+1j
     2020-01-01 01:00:00 UTC,+1.5,+1500 W,+2+1j
+    2020-01-01 02:00:00 UTC,+1.5,+1500 W,+2+1j
     >>> Class.reset()
 
 Caveats
@@ -108,9 +109,6 @@ Caveats
 - The plot properties (`plotcommands`, `xdata`, `columns`, `output`) are
   published but not used: the `plot` tape mode is not supported, nor is
   the `memory` mode.
-- As in gridlabd, the sample of a positive `interval` is written only
-  when the clock passes it, so the last sample of a run is not written,
-  and `limit` allows `limit`+1 rows.
 - As in gridlabd, the time zone, user, and host comment lines of the
   `FULL` header come from the environment of the process.
 
@@ -133,6 +131,13 @@ Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
 6. The trigger compares the sign of `strcmp()`; gridlabd compares the
    value `strcmp()` returns, which the C library need not limit to -1,
    0, and 1.
+7. With `interval` 0 a row is written at the first time; gridlabd writes
+   none then, because it sets the time of the last row before the file
+   opens.
+8. With a positive `interval`, the last sample is written when the run
+   ends; gridlabd writes a sample only when the clock passes it, so the
+   last sample of a run is lost.
+9. `limit` rows are written; gridlabd writes `limit`+1.
 
 References
 ----------
@@ -559,7 +564,7 @@ class Recorder(TapeClass):
     def write(cls, model:Any, name:str, st:RecorderState) -> int:
         """`recorder_write()`: write the last sample"""
         ts = timestamp_text(model, st.last_ts, bool_value(model, name, "format"), model.get_property(name, "strftime_format") or "")
-        if (0 < st.limit < st.samples) or not _file.write_row(model, st, ts, st.last_value):
+        if (0 < st.limit <= st.samples) or not _file.write_row(model, st, ts, st.last_value):
             cls.close(model, st)
             st.status = TS_DONE
         else:
@@ -628,7 +633,7 @@ class Recorder(TapeClass):
             elif st.status == TS_INIT and not cls.open(model, name, st):
                 cls.close(model, st)
                 return TS_NEVER
-            if st.last_ts < 1 and st.interval != -1:
+            if st.last_ts < 1 and st.interval not in (0, -1):
                 st.last_ts, st.last_ns = t0, 0
             if st.status == TS_OPEN:
                 if st.interval == 0 or (st.interval == -1 and st.last_ts != t0 and buffer != st.last_value):
@@ -649,7 +654,11 @@ class Recorder(TapeClass):
 
     @classmethod
     def finalize(cls, model:Any, name:str, t:int) -> None: # pylint: disable=unused-argument
-        """`finalize_recorder()`: close the files"""
+        """`finalize_recorder()`: write the last sample of a positive
+        interval, then close the files"""
         st = get_state(model, name)
         if st is not None:
+            if st.status == TS_OPEN and st.interval > 0 and st.last_value and st.last_ns == 0:
+                cls.write(model, name, st)
+                st.last_value = ""
             cls.close(model, st)

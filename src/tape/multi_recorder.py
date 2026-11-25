@@ -47,12 +47,12 @@ in gridlabd:
 2. A `double` (or `complex`) with a unit other than its own, or with
    `line_units NONE`, is written with `%g` (`%g%+g` and the notation),
    converted, with the unit unless `line_units` is `NONE`; other values
-   are written as `gl_get_value()` writes them.
+   are written as `gl_get_value()` writes them, with the unit the
+   property list gives, or their own unit when `line_units` is `ALL`.
 3. The parent is optional; the file has no `# target` line without one.
 4. Rows are flushed at every row unless a `flush` property is published
    (gridlabd's `flush` member is never set).
-5. There is no `strftime_format`; the file is closed at the end of the
-   run without an `# end of tape` line (unless the limit closed it).
+5. There is no `strftime_format`.
 
 Examples
 --------
@@ -74,13 +74,14 @@ Examples
     >>> print(open(csv).read(), end="")
     timestamp,L1:power,L2:power[W]
     2020-01-01 00:00:00 UTC,+1.5,2500 W
+    2020-01-01 01:00:00 UTC,+1.5,2500 W
     >>> Class.reset()
 
 Caveats
 -------
 
-- As in gridlabd, a property is written with a unit only when the
-  property list gives one; `line_units ALL` has no effect.
+- With `line_units DEFAULT`, a property is written with a unit only when
+  the property list gives one.
 
 Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
 -----------------------------------------------------------------
@@ -94,6 +95,13 @@ Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
    `multifile`; gridlabd does so only when the recorder stops at its
    limit.
 4. Deltamode is not run.
+5. `line_units ALL` writes each property's own unit when the property
+   list gives none; gridlabd ignores it.
+6. When the run ends, the last sample of a positive `interval` is
+   written and the file is closed with `# end of tape` (unless
+   `csv_data_only` is set); gridlabd loses the last sample and leaves the
+   file to the process exit, without the line.
+7. `limit` rows are written; gridlabd writes `limit`+1.
 
 References
 ----------
@@ -237,7 +245,7 @@ class MultiRecorder(TapeClass):
                     if line_units != UNITS["NONE"] and target.unit is not None:
                         text += f" {target.unit}"
                 else:
-                    text = target.to_string(target.unit)
+                    text = target.to_string(target.unit if target.unit is not None or line_units != UNITS["ALL"] else target.native)
             except TapeError as err:
                 gl_error(str(err))
                 text = ""
@@ -318,7 +326,7 @@ class MultiRecorder(TapeClass):
         """`multi_recorder_write()`: write the last sample"""
         text = model.get_property(name, "format") or "0"
         ts = timestamp_text(model, st.last_ts, text.strip() not in ("0", ""))
-        if (0 < st.limit < st.samples) or not _file.write_row(model, st, ts, st.last_value):
+        if (0 < st.limit <= st.samples) or not _file.write_row(model, st, ts, st.last_value):
             cls.close(model, st)
             st.status = TS_DONE
         else:
@@ -389,11 +397,11 @@ class MultiRecorder(TapeClass):
 
     @classmethod
     def finalize(cls, model:Any, name:str, t:int) -> None: # pylint: disable=unused-argument
-        """Close the files when the run ends (gridlabd closes them when
-        the process exits)"""
+        """Write the last sample of a positive interval and close the files
+        with the end-of-tape line (gridlabd leaves them to the process exit)"""
         st = get_state(model, name)
         if st is not None:
-            if st.fp is not None:
-                st.fp.close()
-                st.fp = None
-            multirun_close(st, kind="multi_recorder")
+            if st.status == TS_OPEN and st.interval > 0 and st.last_value:
+                cls.write(model, name, st)
+                st.last_value = ""
+            cls.close(model, st)

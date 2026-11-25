@@ -87,8 +87,6 @@ Caveats
 
 - The file name is used as given (relative to the working folder), as in
   gridlabd.
-- Looping a file whose first line is a CSV header reads the header again
-  as data, which writes a warning, as in gridlabd.
 
 Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
 -----------------------------------------------------------------
@@ -99,7 +97,10 @@ Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
    value with a unit for a property listed without one.
 2. Deltamode is not run: a player with the `DELTAMODE` flag behaves as
    one without it.
-3. A time zone abbreviation is read only when it is `UTC`, `GMT`, or an
+3. A player that loops over a file whose first line is a CSV header skips
+   the header when it starts again; gridlabd reads it again as data and
+   writes a warning.
+4. A time zone abbreviation is read only when it is `UTC`, `GMT`, or an
    abbreviation of the model's time zone (`arras` time zones are IANA
    names, #41).
 
@@ -137,6 +138,7 @@ class PlayerState: # pylint: disable=too-many-instance-attributes,too-few-public
         self.delta_value = ""
         self.targets: list[Prop]|None = None
         self.lasterr = ""
+        self.header = False
 
 def state(model:Any, name:str) -> PlayerState:
     """State of a player, created on first use"""
@@ -199,6 +201,7 @@ class Player(TapeClass):
                 return None
             items = line[line.index(",")+1:].rstrip()
             model.objects[name]["property"] = items
+            st.header = True
         targets = []
         for item in items.split(","):
             if not item:
@@ -261,6 +264,8 @@ class Player(TapeClass):
             if result is None:
                 if st.loopnum > 0:
                     _file.rewind_player(st)
+                    if st.header:
+                        _file.read_player(st)
                     st.loopnum -= 1
                     continue
                 if st.fp is not None:

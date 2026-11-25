@@ -117,16 +117,17 @@ def close_player(st:Any) -> None:
 #
 # Shapers
 #
-def setmap(spec:str, size:int) -> set[int]|None:
-    """Bits set by a cron-like field (`setmap()`): `*`, numbers, `a-b`
-    spans (wrapping), `;` to stop a span; `None` when not valid"""
+def setmap(spec:str, size:int, first:int=0) -> set[int]|None:
+    """Values set by a cron-like field (`setmap()`): `*` (all `size` values
+    from `first`), numbers, `a-b` spans (wrapping), `;` to stop a span;
+    `None` when not valid"""
     bits: set[int] = set()
     last = -1
     pos = 0
     while pos < len(spec):
         char = spec[pos]
         if char == "*":
-            bits.update(range(size))
+            bits.update(range(first, first + size))
             pos += 1
         elif char.isdigit():
             end = pos
@@ -138,8 +139,8 @@ def setmap(spec:str, size:int) -> set[int]|None:
             elif i > last:
                 bits.update(range(last, i+1))
             else:
-                bits.update(range(last, size))
-                bits.update(range(0, i+1))
+                bits.update(range(last, first + size))
+                bits.update(range(first, i+1))
             last = i
             pos = end
         elif char == "-":
@@ -153,7 +154,8 @@ def setmap(spec:str, size:int) -> set[int]|None:
 
 def open_shaper(st:Any, fname:str) -> bool:
     """`open_shaper()`: read the shape file into `st.shape`, keyed on
-    `(month, day, weekday, hour)` with values 0 to 255, and set `st.scale`"""
+    `(month, day, weekday, hour)` (months 1 to 12, days 1 to 31, as the
+    file writes them) with values 0 to 255, and set `st.scale`"""
     # pylint: disable=too-many-locals,too-many-branches,too-many-return-statements,too-many-statements,too-many-nested-blocks
     try:
         fp = open(fname, "r", encoding="utf-8", errors="replace") # pylint: disable=consider-using-with
@@ -187,8 +189,8 @@ def open_shaper(st:Any, fname:str) -> bool:
                     st.status = TS_ERROR
                     return False
                 maps = []
-                for what, spec, size in (("hours", hour, 24), ("days", day, 31), ("months", month, 12), ("weekdays", weekday, 7)):
-                    bits = setmap(spec, size)
+                for what, spec, size, first in (("hours", hour, 24, 0), ("days", day, 31, 1), ("months", month, 12, 1), ("weekdays", weekday, 7, 0)):
+                    bits = setmap(spec, size, first)
                     if bits is None:
                         st.lasterr = f"{fname}({linenum}): {what} in '{line}' not valid"
                         st.status = TS_ERROR
@@ -196,13 +198,13 @@ def open_shaper(st:Any, fname:str) -> bool:
                     maps.append(bits)
                 hours, days, months, weekdays = maps # pylint: disable=unbalanced-tuple-unpacking
                 load = float(_float32(_atof(value)))
-                for m in range(12):
+                for m in range(1, 13):
                     if m not in months:
                         continue
                     for w in range(7):
                         if w not in weekdays:
                             continue
-                        for d in range(31):
+                        for d in range(1, 32):
                             if d not in days:
                                 continue
                             for h in range(24):

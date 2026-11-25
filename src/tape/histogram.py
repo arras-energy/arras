@@ -23,8 +23,7 @@ Syntax
 A bin is `[A .. B]`, `(A .. B)`, `[A-B)`, ... (`[` and `]` include a
 bound, `(` and `)` exclude it, the lower bound is included by default),
 `..B` (below B), or `A ..` (A and above); for enumerations and sets, a bin
-is a keyword. As in gridlabd, `A..B` without a space after an integer `A`
-is not valid: C's `strtod()` reads `A.` as the number.
+is a keyword. `A..B` needs no spaces.
 
 Properties
 ----------
@@ -58,10 +57,9 @@ A histogram is expected to satisfy:
    seconds (every pass for 0; with -1, when the last count is later than
    the clock), and writes a row of counts every `countrate` seconds
    (every pass for 0; with -1, whenever the clock passes the last row),
-   then clears the counts. Each count is followed by a comma, as in
-   gridlabd.
-3. After `limit` rows (or the first row when `limit` is 0 or less) the
-   file is closed with `# end of tape`.
+   then clears the counts. Counts are separated by commas.
+3. After `limit` rows (or the first row when `limit` is 0 or less), or
+   when the run ends, the file is closed with `# end of tape`.
 4. It returns the next sample or count time.
 
 Examples
@@ -78,25 +76,31 @@ Examples
     ... object load {{ power 1; }}
     ... object load {{ power 5; }}
     ... object load {{ power 7; }}
-    ... object histogram {{ group "class=load"; property "power"; bins "0-4,4-8"; samplerate 10; countrate 10; limit 1; filename "{csv}"; }}
+    ... object histogram {{ group "class=load"; property "power"; bins "0..4,4..8"; samplerate 10; countrate 10; limit 1; filename "{csv}"; }}
     ... ''')
     >>> Runner(model=m).returncode
     0
     >>> print(open(csv).read(), end="")
-    2020-01-01 00:00:10 UTC,1,2,
+    2020-01-01 00:00:10 UTC,1,2
     # end of tape
     >>> Class.reset()
 
 Caveats
 -------
 
-- As in gridlabd, a value equal to both bounds of adjacent bins is counted
-  in each bin that includes it.
+- A value equal to the bounds of adjacent bins is counted in each bin
+  that includes it, as in gridlabd.
 
 Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
 -----------------------------------------------------------------
 
-None.
+1. Rows end with the last count; gridlabd writes a comma after every
+   count, so its rows end with a comma.
+2. `A..B` is a bin; gridlabd refuses it when `A` is an integer, because
+   C's `strtod()` reads `A.` as the number, which leaves `.B` (write
+   `A .. B` or `A-B` for gridlabd).
+3. A file still open when the run ends is closed with `# end of tape`;
+   gridlabd leaves it to the process exit, without the line.
 
 References
 ----------
@@ -130,7 +134,7 @@ class Bin: # pylint: disable=too-few-public-methods
         self.high_inc = high_inc
 
 def _strtod(text:str, pos:int) -> tuple[float,int]:
-    match = re.compile(r"\d+\.?\d*(?:[eE][-+]?\d+)?|\d*\.\d+(?:[eE][-+]?\d+)?").match(text, pos)
+    match = re.compile(r"\d+(?:\.(?!\.)\d*)?(?:[eE][-+]?\d+)?|\.(?!\.)\d+(?:[eE][-+]?\d+)?").match(text, pos)
     return (float(match.group(0)), match.end()) if match else (0.0, pos)
 
 def parse_bin(text:str) -> Bin|None: # pylint: disable=too-many-branches
@@ -364,7 +368,7 @@ class Histogram(TapeClass):
             st.next_sample = t1 + int(st.sampling_interval) if st.sampling_interval > 0.0001 else TS_NEVER
         if (st.counting_interval == -1.0 and st.t_count < t1) or st.counting_interval == 0.0 \
                 or (st.counting_interval > 0.0 and t1 >= st.next_count):
-            line = "".join(f"{count}," for count in st.counts)
+            line = ",".join(str(count) for count in st.counts)
             _file.write_row(model, st, strtime(model, t1), line)
             st.counts = [0]*len(st.counts)
             st.t_count = t1
@@ -380,9 +384,8 @@ class Histogram(TapeClass):
 
     @classmethod
     def finalize(cls, model:Any, name:str, t:int) -> None: # pylint: disable=unused-argument
-        """Close the file when the run ends (gridlabd closes it when the
-        process exits, without an end-of-tape line)"""
+        """Close the file with the end-of-tape line when the run ends
+        (gridlabd leaves it to the process exit)"""
         st = get_state(model, name)
-        if st is not None and st.fp is not None:
-            st.fp.close()
-            st.fp = None
+        if st is not None:
+            _file.close_histogram(st)
