@@ -1,0 +1,14 @@
+// tape module classes standing in for the tape module used by the gridlabd autotests
+// (arras has no tape module; these objects have no behavior)
+class recorder {
+	char1024 file;
+	char1024 property;
+	double interval[s];
+	int32 limit;
+}
+class multi_recorder {
+	char1024 file;
+	char1024 property;
+	double interval[s];
+	int32 limit;
+}

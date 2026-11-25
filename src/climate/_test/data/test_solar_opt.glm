@@ -1,0 +1,74 @@
+module assert;
+
+//#define RECORD 1
+
+//#ifdef RECORD
+#include "tape.glm"
+//#endif
+
+clock {
+	timezone "America/Los_Angeles";
+	starttime '2009-01-01 0:00:00';
+	stoptime '2010-01-01 0:00:00';
+}
+
+module climate;
+object climate {
+	name "Yakima_WA";
+	tmyfile "WA-Yakima_Air_Terminal.tmy3";
+}
+
+// the gridlabd test's intrinsic C++ functions are the Python handlers in climate_test_solar.py
+class solar {
+	object weather;
+	double power[kW];
+	double energy[MWh];
+	double efficiency[pu];
+	double area[sf];
+	enumeration {FIXED=0, TRACKING=1} type;
+	enumeration {HORIZONTAL=0, NORTH=1, NORTHEAST=2, EAST=3, SOUTHEAST=4, SOUTH=5, SOUTHWEST=6, WEST=7, NORTHWEST=8} orientation;
+	on_init "python:climate_test_solar.opt_init";
+	on_presync "python:climate_test_solar.opt_presync";
+	on_sync "python:climate_test_solar.opt_sync";
+}
+
+object solar {
+	weather "Yakima_WA";
+	area 1000;
+	type TRACKING;
+	object double_assert {
+		in '2009-12-31 23:00:00';
+		status ASSERT_TRUE;
+		target energy;
+		value 133.7;
+		within 0.1;
+	};
+//#ifdef RECORD
+	object recorder {
+		property power,energy;
+		file solar_opt_tracking_power_energy.csv;
+		interval 3600;
+	};
+//#endif
+}
+
+object solar {
+	weather "Yakima_WA";
+	area 1000;
+	type FIXED;
+	orientation SOUTHWEST;
+	object double_assert {
+		in '2009-12-31 23:00:00';
+		status ASSERT_TRUE;
+		target energy;
+		value 98.9;
+		within 0.1;
+	};
+//#ifdef RECORD
+	object recorder {
+		property power,energy;
+		file solar_opt_fixed_power_energy.csv;
+		interval 3600;
+	};
+//#endif
+}

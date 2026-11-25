@@ -1,0 +1,36 @@
+//#set profiler=1
+#set threadcount=1;
+#set randomseed=1;
+
+clock {
+	timezone "Pacific/Honolulu";
+	starttime '2000-05-05 05:00:00';
+	stoptime '2000-05-05 20:00:00';
+}
+
+#include "tape.glm"
+#include "generators.glm"
+
+module climate;
+
+// #weather get WA-Yakima_Air_Terminal.tmy3 (the file is in this folder)
+object climate
+{
+	name NREL_climate;
+	tmyfile "WA-Yakima_Air_Terminal.tmy3";
+};
+
+object solar {
+	name DHHL_3_PV;
+	tilt_angle 90.0;
+	orientation_azimuth 180; //equator-facing (South)
+	orientation DEFAULT;
+	SOLAR_TILT_MODEL SOLPOS;
+	latitude 21.31236;
+	longitude -158.08463;
+	object recorder {
+		file solar_insolation.csv;
+		property Insolation;
+		interval 900;
+	};
+}

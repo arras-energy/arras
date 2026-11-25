@@ -1,0 +1,35 @@
+clock {
+	timezone "America/Los_Angeles";
+	starttime '2001-01-01 0:00:00';
+	stoptime '2001-01-02 0:00:00';
+}
+
+#include "tape.glm"
+module climate;
+#include "residential.glm"
+
+object csv_reader{
+	name CsvReader;
+	filename weather_dst.csv;
+};
+
+object climate{
+	name MyClimate;
+	tmyfile weather_dst.csv;
+	reader CsvReader;
+	object recorder {
+		file climate_out.csv;
+		interval 3600;
+		limit 120;
+		property temperature,humidity;
+	};
+};
+
+object house {
+     object recorder {
+          	file house_out.csv;
+          	interval 3600;
+          	limit 24;
+          	property outdoor_temperature,outdoor_rh;
+     };
+}

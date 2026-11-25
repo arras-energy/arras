@@ -1,0 +1,99 @@
+class climate {
+	function calculate_solar_radiation_degrees();
+	function calculate_solar_radiation_radians();
+	function calculate_solar_radiation_shading_degrees();
+	function calculate_solar_radiation_shading_radians();
+	function calculate_solar_radiation_shading_position_radians();
+	function calculate_solpos_radiation_shading_position_radians();
+	function calc_solar_ideal_shading_position_radians();
+	double solar_elevation[rad]; // (OUTPUT) solar elevation angle in radians
+	double solar_azimuth[rad]; // (OUTPUT) solar azimuth angle in radians
+	double solar_zenith[rad]; // (OUTPUT) solar zenith angle in radians
+	char256 city; // weather data city name
+	char1024 tmyfile; // (REQUIRED) weather data file name
+	double temperature[degF]; // (OUTPUT) current temperature
+	double humidity[pu]; // (OUTPUT) current humidity
+	double solar_flux[W/sf]; // (OUTPUT) current solar irradiance (9 orientiations)
+	double solar_direct[W/sf]; // (OUTPUT) solar direct irradiance
+	double solar_diffuse[W/sf]; // (OUTPUT) solar diffuse irradiance
+	double solar_global[W/sf]; // (OUTPUT) solar global flux irradiance
+	double extraterrestrial_global_horizontal[W/sf]; // (OUTPUT) solar global extraterrestrial irradiance
+	double extraterrestrial_direct_normal[W/sf]; // (OUTPUT) solar direct normal extraterrestrial irradiance
+	double pressure[mbar]; // (OUTPUT) current air pressure
+	double wind_speed[m/s]; // (OUTPUT) current wind speed
+	double wind_dir[rad]; // (OUTPUT) current direction in radians
+	double wind_gust[m/s]; // (OUTPUT) current wind gusts
+	double record.low[degF]; // (OUTPUT) record low temperature observed
+	int32 record.low_day; // (OUTPUT) day of year for record low observation
+	double record.high[degF]; // (OUTPUT) record high temperature observed
+	int32 record.high_day; // (OUTPUT) day of year for record high observation
+	double record.solar[W/sf]; // (OUTPUT) record high solar irradiance observed
+	double rainfall[in/h]; // (OUTPUT) rainfall observed
+	double snowdepth[in]; // (OUTPUT) snow depth observed
+	enumeration {QUADRATIC=2, LINEAR=1, NONE=0} interpolate; // (OUTPUT) the interpolation mode used on the climate data
+	double solar_horiz; // (OUTPUT) solar flux on horizontal surface
+	double solar_north; // (OUTPUT) solar flux on north surface
+	double solar_northeast; // (OUTPUT) solar flux on northeast surface
+	double solar_east; // (OUTPUT) solar flux on east surface
+	double solar_southeast; // (OUTPUT) solar flux on southeast surface
+	double solar_south; // (OUTPUT) solar flux on south surface
+	double solar_southwest; // (OUTPUT) solar flux on southwest surface
+	double solar_west; // (OUTPUT) solar flux on west surface
+	double solar_northwest; // (OUTPUT) solar flux on northwest surface
+	double solar_raw[W/sf]; // (OUTPUT) raw solar flux
+	double ground_reflectivity[pu]; // (OUTPUT) ground reflectivity observed
+	object reader; // weather reader object
+	char1024 forecast; // forecasting specifications
+	enumeration {CUMULUS=1, NONE=0} cloud_model; // (OUTPUT) the cloud model to use
+	double cloud_opacity[pu]; // (OUTPUT) cloud opacity factor
+	double opq_sky_cov[pu]; // (OUTPUT) cloud sky coverage factor
+	double cloud_speed_factor[pu]; // (OUTPUT) cloud speed factor
+	double solar_cloud_direct[W/sf]; // (OUTPUT) cloud direct irradiance
+	double solar_cloud_diffuse[W/sf]; // (OUTPUT) cloud diffuse irradiance
+	double solar_cloud_global[W/sf]; // (OUTPUT) cloud global irradiance
+	double cloud_alpha[pu]; // (OUTPUT) cloud alpha
+	double cloud_num_layers[pu]; // (OUTPUT) number of cloud layers
+	double cloud_aerosol_transmissivity[pu]; // (OUTPUT) cloud aerosal transmissivity
+	double heat_index[degF]; // (OUTPUT) heat index based on temperature and humidity
+}
+
+class csv_reader {
+	int32 index; // reader line index
+	char32 city_name; // name of city
+	char32 state_name; // name of state/province
+	double lat_deg; // latitude degrees
+	double lat_min; // latitude minutes
+	double long_deg; // longitude degrees
+	double long_min; // longitude minutes
+	double low_temp; // lowest temperature
+	double high_temp; // highest temperature
+	double peak_solar; // peak solar flux
+	int32 elevation; // elevation
+	enumeration {ERROR=2, OPEN=1, INIT=0} status; // reader status
+	char32 timefmt; // time format
+	char32 timezone; // timezone
+	double timezone_offset; // timezone offset
+	char256 columns; // column names
+	char256 filename; // filename
+}
+
+class weather {
+	double temperature[degF]; // (OUTPUT) dry-bulb air temperature
+	double humidity[%]; // (OUTPUT) relative humidity
+	double solar_direct[W/sf]; // direct solar flux
+	double solar_diffuse[W/sf]; // (OUTPUT) diffuse solar flux
+	double solar_global[W/sf]; // (OUTPUT) global solar flux
+	double global_horizontal_extra[W/sf]; // (OUTPUT) horizontal surface solar flux
+	double wind_speed[mph]; // (OUTPUT) wind speed
+	double wind_dir[deg]; // (OUTPUT) wind direction
+	double opq_sky_cov[pu]; // (OUTPUT) opaque sky cover
+	double tot_sky_cov[pu]; // (OUTPUT) total sky cover
+	double rainfall[in/h]; // (OUTPUT) rainfall rate
+	double snowdepth[in]; // (OUTPUT) depth of snow on the ground
+	double pressure[mbar]; // (OUTPUT) air pressure
+	int16 month; // (OUTPUT) current month
+	int16 day; // (OUTPUT) current day
+	int16 hour; // (OUTPUT) current hour
+	int16 minute; // (OUTPUT) current minute
+	int16 second; // (OUTPUT) current second
+}

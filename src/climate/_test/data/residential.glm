@@ -1,0 +1,5 @@
+// residential module class standing in for the residential module used by the gridlabd autotests
+class house {
+	double outdoor_temperature[degF];
+	double outdoor_rh[%];
+}

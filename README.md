@@ -128,7 +128,25 @@ Some gridlabd modules are ported to Python packages that are installed with `arr
 0
 ```
 
-`assert` is a Python keyword, so the package is imported with `importlib.import_module("assert")`. See the [`assert` documentation](https://arras-energy.github.io/arras/assert.html) for its classes `assert`, `double_assert`, `complex_assert`, `enum_assert`, and `int_assert`, and the differences from gridlabd. A distribution can provide other modules the same way, as an `arras.modules` entry point (see [`arras.model`](https://arras-energy.github.io/arras/arras/model.html)).
+`assert` is a Python keyword, so the package is imported with `importlib.import_module("assert")`. See the [`assert` documentation](https://arras-energy.github.io/arras/assert.html) for its classes `assert`, `double_assert`, `complex_assert`, `enum_assert`, and `int_assert`, and the differences from gridlabd.
+
+The `climate` module gives the weather of a site at each time step, read from a TMY2, TMY3, or CSV weather file, with the solar position, the solar flux on surfaces facing nine directions, the heat index, and an optional cloud model:
+
+```python
+>>> from arras import Model, Runner
+>>> m = Model()
+>>> m.read_glm("""
+... clock { starttime "2020-07-01 12:00:00 UTC"; stoptime "2020-07-01 12:00:00 UTC"; }
+... module climate;
+... object climate { name "site"; tmyfile ""; temperature 90; humidity 0.5; }
+... """)
+>>> Runner(model=m).returncode
+0
+>>> m.get_property("site", "temperature")
+'90'
+```
+
+With `tmyfile ""` the model sets the weather; a file name is searched as given, then in the folders of the `climate::library_path` global. See the [`climate` documentation](https://arras-energy.github.io/arras/climate.html) for its classes `climate`, `weather`, and `csv_reader`, the class functions, and the differences from gridlabd. A distribution can provide other modules the same way, as an `arras.modules` entry point (see [`arras.model`](https://arras-energy.github.io/arras/arras/model.html)).
 
 ## Testing
 
@@ -138,7 +156,7 @@ pip install -e . pytest pytest-cov
 pytest --cov
 ```
 
-See `src/arras/_test/README.md` and `src/assert/_test/README.md` for what the tests check. The coverage report for `main` is published at https://arras-energy.github.io/arras/coverage/.
+See `src/arras/_test/README.md`, `src/assert/_test/README.md`, and `src/climate/_test/README.md` for what the tests check. The coverage report for `main` is published at https://arras-energy.github.io/arras/coverage/.
 
 ## Source Code Repositories
 
