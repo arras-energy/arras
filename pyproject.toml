@@ -45,14 +45,15 @@ arras = "arras.main:main"
 [project.entry-points."arras.modules"]
 assert = "assert:load"
 climate = "climate:load"
+tape = "tape:load"
 
 [tool.pytest.ini_options]
-testpaths = ["src/arras/_test", "src/assert/_test", "src/climate/_test"]
+testpaths = ["src/arras/_test", "src/assert/_test", "src/climate/_test", "src/tape/_test"]
 
 # Test coverage (CI runs `pytest --cov`; needs pytest-cov)
 [tool.coverage.run]
-source_pkgs = ["arras", "assert", "climate"]
-omit = ["*/arras/_test/*", "*/assert/_test/*", "*/climate/_test/*"]
+source_pkgs = ["arras", "assert", "climate", "tape"]
+omit = ["*/arras/_test/*", "*/assert/_test/*", "*/climate/_test/*", "*/tape/_test/*"]
 branch = true
 relative_files = true
 
@@ -61,6 +62,7 @@ relative_files = true
 source = ["src/arras/","*/site-packages/arras/"]
 assert = ["src/assert/","*/site-packages/assert/"]
 climate = ["src/climate/","*/site-packages/climate/"]
+tape = ["src/tape/","*/site-packages/tape/"]
 
 [tool.coverage.report]
 show_missing = true

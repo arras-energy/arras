@@ -5,7 +5,9 @@ modules and solver dispatch (`arras.module`, #22) added 2026-11-23;
 internal item and heartbeat dispatch added 2026-11-23;
 runner decisions revised for #45, 2026-11-24;
 folders without a gridlabd install (`arras.folders`, decision 1.12, #47), 2026-11-24;
-gridlabd modules as Python packages and the `assert` module (decisions 1.13, 6.15, group 8, #49), 2026-11-24
+gridlabd modules as Python packages and the `assert` module (decisions 1.13, 6.15, group 8, #49), 2026-11-24;
+the `climate` module (group 9, #51), 2026-11-24;
+the `tape` module, `Runner.setexitcode()`, and `method` properties in GLM (decisions 2.14, 6.16, group 10, #53), 2026-11-24
 
 ## Purpose
 
@@ -20,7 +22,7 @@ GridLAB-D. It provides:
   (`arras.model`), and modules with the solvers that keep the clock
   synchronized (`arras.module`); and
 - gridlabd modules implemented in Python, each a top-level package under
-  `src/` (the first is `assert`, decision group 8).
+  `src/` (`assert`, `climate`, and `tape`, decision groups 8 to 10).
 
 The Python model reads, checks, edits, and writes what gridlabd reads and
 writes, without running `gridlabd`. Users get the same values, text, and
@@ -91,6 +93,7 @@ PRs can cite "decision 4.3".
 | 2.11 | The model given with `-o` is written whenever the model was loaded, also after a failed run. |
 | 2.12 | Soft events alone end a run when `stoptime` is `NEVER`, as the comment in `exec_start()` intends. gridlabd's `clock_update_modules()` posts the next time as a hard event after every committed step, so its loop never stops on soft events; `Runner` posts the `clockupdate` result only when a solver lowers the next time. Listed as runner difference 8. (2026-11-24, #45.) |
 | 2.13 | A module `precommit` result is checked and used like a `presync` result: `TS_INVALID`, 0, or a time before the clock fails the run, and a later time is an event. gridlabd's `precommit_all()` tests `module_precommitall()` as a truth value, so only 0 fails and times are discarded. A Python module's `on_precommit` may return `True` (no event) or `False` (failure). Listed as runner difference 9. (2026-11-24, #45.) |
+| 2.14 | `Runner.setexitcode(code)` sets the exit code that a run ends with when it does not fail otherwise, as gridlabd's `exec_setexitcode()` does; the run goes on. gridlabd's `output_error()` calls it with `RUNERR`, so every error message fails a gridlabd run once it ends; `Runner.error()` does not, so that handlers keep deciding, and module packages call `setexitcode()` where gridlabd writes an error and goes on (`tape`, 10.6). (2026-11-24, #53) |
 
 ### 3. Global variables (`arras.globals`)
 
@@ -152,6 +155,7 @@ PRs can cite "decision 4.3".
 | 6.13 | Time zone abbreviations (e.g. `PST`) in JSON globals that `Globals` cannot convert (3.9) leave the global at its default and log a warning. Object timestamps in that form are stored as given. |
 | 6.14 | Numbers written after unit conversion are rounded to 15 significant digits, so conversion errors such as `1500.0000000000002` do not appear. |
 | 6.15 | `Model.load_module(name)` first calls the `arras.modules` entry point named `name`, if an installed distribution provides one (1.13), on every load, so each model gets the module's globals; then it adds the module's registered classes, and calls `Model.module_loader` only when none are registered. An entry point that cannot be loaded, is not callable, or raises an `ArrasException` raises `ModelError`. (2026-11-24, #49) |
+| 6.16 | A `method` property given more than once in a GLM object block keeps every value, joined with `,`, as the `property` methods of the `tape` recorders, collectors, and multiplayers add each value to their list. `set_property()` replaces the value. (2026-11-24, #53) |
 
 ### 7. Modules (`arras.module`)
 
@@ -217,6 +221,20 @@ published at https://arras-energy.github.io/arras rather than under
 | 9.8 | The tests port every gridlabd autotest in `module/climate/autotest/` to `src/climate/_test/data/`, with the changes listed in `src/climate/_test/data/README.md`, and compare `arras` with values written by a gridlabd build (master 076e78a) for TMY2, TMY3, and CSV files, the three interpolation modes, daylight saving time, the new year, leap days, and the class functions, within the 6 significant digits of gridlabd's recorders. The Yakima TMY3 file (1.7 MB) is checked in because the autotests need a full year and the tests use no network. |
 | 9.9 | Four gridlabd defects are fixed in `arras` only, not in gridlabd (2026-11-24), and listed under Differences from gridlabd (1.4): `wind_dir` is published in degrees, the unit of the values it holds (gridlabd publishes radians); CSV values are converted from the `weather` units to the `climate` units (gridlabd copies the numbers, so its `humidity` from a file in % is 100 times too large and its `wind_speed` is mph labeled m/s); a CSV run that starts after the last sample of the year moves to the first sample of the next year (gridlabd's next event is in the past, a run error); and the cloud model without a weather file asks for an event every minute (gridlabd's presync returns 0, a run error). The tests compare with gridlabd's values converted accordingly and check the two runs that gridlabd fails. |
 
+### 10. The `tape` module (`src/tape/`, #53)
+
+| # | Decision |
+|---|---|
+| 10.1 | The package reproduces gridlabd's `module/tape` and, inside it, the file operations of the separate `module/tape_file` (the `file` tape mode): the classes `player`, `shaper`, `recorder`, `multi_recorder`, `collector`, `histogram`, `group_recorder`, `violation_recorder`, `metrics_collector`, `metrics_collector_writer`, and `multiplayer` in registration order, with the published property names, types, units, keywords (in reverse publication order, 8.1), defaults (including the values the `create()` functions set, as 8.1 does), flags, descriptions, pass configurations, and readiness levels of `tape.cpp` and the class files; and the globals `tape::gnuplot_path`, `flush_interval`, `csv_data_only`, `csv_header_type` (one value shared with `csv_data_only`, as in gridlabd), `csv_keep_clean`, and `delta_mode_needed`. One module per class, with private helpers: `_common.py` (messages, state, C formats including `%a`, local time, property values as `gl_get_value()`/`gl_set_value()` handle them), `_file.py` (`tape_file.cpp`), `_aggregate.py` (the core's `aggregate.cpp`), `_json.py` (jsoncpp's `StyledWriter`), and `_base.py` (registration). |
+| 10.2 | Where gridlabd's documentation is incomplete or describes older code, the package follows the code (as 9.2 does). Where the documentation describes what the code computes but then defeats, the package follows the documentation (1.3) and lists the difference (1.4): player values in a header unit are converted (`docs/Module/Tape/Player.md`), recorded `double` values in another unit are converted (gridlabd's `convert_from_double()` converts but writes the unconverted number), and file headers follow `header_units` (gridlabd computes `out_property` but never writes it). |
+| 10.3 | Behavior is reproduced row for row where gridlabd's is intended: timestamps and values are formatted with gridlabd's formats, headers and footers are gridlabd's, and the year-long `test_player_header` autotest gives gridlabd's output line for line. Behavior that only follows from how gridlabd's code is written is fixed in `arras` (10.4). (Edited 2026-11-24, #53: the quirks kept at first are now fixed.) |
+| 10.4 | These gridlabd defects and quirks are fixed in `arras` only, not in gridlabd (2026-11-24), and listed under Differences from gridlabd (1.4) in each class's module: group recorder rows hold every value (gridlabd's `snprintf(... sizeof(line_buffer) ...)` uses the size of a pointer and ends the row after a truncated first value), `interval -1` writes changed rows (gridlabd's commit writes none), and a positive `flush_interval` flushes; the violation recorder checks and counts every object (its lists drop the second object, its unique lists the second name); metrics energies use the interval length (gridlabd multiplies by the flag `interval_write`); a direct shaper asks to run again at the next hour (gridlabd returns 0, a run error), and shape months are 1 to 12 and days 1 to 31 (gridlabd indexes its arrays with the file's numbers from 0); unit conversions of multi-recorders, multiplayers, and recorder output formats include the unit offset (gridlabd multiplies by the conversion of 1, so 0 degF is 0 degC); recorders, multi-recorders, and collectors write exactly `limit` rows (gridlabd `limit`+1), write the last sample of a positive interval when the run ends (gridlabd loses it), and a recorder with `interval 0` writes at the first time; a collector samples from the first time, so its first row is its first sample and its trigger works (gridlabd reads the interval only when the file opens); files still open when the run ends get their end lines (gridlabd leaves collector, multi-recorder, histogram, and group recorder files to the process exit); a multi-recorder's multi-run file is replaced at the end of the run and `line_units ALL` writes units; histogram rows have no trailing comma and `A..B` is a bin (C's `strtod()` reads `A.`); and a looping player skips its CSV header. |
+| 10.5 | Where gridlabd's behavior is undefined, the package defines it and lists it (1.4): shaper day 31 has no shape, a triplex line without a conductor uses its configuration's rating, multiplayer values that cannot be read are not written, and aggregates that divide by zero are `nan` or an infinity. |
+| 10.6 | Object error messages are written as `gl_error()` writes them and end the run with `RUNERR` without stopping it (`Runner.setexitcode()`, 2.14), as gridlabd's `output_error()` does; the `_err` autotests rely on it. Handlers return `TS_INVALID`, 0, or `False` only where the C++ code returns them. |
+| 10.7 | Not modeled: the `memory` and `plot` tape modes (other modes fail as gridlabd fails when it cannot find `tape_MODE`), deltamode (objects with the `DELTAMODE` flag behave as objects without it; the module's deltamode functions are not modeled), the module's `check()` function, and plots. Times that gridlabd takes from the process's time zone (shaper hours, `strftime_format`) use the model's time zone; the `FULL` header's date, user, and host come from the process, as in gridlabd. |
+| 10.8 | Classes that the violation recorder and metrics collectors read (powerflow, residential) are found by class name and read by property name, so they may come from gridlabd JSON or GLM stand-ins; group expressions use the find-language subset of `assert._find` (8.6, open question 6). |
+| 10.9 | The tests port every gridlabd autotest in `module/tape/autotest/` except the two deltamode tests, to `src/tape/_test/data/`, with the changes listed in `src/tape/_test/data/README.md` (GLM stand-ins for powerflow and residential classes, IANA time zones, `randomvar` refreshes replaced by a seeded Python handler, one-week runs for the random tests). gridlabd's own outputs in the autotest folder (`test_player_header_output.csv`, `test_multiplayer_record_*.csv`) are compared line for line. Without a gridlabd build in the session, the published properties were checked against the C++ source, not against `gridlabd --modhelp tape`. |
+
 ## Module layout
 
 ```
@@ -262,6 +280,27 @@ src/climate/       gridlabd climate module (decision group 9), entry point clima
   _test/           pytest tests
     data/          gridlabd climate autotests ported to arras; weather files
       reference/   values written by gridlabd, and the script that made them
+
+src/tape/          gridlabd tape module with tape_file (decision group 10), entry point tape:load
+  __init__.py      package docs; load(model), classes(), init/precommit/presync/sync/postsync/commit/finalize(name,t)
+  player.py        Player: class player
+  shaper.py        Shaper: class shaper
+  recorder.py      Recorder: class recorder; multi-run files, triggers, timestamps
+  multi_recorder.py MultiRecorder: class multi_recorder
+  collector.py     Collector: class collector
+  histogram.py     Histogram: class histogram
+  group_recorder.py GroupRecorder: class group_recorder
+  violation_recorder.py ViolationRecorder: class violation_recorder
+  metrics_collector.py MetricsCollector: class metrics_collector
+  metrics_collector_writer.py MetricsCollectorWriter: class metrics_collector_writer
+  multiplayer.py   Multiplayer: class multiplayer
+  _base.py         TapeClass: registration shared by the classes
+  _common.py       messages, per-object state, C formats, local time, Prop (property values)
+  _file.py         file tapes (gridlabd tape_file): headers, rows, CSV options
+  _aggregate.py    Aggregate: collector aggregates (gridlabd aggregate.cpp)
+  _json.py         jsoncpp StyledWriter text
+  _test/           pytest tests; tape_test_random.py (randomvar stand-in)
+    data/          gridlabd tape autotests ported to arras; their data and outputs
 ```
 
 Dependencies between modules (`runner` imports `model` when a `Runner`
@@ -293,9 +332,14 @@ flowchart LR
   climate --> module
   climate --> oclass
   climate --> runner
+  tape --> model
+  tape --> module
+  tape --> oclass
+  tape --> runner
+  tape --> assert
 ```
 
-`model` reaches `assert` and `climate` only through the `arras.modules` entry point
+`model` reaches `assert`, `climate`, and `tape` only through the `arras.modules` entry point
 (6.15), so `arras` does not import the module packages.
 
 ## Contracts
@@ -327,6 +371,7 @@ Each module is checked against these gridlabd files (`master` 076e78a):
 | `module` | `source/module.h`, `module.cpp`, `exec.cpp` (`clock_update_modules()`, `syncall_internals()`, `sync_heartbeats()`, module calls in the sync passes), `deltamode.cpp`, `object.cpp` (`object_heartbeat()`), `random.cpp`, `schedule.cpp`, `loadshape.cpp`, `transform.cpp`, `transform.h`, `enduse.cpp`, `timestamp.h`, `timestamp.cpp`; `docs/GLM/Directive/Module.md` |
 | `exitcodes` | gridlabd exit codes |
 | `runner` | `source/exec.cpp`, `object.cpp`, `main.cpp`, `module.cpp`; `python/python.cpp` (`python_module_load()`, `python_event()`); `docs/GLM/Object/Events.md`, `docs/Module/Python.md` |
+| `tape` | `module/tape/` (all files and `autotest/`), `module/tape_file/tape_file.cpp`, `source/aggregate.cpp`, `convert.cpp` (`convert_from_double()`, `convert_from_complex()`, `convert_from_set()`), `output.cpp` (`output_error()`), `exec.cpp` (`exec_setexitcode()`), `third_party/jsonCpp/jsoncpp.cpp`; `docs/Module/Tape.md`, `docs/Module/Tape/` |
 | `assert` | `module/assert/` (all files and `autotest/`), `source/gridlabd.h` (`INIT_MMF()`, `gld_object`, `gld_property`, `INIT_CATCHALL()`), `property.cpp`, `compare.cpp`, `convert.cpp`, `timestamp.cpp`, `object.cpp`, `enduse.cpp`, `random.cpp`, `find.cpp`; `docs/Module/Assert.md`, `docs/Module/Assert/` |
 
 ## Files and formats
@@ -364,8 +409,16 @@ Each module is checked against these gridlabd files (`master` 076e78a):
   model's time zone.
 - The GLM clock block does not read `timestamp` (gridlabd's other name for
   `starttime`), and object names may not contain spaces, which gridlabd
-  accepts; the ported climate autotests are changed for both
-  (`src/climate/_test/data/README.md`).
+  accepts; the ported climate and tape autotests are changed for the
+  first, the climate autotests for both (`src/climate/_test/data/README.md`,
+  `src/tape/_test/data/README.md`).
+- `arras` does not refresh `randomvar` properties, so the tape autotests
+  that record them use a seeded Python handler (10.9); the climate tests
+  still declare GLM stand-ins for the tape classes they use, which they
+  could now load with `module tape;`.
+- Only `tape` calls `Runner.setexitcode()` for its error messages (2.14);
+  the `assert` and `climate` packages fail runs only by their handler
+  results.
 - Models and scripts that set `GLD_*` or `GLTEMP` for gridlabd
   get no effect from them in `arras` (1.12): move shared files to the user
   `share` folder (or set `ARRAS_USERDIR`), or set the folder globals in the
@@ -388,7 +441,8 @@ Each module is checked against these gridlabd files (`master` 076e78a):
    simulations whose handlers hold the GIL for long periods (2.9)?
 6. Should the find-expression subset in `assert._find` move to
    `arras.model`, where it could also serve the `FIND` pseudo-global
-   (#34)? It stays private to `assert` until then (8.6).
+   (#34)? It stays in `assert` until then (8.6); `tape` imports it for
+   collector, shaper, histogram, and group recorder groups (10.8).
 7. Should gridlabd's climate documentation be regenerated from the code
    (9.2), and the undefined behaviors of 9.4 be fixed in gridlabd, as
    was done for `assert` (8.4, 8.5)? Until then `arras` follows the code
@@ -397,3 +451,11 @@ Each module is checked against these gridlabd files (`master` 076e78a):
 8. Should the GLM loader read the clock's `timestamp` and accept object
    names with spaces, as gridlabd does, so that the climate autotests run
    unchanged?
+9. The tape defects and quirks fixed in `arras` (10.4) stay in gridlabd
+   by decision (2026-11-24), so gridlabd and `arras` give different files
+   for those cases. Should gridlabd's tape documentation be completed to
+   describe the `arras` behavior?
+10. Should `assert` and `climate` also call `Runner.setexitcode()` where
+    gridlabd writes an error and goes on (2.14), so that every module
+    package ends a run with `RUNERR` after an error message as gridlabd
+    does?

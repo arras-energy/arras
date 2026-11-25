@@ -1,0 +1,31 @@
+// residential classes standing in for the residential module used by the
+// gridlabd autotests (arras has no residential module): the properties that
+// the tests set or record, with the types and units residential publishes;
+// the objects have no behavior, so their values stay as set
+class house {
+	double Rroof[degF*sf*h/Btu];
+	double Rwall[degF*sf*h/Btu];
+	double Rfloor[degF*sf*h/Btu];
+	double Rdoors[degF*sf*h/Btu];
+	double Rwindows[degF*sf*h/Btu];
+	double airchange_per_hour[unit/h];
+	double hvac_power_factor[unit];
+	enumeration {NONE=1, ELECTRIC=2, HEAT_PUMP=4} cooling_system_type;
+	enumeration {NONE=1, GAS=2, HEAT_PUMP=4, RESISTANCE=8} heating_system_type;
+	enumeration {NONE=1, ONE_SPEED=2, TWO_SPEED=4} fan_type;
+	double hvac_breaker_rating[A];
+	double total_thermal_mass_per_floor_area[Btu/degF/sf];
+	enumeration {VERY_POOR=0, POOR=1, AVERAGE=2, GOOD=3, VERY_GOOD=4} motor_efficiency;
+	enumeration {NONE=0, BASIC=1, FULL=2} motor_model;
+	double cooling_COP[pu];
+	double floor_area[sf];
+	double number_of_doors;
+	double air_temperature[degF];
+	double mass_temperature[degF];
+	double heating_setpoint[degF];
+	double cooling_setpoint[degF];
+}
+class waterheater {
+	double temperature[degF];
+	double actual_load[kW];
+}

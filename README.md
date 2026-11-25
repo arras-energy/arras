@@ -146,7 +146,24 @@ The `climate` module gives the weather of a site at each time step, read from a 
 '90'
 ```
 
-With `tmyfile ""` the model sets the weather; a file name is searched as given, then in the folders of the `climate::library_path` global. See the [`climate` documentation](https://arras-energy.github.io/arras/climate.html) for its classes `climate`, `weather`, and `csv_reader`, the class functions, and the differences from gridlabd. A distribution can provide other modules the same way, as an `arras.modules` entry point (see [`arras.model`](https://arras-energy.github.io/arras/arras/model.html)).
+With `tmyfile ""` the model sets the weather; a file name is searched as given, then in the folders of the `climate::library_path` global. See the [`climate` documentation](https://arras-energy.github.io/arras/climate.html) for its classes `climate`, `weather`, and `csv_reader`, the class functions, and the differences from gridlabd.
+
+The `tape` module plays values from files into a model and records properties to files. The file `-` writes to the run's output:
+
+```python
+>>> from arras import Model, Runner
+>>> m = Model()
+>>> m.read_glm("""
+... clock { starttime "2020-01-01 00:00:00 UTC"; stoptime "2020-01-01 02:00:00 UTC"; }
+... module tape { csv_header_type NAME; }
+... class load { double power[kW]; }
+... object load { power 1.5; object recorder { property "power[W]"; file "-"; interval 3600; }; }
+... """)
+>>> Runner(model=m).stdout
+['timestamp,power[W]', '2020-01-01 00:00:00 UTC,+1500 W', '2020-01-01 01:00:00 UTC,+1500 W']
+```
+
+The file operations of gridlabd's separate `tape_file` module are part of the `tape` package; the `memory` and `plot` tape modes are not implemented. See the [`tape` documentation](https://arras-energy.github.io/arras/tape.html) for its classes `player`, `shaper`, `recorder`, `multi_recorder`, `collector`, `histogram`, `group_recorder`, `violation_recorder`, `metrics_collector`, `metrics_collector_writer`, and `multiplayer`, and the differences from gridlabd. A distribution can provide other modules the same way, as an `arras.modules` entry point (see [`arras.model`](https://arras-energy.github.io/arras/arras/model.html)).
 
 ## Testing
 
@@ -156,7 +173,7 @@ pip install -e . pytest pytest-cov
 pytest --cov
 ```
 
-See `src/arras/_test/README.md`, `src/assert/_test/README.md`, and `src/climate/_test/README.md` for what the tests check. The coverage report for `main` is published at https://arras-energy.github.io/arras/coverage/.
+See `src/arras/_test/README.md`, `src/assert/_test/README.md`, `src/climate/_test/README.md`, and `src/tape/_test/README.md` for what the tests check. The coverage report for `main` is published at https://arras-energy.github.io/arras/coverage/.
 
 ## Source Code Repositories
 

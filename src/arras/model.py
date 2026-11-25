@@ -83,7 +83,9 @@ Property value checks
 Values may also be given as Python values (`int`, `float`, `bool`,
 `complex`, a `list` or `set` of keywords for `set` properties). GLM values
 `inherit` (copy the parent's value) and `@NAME` (copy object NAME's value)
-are resolved when read.
+are resolved when read. A `method` property given more than once in a GLM
+object block keeps all the values, joined with `,`, as the methods of the
+`tape` module's recorders and players add each value to a list.
 
 Header properties
 -----------------
@@ -1745,6 +1747,8 @@ class Model: # pylint: disable=too-many-instance-attributes,too-many-public-meth
                     elif value.startswith("@") and re.fullmatch(r"@[A-Za-z_][\w.:]*", value) and self._ptype(obj.oclass, key) != "object":
                         value = self._get(self._object(value[1:]), key)
                     key, text = self._validate(obj, key, value)
+                    if key in obj and self._ptype(obj.oclass, key) == "method":
+                        text = f"{obj[key]},{text}"
                     obj[key] = text
                 except ModelError as err:
                     raise ModelError(f"{where}: {err}") from err

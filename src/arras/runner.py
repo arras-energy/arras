@@ -124,6 +124,9 @@ expected to satisfy:
     fraction of the time from `starttime` to `stoptime` that is done).
 11. A solver that raises or returns the wrong type stops the run
     (`INIERR` during initialization, else `RUNERR`).
+12. A handler or solver may call `Runner.current().setexitcode(code)` to
+    end a run that otherwise succeeds with `code`, as gridlabd's
+    `exec_setexitcode()` does; the run goes on.
 
 Event handlers
 --------------
@@ -432,6 +435,7 @@ class Runner: # pylint: disable=too-many-instance-attributes
         self._step = TS_NEVER
         self._hard = False
         self._service: dict[str,tuple[int,int]] = {}
+        self._exitcode = exitcodes.SUCCESS
         if background:
             self._thread = threading.Thread(target=self._main, name="arras-runner", daemon=True)
             self._thread.start()
@@ -496,6 +500,17 @@ class Runner: # pylint: disable=too-many-instance-attributes
         """Stop the run at the next time step (the run ends with
         `arras.exitcodes.RUNERR` after the objects are finalized)"""
         self._stop.set()
+
+    def setexitcode(self, code:int) -> int:
+        """Set the exit code of a run that otherwise succeeds, as gridlabd's
+        `exec_setexitcode()` does (gridlabd's `output_error()` sets
+        `RUNERR`); returns the code set before
+
+        A failure that stops the run keeps its own exit code. Module
+        packages call this where gridlabd writes an error and goes on.
+        """
+        previous, self._exitcode = self._exitcode, code
+        return previous
 
     #
     # Output
@@ -596,7 +611,7 @@ class Runner: # pylint: disable=too-many-instance-attributes
                 self._simulate(options["initialize"])
         finally:
             self._save()
-        return exitcodes.SUCCESS
+        return self._exitcode
 
     def _commandline(self) -> dict[str,bool]: # pylint: disable=too-many-branches
         """Process the command line arguments in order"""

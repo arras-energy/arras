@@ -1,0 +1,28 @@
+// randomvar values are not refreshed by arras: x and y are set by the on_sync
+// handler tape_test_random.sync, which draws normal(0,1) values every
+// `refresh` seconds from Python's random module; the run is one week long
+clock {
+	timezone UTC;
+	starttime '2018-01-01 00:00:00';
+	stoptime '2018-01-08 00:00:00';
+}
+
+class test {
+	double x;
+	double y;
+	double refresh[s];
+}
+
+module tape;
+object test:..10 {
+	refresh 1h;
+	on_sync "python:tape_test_random.sync";
+}
+
+object collector {
+	group class=test;
+	property mean(x),std(x),min(x),max(x);
+	property mean(y),std(y),min(y),max(y);
+	file test_collector_multiple_properties.csv;
+	interval 1h;
+};

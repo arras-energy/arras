@@ -1,0 +1,45 @@
+// test_recorder_flush.glm tests to make sure the recorder flush operation is correct 
+// A. Ivanova Oct 9, 2018
+// randomvar values are not refreshed by arras: x is set by the on_sync
+// handler tape_test_random.sync every `refresh` seconds
+
+/////////////////////////////////////////////
+// BEGIN
+/////////////////////////////////////////////
+
+#set pythonpath=.
+module test_recorder_flush_sync;
+
+#set show_progress=FALSE
+
+clock {
+	timezone America/New_York;
+	starttime '2000-01-01 0:00:00';
+	stoptime '2000-01-01 1:00:00';
+}
+
+module tape
+{
+	csv_header_type NAME;
+}
+
+class test {
+	double x;
+	double min;
+	double max;
+	double refresh[s];
+}
+object test {
+	min -10;
+	max +10;
+	refresh 1min;
+	on_sync "python:tape_test_random.sync";
+	object recorder {
+		name "recorder";
+		property x;
+		file test_recorder_flush_0.csv;
+		interval -1;
+		flush -1;
+	};
+	on_commit "python:test_recorder_flush_sync.test_commit";
+}

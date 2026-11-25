@@ -777,3 +777,22 @@ def test_python_module_failures(tmp_path, monkeypatch, source, code, message):
     runner = Runner("-v", model=pymodel(name, stop="2020-01-01 00:00:00 UTC"))
     assert runner.returncode == code
     assert any(message.format(name=name) in line for line in runner.stderr), runner.stderr
+
+def test_setexitcode(monkeypatch):
+    """A handler can set the exit code of a run that otherwise succeeds;
+    the run goes on, and a failure keeps its own code"""
+    import sys, types # pylint: disable=import-outside-toplevel,multiple-imports
+    def sync(name, t): # pylint: disable=unused-argument
+        runner = Runner.current()
+        assert runner.setexitcode(exitcodes.RUNERR) in (exitcodes.SUCCESS, exitcodes.RUNERR)
+        return t + 3600
+    monkeypatch.setitem(sys.modules, "exitcode_test", types.SimpleNamespace(sync=sync))
+    runner = Runner(model=make('object thing { on_sync "python:exitcode_test.sync"; }'))
+    assert runner.returncode == exitcodes.RUNERR
+    assert runner.steps == 4
+    def init(name, t): # pylint: disable=unused-argument
+        Runner.current().setexitcode(exitcodes.RUNERR)
+        return False
+    monkeypatch.setitem(sys.modules, "exitcode_test", types.SimpleNamespace(init=init))
+    runner = Runner(model=make('object thing { on_init "python:exitcode_test.init"; }'))
+    assert runner.returncode == exitcodes.INIERR
