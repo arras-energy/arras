@@ -10,6 +10,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 arras = ["unitfile.txt"]
+"pypower._pypower" = ["LICENSE", "README.md"]
 
 [project]
 name = "arras"
@@ -46,14 +47,15 @@ arras = "arras.main:main"
 assert = "assert:load"
 climate = "climate:load"
 tape = "tape:load"
+pypower = "pypower:load"
 
 [tool.pytest.ini_options]
-testpaths = ["src/arras/_test", "src/assert/_test", "src/climate/_test", "src/tape/_test"]
+testpaths = ["src/arras/_test", "src/assert/_test", "src/climate/_test", "src/tape/_test", "src/pypower/_test"]
 
 # Test coverage (CI runs `pytest --cov`; needs pytest-cov)
 [tool.coverage.run]
-source_pkgs = ["arras", "assert", "climate", "tape"]
-omit = ["*/arras/_test/*", "*/assert/_test/*", "*/climate/_test/*", "*/tape/_test/*"]
+source_pkgs = ["arras", "assert", "climate", "tape", "pypower"]
+omit = ["*/arras/_test/*", "*/assert/_test/*", "*/climate/_test/*", "*/tape/_test/*", "*/pypower/_test/*", "*/pypower/_pypower/*"]
 branch = true
 relative_files = true
 
@@ -63,6 +65,7 @@ source = ["src/arras/","*/site-packages/arras/"]
 assert = ["src/assert/","*/site-packages/assert/"]
 climate = ["src/climate/","*/site-packages/climate/"]
 tape = ["src/tape/","*/site-packages/tape/"]
+pypower = ["src/pypower/","*/site-packages/pypower/"]
 
 [tool.coverage.report]
 show_missing = true

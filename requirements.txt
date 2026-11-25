@@ -1,0 +1,4 @@
+# Third-party dependencies (read by pyproject.toml); numpy and scipy are for the
+# PYPOWER solver vendored in src/pypower/_pypower
+numpy
+scipy

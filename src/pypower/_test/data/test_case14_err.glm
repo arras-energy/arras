@@ -1,0 +1,24 @@
+#define CASE=14e
+
+module pypower
+{
+    solver_method GS;
+    save_case TRUE;    
+}
+
+clock
+{
+    timezone "America/Los_Angeles";
+    starttime "2020-01-01 00:00:00";
+    stoptime "2020-02-01 00:00:00";
+}
+
+// gridlabd: #input "case${CASE}.py" -t pypower (made by make_cases.py)
+#include "case${CASE}.glm" // case14e contains an error on line 33 which should detected
+
+
+#set savefile=case${CASE}.json
+
+// gridlabd: #on_exit 0 python3 check_case.py case${CASE}.json case${CASE}_ref.json pp_bus_1/Vm > gridlabd.diff
+// (the tests make this check after the run)
+

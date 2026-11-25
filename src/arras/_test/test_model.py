@@ -655,8 +655,12 @@ def test_json_globals(caplog):
     assert m.globals.find("mod::odd").ptype == "char1024" and m.globals.find("mod::odd").access == "PUBLIC"
     assert "global 'randomseed' not set" in caplog.text
 
-def test_gridlabd_json():
-    """JSON written by gridlabd 4.3.11 (see data/README.md)"""
+def test_gridlabd_json(monkeypatch):
+    """JSON written by gridlabd 4.3.11 (see data/README.md), read with the
+    classes in the file: the installed `pypower` package publishes the
+    current module's classes, which differ from 4.3.11's (`gen.mu_Pmax` is
+    in `pu./MW`, not `pu/MW`), so its entry point is left out"""
+    monkeypatch.setattr(arras.model, "module_entry_point", lambda name: None)
     path = os.path.join(DATA, "case14.json")
     m = Model(path)
     assert len(m.objects) == 44 and not m.check()

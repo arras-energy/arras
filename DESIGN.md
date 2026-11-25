@@ -7,7 +7,8 @@ runner decisions revised for #45, 2026-11-24;
 folders without a gridlabd install (`arras.folders`, decision 1.12, #47), 2026-11-24;
 gridlabd modules as Python packages and the `assert` module (decisions 1.13, 6.15, group 8, #49), 2026-11-24;
 the `climate` module (group 9, #51), 2026-11-24;
-the `tape` module, `Runner.setexitcode()`, and `method` properties in GLM (decisions 2.14, 6.16, group 10, #53), 2026-11-24
+the `tape` module, `Runner.setexitcode()`, and `method` properties in GLM (decisions 2.14, 6.16, group 10, #53), 2026-11-24;
+the `pypower` module and the vendored PYPOWER solver (group 11, #55), 2026-11-24
 
 ## Purpose
 
@@ -22,7 +23,8 @@ GridLAB-D. It provides:
   (`arras.model`), and modules with the solvers that keep the clock
   synchronized (`arras.module`); and
 - gridlabd modules implemented in Python, each a top-level package under
-  `src/` (`assert`, `climate`, and `tape`, decision groups 8 to 10).
+  `src/` (`assert`, `climate`, `tape`, and `pypower`, decision groups 8
+  to 11).
 
 The Python model reads, checks, edits, and writes what gridlabd reads and
 writes, without running `gridlabd`. Users get the same values, text, and
@@ -235,6 +237,21 @@ published at https://arras-energy.github.io/arras rather than under
 | 10.8 | Classes that the violation recorder and metrics collectors read (powerflow, residential) are found by class name and read by property name, so they may come from gridlabd JSON or GLM stand-ins; group expressions use the find-language subset of `assert._find` (8.6, open question 6). |
 | 10.9 | The tests port every gridlabd autotest in `module/tape/autotest/` except the two deltamode tests, to `src/tape/_test/data/`, with the changes listed in `src/tape/_test/data/README.md` (GLM stand-ins for powerflow and residential classes, IANA time zones, `randomvar` refreshes replaced by a seeded Python handler, one-week runs for the random tests). gridlabd's own outputs in the autotest folder (`test_player_header_output.csv`, `test_multiplayer_record_*.csv`) are compared line for line. Without a gridlabd build in the session, the published properties were checked against the C++ source, not against `gridlabd --modhelp tape`. |
 
+### 11. The `pypower` module (`src/pypower/`, #55)
+
+| # | Decision |
+|---|---|
+| 11.1 | The package reproduces gridlabd's `module/pypower` (`pypower.cpp`, `pypower_solver.py`, and the class files): the classes `bus`, `branch`, `dcline`, `gen`, `gencost`, `geodata`, `load`, `powerplant`, `powerline`, `relay`, `scada`, `shunt`, `transformer`, and `weather` in registration order, with the published property names, types, units, keywords (in reverse publication order, 8.1), defaults (including the values the `create()` functions set), flags, descriptions, pass configurations, and readiness levels; the event handlers each class exports; and the module globals in gridlabd's creation order (`pypower::message_flags`, the globals the class constructors create, then those of `init()`). One module per class, the solver call in `solver.py` (`pypower_solver.py`), and private helpers: `_common.py` (messages, state, values, complex notation), `_base.py` (registration), `_module.py` (the module solvers and the data exchange of `pypower.cpp`), `_controller.py` (object controllers), `_weather.py` (weather files). |
+| 11.2 | PYPOWER is vendored as `pypower._pypower`: the 75 modules of PYPOWER 5.1.16 (the version gridlabd pins in `python/requirements.csv`, BSD license) that `runpf()` and `runopf()` import, changed only for numpy 2 and current scipy and for the package path (`src/pypower/_pypower/README.md`). The package name `pypower` (1.13) is PYPOWER's import name, so PYPOWER cannot be a dependency. numpy and scipy become the first third-party dependencies (`requirements.txt`, #19). Their results were checked against PyPI's PYPOWER 5.1.16 under numpy 1.26 and scipy 1.13 on seven cases (2026-11-24). |
+| 11.3 | The module solvers `init`, `precommit`, `sync`, `commit`, and `term` reproduce gridlabd's `on_init()` ... `on_term()`. Module initialization (importing the controllers module, allocating the solver data, reading the solver options once) runs when the first pypower object initializes, because `arras.runner` initializes modules after objects and gridlabd's `init_all()` initializes them first; the `init` solver runs it when no object did. |
+| 11.4 | The data exchange reproduces `update_controller()` and `update_solution()` item by item: a value is sent only when it differs from the item by more than `solver_update_resolution`; an integer item that is not an integer reads as -1, as `PyLong_AsLong()` gives it, so the first call sends everything, and generator rows that the solver replaced with its (float) solution count as changed at the next sync, which runs the solver again; only the changes of the columns gridlabd counts make the solver run; the solver runs the first time and after such changes; values received that changed make the time step iterate. |
+| 11.5 | Behavior that changes results is reproduced, including these quirks, each listed in its module's Caveats: the `CONTINUOUS_V` shunt reference voltage is 1 (gridlabd assigns a `bool`; with the limit crossed as reference, the `test_shunt_capacitor` autotest does not settle in 1000 iterations); a `REACTIVE` shunt adds its admittance to `Pd`; powerplants add their output and capacity to their generator at each presync, so they accumulate over the iterations of a time step; a powerline sets its branch's `rateA` to 0; DC line multipliers are copied back from the sent rows; a relay `status` of 0 is `CLOSED`; module precommit times count only as `arras.runner` uses them (2.13). Complex values keep a notation per value as gridlabd's `complex` class does (`j` for new values, the left operand's for arithmetic, `d` from `SetPolar()`), so recordings match gridlabd's. |
+| 11.6 | These gridlabd defects are fixed in `arras` only (2026-11-24) and listed under Differences from gridlabd (1.4): `bus.S` is the base load (gridlabd publishes it at the address of `Pd`); bus and load voltage angles are taken in degrees (gridlabd passes degrees to `SetPolar()` as radians); `powerplant.emissions_rate` and `total_emissions` are their own values (gridlabd publishes them at the addresses of `energy_rate` and `total_cost`), costs accumulate over the hours since the last commit (gridlabd's integer division by the time since the last precommit gives 0), and emissions accumulate; `pypower::total_loss` is the loss of the last solution (gridlabd adds every solution's); branch OPF multipliers are received from the solution; the global `pypower::default_reactive_power_fraction` is named without `[pu]`. |
+| 11.7 | Where gridlabd's behavior is undefined, the package defines it and lists it (1.4): a load without parent or `Vn` fails its initialization; divisions by zero give C's infinities and `nan`. |
+| 11.8 | The controllers module is imported as a new module object for each run (gridlabd imports it once per process); the `gridlabd` object that gridlabd adds to it is not added. Python exceptions in controllers are one error line. When the `modelname` global is empty (`arras` does not set it), saved case files are named after the run's first model file. |
+| 11.9 | Error messages are written as `gl_error()` writes them and end the run with `RUNERR` without stopping it (`Runner.setexitcode()`, 2.14), as `tape` does (10.6). |
+| 11.10 | The tests port every gridlabd autotest in `module/pypower/autotest/` (25) to `src/pypower/_test/data/`, with the changes listed in its README: cases converted to GLM by `make_cases.py` (gridlabd's `py2glm.py` conversion), IANA time zones, global units converted, `#for` loops expanded, the `#on_exit` checks made by the tests, and the weather and player files trimmed to the times run. The recordings that gridlabd wrote are compared line for line (except the first row `arras`'s recorders add, 10.4). Without a gridlabd build in the session, published properties were checked against the C++ source. |
+
 ## Module layout
 
 ```
@@ -301,6 +318,32 @@ src/tape/          gridlabd tape module with tape_file (decision group 10), entr
   _json.py         jsoncpp StyledWriter text
   _test/           pytest tests; tape_test_random.py (randomvar stand-in)
     data/          gridlabd tape autotests ported to arras; their data and outputs
+
+src/pypower/       gridlabd pypower module (decision group 11), entry point pypower:load
+  __init__.py      package docs; load(model), classes(), init/precommit/presync/sync/postsync/commit(name,t)
+  bus.py           Bus: class bus; add_load()
+  branch.py        Branch: class branch; distance()
+  dcline.py        Dcline: class dcline
+  gen.py           Gen: class gen; powerplant and cost links
+  gencost.py       Gencost: class gencost
+  geodata.py       Geodata: class geodata; geocode_decode()
+  load.py          Load: class load
+  powerplant.py    Powerplant: class powerplant
+  powerline.py     Powerline: class powerline
+  relay.py         Relay: class relay
+  scada.py         Scada: class scada
+  shunt.py         Shunt: class shunt
+  transformer.py   Transformer: class transformer
+  weather.py       Weather: class weather
+  solver.py        solver(pf_case): the PYPOWER call (gridlabd pypower_solver.py)
+  _module.py       ModuleState; module solvers; data exchange with the solver and controllers
+  _controller.py   object controllers (load, powerplant, relay)
+  _weather.py      WeatherData: weather files of buses and weather objects
+  _common.py       messages, state, values, complex notation, C arithmetic
+  _base.py         PypowerClass: registration
+  _pypower/        PYPOWER 5.1.16 (vendored, BSD license; README lists the changes)
+  _test/           pytest tests
+    data/          gridlabd pypower autotests ported to arras; cases, make_cases.py, gridlabd outputs
 ```
 
 Dependencies between modules (`runner` imports `model` when a `Runner`
@@ -337,9 +380,14 @@ flowchart LR
   tape --> oclass
   tape --> runner
   tape --> assert
+  pypower --> model
+  pypower --> module
+  pypower --> oclass
+  pypower --> runner
+  pypower --> tape
 ```
 
-`model` reaches `assert`, `climate`, and `tape` only through the `arras.modules` entry point
+`model` reaches `assert`, `climate`, `tape`, and `pypower` only through the `arras.modules` entry point
 (6.15), so `arras` does not import the module packages.
 
 ## Contracts
@@ -372,6 +420,7 @@ Each module is checked against these gridlabd files (`master` 076e78a):
 | `exitcodes` | gridlabd exit codes |
 | `runner` | `source/exec.cpp`, `object.cpp`, `main.cpp`, `module.cpp`; `python/python.cpp` (`python_module_load()`, `python_event()`); `docs/GLM/Object/Events.md`, `docs/Module/Python.md` |
 | `tape` | `module/tape/` (all files and `autotest/`), `module/tape_file/tape_file.cpp`, `source/aggregate.cpp`, `convert.cpp` (`convert_from_double()`, `convert_from_complex()`, `convert_from_set()`), `output.cpp` (`output_error()`), `exec.cpp` (`exec_setexitcode()`), `third_party/jsonCpp/jsoncpp.cpp`; `docs/Module/Tape.md`, `docs/Module/Tape/` |
+| `pypower` | `module/pypower/` (all files and `autotest/`), `converters/py2glm.py`, `source/gridlabd.h` (`gld_object` messages, `get_distance()`), `complex.h` (notations), `convert.cpp` (`convert_to_complex()`), `globals.cpp` (`global_create()`), `exec.cpp` (`init_all()`, the pass order); PYPOWER 5.1.16; `docs/Module/Pypower.md`, `docs/Module/Pypower/` |
 | `assert` | `module/assert/` (all files and `autotest/`), `source/gridlabd.h` (`INIT_MMF()`, `gld_object`, `gld_property`, `INIT_CATCHALL()`), `property.cpp`, `compare.cpp`, `convert.cpp`, `timestamp.cpp`, `object.cpp`, `enduse.cpp`, `random.cpp`, `find.cpp`; `docs/Module/Assert.md`, `docs/Module/Assert/` |
 
 ## Files and formats
@@ -387,13 +436,11 @@ Each module is checked against these gridlabd files (`master` 076e78a):
 
 | need | status |
 |---|---|
-| third-party packages | none; standard library only |
+| third-party packages | numpy and scipy, for the vendored PYPOWER of `pypower` (11.2); `arras`, `assert`, `climate`, and `tape` use the standard library only |
 | `gridlabd` install | not needed (since #45); only gridlabd-written JSON for module classes |
 
 ## Known issues to handle
 
-- `pyproject.toml` reads dependencies from `requirements.txt`, which is not
-  in the repository (#19).
 - `[project.urls]` in `pyproject.toml` point to `arras-energy/gridlabd` and
   `https://arras.energy/gridlabd`, not to this repository and its
   documentation site (#20).
@@ -423,6 +470,12 @@ Each module is checked against these gridlabd files (`master` 076e78a):
   get no effect from them in `arras` (1.12): move shared files to the user
   `share` folder (or set `ARRAS_USERDIR`), or set the folder globals in the
   model.
+
+- `arras.runner` initializes modules after objects, while gridlabd's
+  `init_all()` calls `module_initall()` before initializing objects;
+  `pypower` initializes itself at its first object's initialization
+  (11.3). A module precommit event is kept only for the first iteration
+  of a time step (2.5, 2.13).
 
 ## Open questions
 
@@ -459,3 +512,10 @@ Each module is checked against these gridlabd files (`master` 076e78a):
     gridlabd writes an error and goes on (2.14), so that every module
     package ends a run with `RUNERR` after an error message as gridlabd
     does?
+11. `pypower` fixes the gridlabd defects of 11.6 in `arras` only. Should
+    they be fixed in gridlabd too, and should the quirks kept in 11.5
+    (the `CONTINUOUS_V` reference, `REACTIVE` shunts adding to `Pd`,
+    powerplant totals that grow with iterations, powerline ratings of 0)
+    be fixed in both?
+12. Should `arras.runner` initialize modules before objects, as gridlabd
+    does (11.3)?

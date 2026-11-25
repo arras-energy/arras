@@ -1,0 +1,49 @@
+// module/pypower/autotest/test_derating.glm
+
+
+clock
+{
+    timezone "UTC";
+}
+
+module pypower;
+module tape
+{
+    csv_header_type NAME;
+}
+
+object bus
+{
+    object gen
+    {
+        object powerplant
+        {
+            operating_capacity 100 MW;
+            weather weather;
+            Tnominal 15 degC;
+            Tcutoff 45 degC;
+            derating 1 %/degC;
+            status ONLINE;
+        };
+        object recorder
+        {
+            file test_derating_powerplant_capacity.csv;
+            property Pmax,Qmax;
+            interval 0;
+        };
+    };
+}
+
+object weather
+{
+    name weather;
+    Td 10 degC;
+    object player
+    {
+        file test_derating_weather.csv;
+    };
+}
+
+#set savefile=test_derating.json
+
+// gridlabd compares test_derating_powerplant_capacity.csv with its output (the tests do)

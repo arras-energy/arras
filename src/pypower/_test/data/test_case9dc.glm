@@ -1,0 +1,14 @@
+
+#set suppress_repeat_messages=FALSE
+
+#define CASE=9dc
+#include "case.glm"
+
+//#option verbose
+//#option debug
+
+module pypower
+{
+	solver_method GS;
+	save_case TRUE;
+}
