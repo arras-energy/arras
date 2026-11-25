@@ -161,13 +161,13 @@ def test_case14_load(helpers):
 
 def test_case14_powerline(helpers):
     """Powerlines set branches 1 to 3: one line, two in series, two in
-    parallel (impedances in ohms)"""
+    parallel (impedances in ohms); the branches keep their ratings"""
     runner = autotest(helpers, "test_case14_powerline.glm")
     m = runner.model
     assert float(m.get_property("pp_branch_1", "r")) == pytest.approx(0.01938)
     assert float(m.get_property("pp_branch_2", "r")) == pytest.approx(0.05403)
     assert float(m.get_property("pp_branch_3", "x")) == pytest.approx(0.19797)
-    assert float(m.get_property("pp_branch_3", "rateA")) == 0
+    assert float(m.get_property("pp_branch_3", "rateA").split()[0]) == 9900
 
 def test_autosize(helpers):
     """A line, a device, and a transformer get autosized impedances, and
@@ -180,9 +180,11 @@ def test_autosize(helpers):
     assert float(m.get_property("gen_1", "Pg")) == pytest.approx(20.0451, abs=0.001)
 
 def test_shunt_capacitor(helpers):
-    """A discrete capacitor bank steps once and locks for its dwell time; a
-    continuous condenser settles at its limit"""
+    """A discrete capacitor bank steps and locks for its dwell time; a
+    continuous condenser moves its bus toward the voltage limit, one
+    change per dwell time"""
     runner = autotest(helpers, "test_shunt_capacitor.glm")
     m = runner.model
     assert float(m.get_property("caps_3", "admittance")) >= 1.0
     assert 0 < float(m.get_property("caps_4", "admittance")) <= 15.0
+    assert runner.steps > 1

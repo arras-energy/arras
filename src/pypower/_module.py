@@ -504,7 +504,7 @@ def _receive_solution(state:ModuleState, result:dict, t0:int, do_opf:bool) -> in
         for n, obj in enumerate(state.dclines):
             row = rows[n]
             if len(row) > 22:
-                for index, prop in ((17, "mu_Pmax"), (18, "mu_Pmin"), (19, "mu_Qminf"), (20, "mu_Qmaxf"), (21, "mu_Qmint"), (22, "mu_Qmaxt")):
+                for index, prop in enumerate(DCLINE_OPF_FIELDS, 17):
                     _recv(model, obj, prop, float(row[index]), res)
     gl_verbose(f"{n_changes} changes detected")
     return n_changes

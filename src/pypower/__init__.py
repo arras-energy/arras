@@ -197,7 +197,8 @@ Caveats
   not added.
 - `arras.runner.Runner` initializes modules after objects, while
   gridlabd's `init_all()` initializes modules first; the module therefore
-  initializes itself when its first object initializes.
+  initializes itself when its first object initializes, until the runner
+  offers `preinit` and `postinit` module events (#57).
 
 Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
 -----------------------------------------------------------------
@@ -212,10 +213,11 @@ Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
    difference shows mostly for `opf_update_interval`.
 2. `pypower::total_loss` is the sum of the branch losses of the last
    solution; gridlabd adds each solution's losses to it, so it grows
-   during a run.
+   during a run (arras-energy/gridlabd#414).
 3. Branch OPF multipliers (`mu_sfrom`, `mu_sto`, `mu_angmin`,
    `mu_angmax`) are received from the solution; gridlabd reads them from
-   the 13 columns it sends, so it never receives them.
+   the 13 columns it sends, so it never receives them
+   (arras-energy/gridlabd#414).
 4. A Python exception in a controller is written as one error line;
    gridlabd prints the traceback (`PyErr_Print()`).
 5. See each class's module for the differences that remain.

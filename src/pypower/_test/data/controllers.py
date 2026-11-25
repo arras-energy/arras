@@ -38,9 +38,10 @@ def storage_control(obj,**kwargs):
 
 def relay_control(obj,**kwargs):
     # print(f"relay_control({obj})",kwargs,file=sys.stderr)
-    if kwargs['t']%3600 < 1800 and kwargs['status'] != 0: # open the relay in first half-hour
-        return dict(t=(int(kwargs['t']/1800)+1)*1800,status=0)
-    elif kwargs['t']%3600 >= 1800 and kwargs['status'] == 0: # close the relay in second half-hour
+    # arras: status 0 is CLOSED and 1 is OPEN (gridlabd's copy has them the other way around)
+    if kwargs['t']%3600 < 1800 and kwargs['status'] != 1: # open the relay in first half-hour
         return dict(t=(int(kwargs['t']/1800)+1)*1800,status=1)
+    elif kwargs['t']%3600 >= 1800 and kwargs['status'] == 1: # close the relay in second half-hour
+        return dict(t=(int(kwargs['t']/1800)+1)*1800,status=0)
     else: # no change -- advance to next 1/2 hour when a change is anticipated
         return dict(t=(int(kwargs['t']/1800)+1)*1800)

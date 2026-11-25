@@ -51,6 +51,11 @@ The autotests are changed only where `arras` needs it:
 - `#define NO_ONEXIT TRUE` is `#define NO_ONEXIT=TRUE`.
 - The `#for` loops of `test_case14_ts.glm` and
   `test_case14_opf_dispatch_opt.glm` are expanded.
+- `relay_control()` in `controllers.py` swaps the status values 0 and 1:
+  gridlabd's copy treats 0 as open, but a relay `status` of 0 is
+  `CLOSED`, so `test_case14_controller.glm` closed the relay in the first
+  half hour and opened it in the second, the opposite of its comments
+  (arras-energy/gridlabd#413).
 - `${modelname/.glm/_record.csv}` and `${modelname/.glm/.json}` are the
   file names they give, because `arras` does not set `modelname`.
 

@@ -59,9 +59,17 @@ Caveats
 
 - With `control FROM`, `Sto` is limited with `Pmin`, `Pmax`, `Qminf`,
   and `Qmaxf`, the limits of the 'from' end, as gridlabd does.
-- The OPF multipliers are copied back from the values sent (columns 17 to
-  22 of the sent rows, with `mu_Pmin` and `mu_Pmax` swapped), as gridlabd
-  does; PYPOWER does not compute them.
+- The OPF multipliers are received from columns 17 to 22 of the DC line
+  rows of the result, which are the rows sent, because PYPOWER does not
+  compute them without `toggle_dcline()`; they keep their values.
+
+Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
+-----------------------------------------------------------------
+
+1. The multipliers are received in the columns they are sent in.
+   gridlabd sends `mu_Pmin` in column 17 and `mu_Pmax` in 18 but receives
+   `mu_Pmax` from 17 and `mu_Pmin` from 18, so each OPF time step swaps
+   them (arras-energy/gridlabd#412).
 
 References
 ----------

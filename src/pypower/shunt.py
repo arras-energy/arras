@@ -48,27 +48,32 @@ expected to:
    below `voltage_low` or above `voltage_high`, step the admittance up or
    down by `admittance_1` within `0..steps_1 admittance_1` (`DISCRETE_V`;
    warning at a limit or when the step reverses the previous one), or
-   change it by `(1-V) control_gain` within
-   `-admittance_1..admittance_1` (`CONTINUOUS_V`); then add the admittance to the bus (`REAL`: to `Pd`;
-   `REACTIVE`: to `Pd`, and its negative to `Qd`), and ask to run again
-   when the dwell time ends; when `OFFLINE`, set the admittance to 0.
+   change it by `(Vref-V) control_gain` within
+   `-admittance_1..admittance_1`, where `Vref` is the limit crossed
+   (`CONTINUOUS_V`, which then also waits `dwell_time` after a change);
+   then add the admittance to the bus (`REAL`: to `Pd`; `REACTIVE`: its
+   negative to `Qd`), and ask to run again when the dwell time ends; when
+   `OFFLINE`, set the admittance to 0.
 
 Caveats
 -------
 
-- A `REACTIVE` shunt adds its admittance to the bus's `Pd` as well as
-  subtracting it from `Qd`, as gridlabd does.
 - `voltage_high` and `voltage_low` have no unit; give them in the unit of
   the input (per unit for `MAGNITUDE`, degrees for `ANGLE`).
 - The bus resets its `Pd` and `Qd` in its presync, which comes after the
   shunt's precommit, so only the sync adds the admittance to the
   solution.
-- The `CONTINUOUS_V` reference voltage is 1 whichever limit is crossed,
-  because gridlabd assigns the `bool` test results (`Vlow`, `Vhigh`) to
-  it. The intended reference is probably the limit crossed, but with it
-  the `CONTINUOUS_V` shunt of gridlabd's `test_shunt_capacitor` autotest
-  moves too slowly to settle within its 1000 iterations, so gridlabd's
-  behavior is kept.
+
+Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
+-----------------------------------------------------------------
+
+1. The `CONTINUOUS_V` reference is the limit crossed, and a change starts
+   the dwell time. gridlabd assigns the `bool` test results (`Vlow`,
+   `Vhigh`) to the reference, so its reference is 1, and never starts the
+   dwell time of a continuous shunt, so the shunt changes at every
+   iteration until it reaches a limit (arras-energy/gridlabd#409).
+2. A `REACTIVE` shunt changes only the bus's `Qd`; gridlabd also adds its
+   admittance to `Pd` (arras-energy/gridlabd#408).
 
 References
 ----------
@@ -204,7 +209,7 @@ def update_bus(model:Any, name:str) -> None:
         add_load(model, bus, admittance, 0)
     elif get_int(model, name, "output") == CO_REACTIVE:
         out.verbose("control output is REACTIVE")
-        add_load(model, bus, admittance, -admittance)
+        add_load(model, bus, 0, -admittance)
 
 def update_control(model:Any, name:str, t0:int, update_time:bool=False) -> int:
     """`shunt::update_control()`"""
@@ -272,8 +277,10 @@ def update_control(model:Any, name:str, t0:int, update_time:bool=False) -> int:
                 t1 = int(state["last_update"] + dwell)
             elif mode == CM_CONTINUOUS_V:
                 if not update_time:
-                    vref = 1.0 if vlow or vhigh else v # gridlabd assigns the bool vlow or vhigh
+                    vref = low if vlow else (high if vhigh else v)
                     state["last_delta"] = (vref - v)*get_double(model, name, "control_gain")
+                    if state["last_delta"] != 0:
+                        state["last_update"] = t0
                     admittance += state["last_delta"]
                     if admittance < -step:
                         admittance = -step

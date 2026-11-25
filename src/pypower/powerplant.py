@@ -76,9 +76,11 @@ model, a powerplant is expected to:
    `derating` per degree of the weather's `Td` above `Tnominal` (0 above
    `Tcutoff`), and post its costs to its gencost (`POLYNOMIAL`, startup and
    shutdown costs, and `scarcity_cost,variable_cost,fixed_cost`);
-5. at each presync, unless `OFFLINE`, add `Pg`, `Qg`, and the derated
-   capacity to the generator (which sets its reactive limits), or subtract
-   `Pg` and `Qg` from the bus's demand;
+5. at each presync, unless `OFFLINE`, add the derated capacity and the
+   change of `Pg` and `Qg` since its last presync to the generator (which
+   sets its reactive limits), or subtract `Pg` and `Qg` from the bus's
+   demand; an `OFFLINE` powerplant removes the output it added to its
+   generator;
 6. at each sync, call its controller, if any, as
    `controller(NAME, city=, state=, zipcode=, country=, naics_code=,
    naics_description=, plant_code=, generator=, fuel=,
@@ -109,17 +111,22 @@ Caveats
 Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
 -----------------------------------------------------------------
 
-1. `emissions_rate` and `total_emissions` are their own values. gridlabd
+1. A powerplant on a generator adds the change of its output at each
+   presync, and removes it when it goes `OFFLINE`; gridlabd adds its
+   whole output at each presync, so the generator's totals grow with the
+   iterations of a time step (see `pypower.gen`,
+   arras-energy/gridlabd#410).
+2. `emissions_rate` and `total_emissions` are their own values. gridlabd
    publishes them at the addresses of `energy_rate` and `total_cost`, so
    they read and write those properties.
-2. Costs accumulate over the hours since the previous commit, as a
+3. Costs accumulate over the hours since the previous commit, as a
    decimal number. gridlabd computes the hours from the time of the last
    precommit, which is the commit time, with integer division, so only
    startup and shutdown costs accumulate.
-3. `total_emissions` accumulates `emissions_rate` times the energy;
+4. `total_emissions` accumulates `emissions_rate` times the energy;
    gridlabd sets it to `emissions_rate` times the energy times the hours
-   (0, see 2) at each commit.
-4. A controller exception is written as one error line (gridlabd prints
+   (0, see 3) at each commit.
+5. A controller exception is written as one error line (gridlabd prints
    the Python traceback).
 
 References
@@ -210,9 +217,11 @@ class Powerplant(PypowerClass):
         """State of a powerplant: `controller`, `is_dynamic` (on a
         generator), `last_t` (last precommit), `last_commit`, `last_Sm`
         (output magnitude at the last commit), `gen_cf`, `weather`,
-        `costobj`, `pmax` (derated capacity)"""
+        `costobj`, `pmax` (derated capacity), `added` (output added to the
+        generator)"""
         return object_state(model, name, lambda: {"controller": None, "is_dynamic": False, "last_t": 0,
-            "last_commit": None, "last_Sm": 0.0, "gen_cf": 1.0, "weather": None, "costobj": None, "pmax": 0.0})
+            "last_commit": None, "last_Sm": 0.0, "gen_cf": 1.0, "weather": None, "costobj": None, "pmax": 0.0,
+            "added": (0.0, 0.0)})
 
     @classmethod
     def init(cls, model:Any, name:str, t:int) -> bool: # pylint: disable=unused-argument
@@ -342,13 +351,18 @@ class Powerplant(PypowerClass):
     @classmethod
     def presync(cls, model:Any, name:str, t:int) -> int: # pylint: disable=unused-argument
         """`powerplant::presync()`: add the output to the parent"""
-        if get_int(model, name, "status") == GS_OFFLINE:
-            return TS_NEVER
         state = cls.state(model, name)
         parent = parent_of(model, name)
+        if get_int(model, name, "status") == GS_OFFLINE:
+            if state["is_dynamic"] and state["added"] != (0.0, 0.0):
+                add_output(model, parent, -state["added"][0], -state["added"][1])
+                state["added"] = (0.0, 0.0)
+            return TS_NEVER
         pg, qg = get_double(model, name, "Pg"), get_double(model, name, "Qg")
         if state["is_dynamic"]:
-            add_output(model, parent, pg, qg)
+            last_pg, last_qg = state["added"]
+            add_output(model, parent, pg - last_pg, qg - last_qg)
+            state["added"] = (pg, qg)
             add_pmax(model, parent, state["pmax"])
         else:
             set_double(model, parent, "Pd", get_double(model, parent, "Pd") - pg)

@@ -43,10 +43,12 @@ expected to:
 2. take `bus` from its parent's `bus_i` when it is 0 (deferring until the
    bus has a number), and refuse a `bus` that differs from it;
 3. when powerplants are attached (`powerplant` objects whose parent is the
-   generator), reset `Pmax`, `Pg`, and `Qg` to 0 at each precommit; each
-   powerplant then adds its output to `Pg` and `Qg` and its capacity to
-   `Pmax`, which sets `Qmax` to `Pmax` times
-   `pypower::default_reactive_power_fraction` and `Qmin` to `-Qmax`;
+   generator), reset `Pmax` to 0 at each presync (the generator's presync
+   comes before its powerplants'); each powerplant then adds its capacity
+   to `Pmax`, which sets `Qmax` to `Pmax` times
+   `pypower::default_reactive_power_fraction` and `Qmin` to `-Qmax`, and
+   adds the change of its output since its last presync to `Pg` and
+   `Qg` (which the first presync resets to 0);
 4. receive `Pg`, `Qg`, and `apf` from each solution, except that when the
    OPF runs and powerplants are attached, the solution's `Pg` and `Qg` are
    the powerplants' setpoints (members `Ps` and `Qs`, not published);
@@ -58,7 +60,17 @@ Only generators whose `status` is `IN_SERVICE` are passed to PYPOWER.
 Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
 -----------------------------------------------------------------
 
-1. The global is `pypower::default_reactive_power_fraction` with unit
+1. The capacity is reset at each presync, `Pg` and `Qg` at the first,
+   and the powerplants add the change of their output, so `Pmax`, `Pg`, and `Qg` do not grow with the
+   iterations of a time step. gridlabd resets `Pmax`, `Pg`, and `Qg` at
+   precommit (once per time step) while the powerplants add their whole
+   capacity and output at each presync (each iteration), so the totals
+   grow with the iterations, and a powerplant's precommit may read the
+   reset values (arras-energy/gridlabd#410). Resetting `Pg` and `Qg` at
+   each presync instead would make a slack generator iterate without end,
+   because each solution changes them. The class therefore has the
+   `PRETOPDOWN` pass and a presync handler, which gridlabd's does not.
+2. The global is `pypower::default_reactive_power_fraction` with unit
    `pu`; gridlabd creates it as
    `pypower::default_reactive_power_fraction[pu]` (the unit is part of the
    name), so `default_reactive_power_fraction` in a `module pypower` block
@@ -83,6 +95,7 @@ class Gen(PypowerClass):
     """Behavior of class `gen`"""
 
     NAME = "gen"
+    PASSCONFIG = "PRETOPDOWN|AUTOLOCK|OBSERVER"
     PROPERTIES = (
         ("bus", "int32", prop("bus number")),
         ("Pg[MW]", "double", prop("real power output (MW)")),
@@ -111,13 +124,15 @@ class Gen(PypowerClass):
         ("mu_Qmax[pu./MVAr]", "double", prop("Kuhn-Tucker multiplier on upper Qg limit (per unit/MVAr)")),
         ("mu_Qmin[pu./MVAr]", "double", prop("Kuhn-Tucker multiplier on lower Qg limit (per unit/MVAr)")),
     )
-    EVENTS = ("init", "precommit")
+    EVENTS = ("init", "precommit", "presync")
 
     @classmethod
     def state(cls, model:Any, name:str) -> dict[str,Any]:
         """State of a generator: `cost` (name of its gencost or `None`),
-        `plant_count`, and the powerplant setpoints `Ps` and `Qs`"""
-        return object_state(model, name, lambda: {"cost": None, "plant_count": 0, "Ps": 0.0, "Qs": 0.0})
+        `plant_count`, the powerplant setpoints `Ps` and `Qs`, and `started`
+        (the first presync reset `Pg` and `Qg`)"""
+        return object_state(model, name, lambda: {"cost": None, "plant_count": 0, "Ps": 0.0, "Qs": 0.0,
+            "started": False})
 
     @classmethod
     def init(cls, model:Any, name:str, t:int) -> bool|int: # pylint: disable=unused-argument
@@ -146,10 +161,20 @@ class Gen(PypowerClass):
 
     @classmethod
     def precommit(cls, model:Any, name:str, t:int) -> int: # pylint: disable=unused-argument
-        """`gen::precommit()`"""
-        if cls.state(model, name)["plant_count"] > 0:
-            for prop_ in ("Pmax", "Pg", "Qg"):
-                set_double(model, name, prop_, 0.0)
+        """`gen::precommit()`: nothing (the totals are reset in presync)"""
+        return TS_NEVER
+
+    @classmethod
+    def presync(cls, model:Any, name:str, t:int) -> int: # pylint: disable=unused-argument
+        """Reset the capacity before the powerplants add to it (gridlabd
+        resets it, and `Pg` and `Qg`, in `gen::precommit()`)"""
+        state = cls.state(model, name)
+        if state["plant_count"] > 0:
+            set_double(model, name, "Pmax", 0.0)
+            if not state["started"]:
+                state["started"] = True
+                set_double(model, name, "Pg", 0.0)
+                set_double(model, name, "Qg", 0.0)
         return TS_NEVER
 
 def add_powerplant(model:Any, name:str, plant:str) -> None:

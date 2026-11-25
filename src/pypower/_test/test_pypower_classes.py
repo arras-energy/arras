@@ -277,9 +277,9 @@ def test_powerplant_bus(helpers):
 
 def test_powerplant_gen(helpers):
     """Dispatchable powerplants add their output and derated capacity
-    (180 MW at 30 degC) to their generator at each presync (so the totals
-    grow with the iterations of a time step, as in gridlabd), ramp, and
-    post their costs"""
+    (180 MW at 30 degC) to their generator, which resets its totals at
+    each presync (so they do not grow with the iterations of a time step),
+    ramp, and post their costs"""
     runner = helpers.run(helpers.THREE_BUS + """
         object weather { name w; Td 30 degC; }
         object powerplant { name p1; parent g1; status ONLINE; operating_capacity 200 MW; ramp_rate -1 MW/min;
@@ -289,9 +289,8 @@ def test_powerplant_gen(helpers):
         module pypower { maximum_timestep 3600; with_emissions TRUE; }
         """, stop="2020-01-01 03:00:00")
     assert runner.returncode == exitcodes.SUCCESS, runner.stderr
-    pmax = value(runner, "g1", "Pmax")
-    assert pmax > 0 and pmax % 180 == pytest.approx(0)
-    assert value(runner, "g1", "Qmax") == pytest.approx(0.2*pmax)
+    assert value(runner, "g1", "Pmax") == pytest.approx(180)
+    assert value(runner, "g1", "Qmax") == pytest.approx(36)
     assert value(runner, "p1", "ramp_rate") == 1
     assert runner.model.get_property("c1", "costs") == "0.000000,20.000000,2.000000"
     assert value(runner, "p1", "total_cost") > 0
@@ -380,13 +379,16 @@ def test_shunt_errors(helpers, glm, message):
     init_error(helpers, "object shunt { dwell_time 1; }", "parent bus must be specified")
 
 def test_shunt_fixed(helpers):
-    """A fixed shunt adds its admittance to the bus; an offline shunt has
-    none"""
+    """A fixed shunt adds its admittance to the bus (`REAL`: to `Pd`;
+    `REACTIVE`: its negative to `Qd` only); an offline shunt has none"""
     runner = helpers.run(helpers.THREE_BUS + """
         object shunt { name s1; parent b2; status ONLINE; output REAL; admittance 5 MVAr; dwell_time 60; }
         object shunt { name s2; parent b3; status OFFLINE; admittance 5 MVAr; dwell_time 60; }
+        object shunt { name s3; parent b3; status ONLINE; output REACTIVE; admittance 4 MVAr; dwell_time 60; }
         """)
     assert value(runner, "b2", "Pd") == pytest.approx(55)
+    assert value(runner, "b3", "Pd") == pytest.approx(40)
+    assert value(runner, "b3", "Qd") == pytest.approx(6)
     assert value(runner, "s2", "admittance") == 0
 
 #

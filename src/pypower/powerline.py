@@ -30,20 +30,25 @@ to:
 3. at each presync, when it has a parent and no impedance of its own (a
    composition), reset its `Z`, `Y`, and `b` to 0;
 4. at each sync (children before parents): on a branch, copy `Z` to the
-   branch's `r` and `x`, `b` to `b`, its rating to `rateA`, and set the
-   branch `IN`, or set the branch `OUT` when it is `OUT`; on a powerline
-   parent, when `IN`, add its `Z` and `b` to a `SERIES` parent (rating:
-   the smaller), or its `Y` and `b` to a `PARALLEL` parent (rating: the
-   sum).
+   branch's `r` and `x` and `b` to `b`, and set the branch `IN`, or set
+   the branch `OUT` when it is `OUT`; on a powerline parent, when `IN`,
+   add its `Z` and `b` to a `SERIES` parent, or its `Y` and `b` to a
+   `PARALLEL` parent. The branch keeps its `rateA`.
 
 Caveats
 -------
 
-- `Z`, `Y`, `b`, and the rating are members that gridlabd does not
-  publish; the rating is never set, so the branch's `rateA` becomes 0, as
-  in gridlabd.
+- `Z`, `Y`, and `b` are members that gridlabd does not publish.
 - The impedance is copied in ohms to the branch's `r` and `x`, which are
   per unit, as in gridlabd.
+
+Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
+-----------------------------------------------------------------
+
+1. The branch keeps its `rateA`. gridlabd copies a rating member that
+   nothing sets (so 0) to the branch's `rateA`, and composes it as the
+   smaller (series) or the sum (parallel) of the lines' ratings
+   (arras-energy/gridlabd#411).
 
 References
 ----------
@@ -82,9 +87,9 @@ class Powerline(PypowerClass):
 
     @classmethod
     def state(cls, model:Any, name:str) -> dict[str,Any]:
-        """State of a powerline: `parent_is_branch`, `Z`, `Y`, `b`,
-        `rateA` (members gridlabd does not publish)"""
-        return object_state(model, name, lambda: {"parent_is_branch": False, "Z": 0j, "Y": 0j, "b": 0.0, "rateA": 0.0})
+        """State of a powerline: `parent_is_branch`, `Z`, `Y`, `b` (members
+        gridlabd does not publish)"""
+        return object_state(model, name, lambda: {"parent_is_branch": False, "Z": 0j, "Y": 0j, "b": 0.0})
 
     @classmethod
     def init(cls, model:Any, name:str, t:int) -> bool: # pylint: disable=unused-argument
@@ -148,7 +153,6 @@ class Powerline(PypowerClass):
                 set_double(model, parent, "r", state["Z"].real)
                 set_double(model, parent, "x", state["Z"].imag)
                 set_double(model, parent, "b", state["b"])
-                set_double(model, parent, "rateA", state["rateA"])
                 set_int(model, parent, "status", BS_IN)
             else:
                 set_int(model, parent, "status", BS_OUT)
@@ -159,12 +163,10 @@ class Powerline(PypowerClass):
                 other["Z"] = other["Z"] + state["Z"]
                 other["Y"] = _inv(other["Z"])
                 other["b"] += state["b"]
-                other["rateA"] = min(other["rateA"], state["rateA"])
             elif composition == PLC_PARALLEL:
                 other["Y"] = other["Y"] + state["Y"]
                 other["Z"] = _inv(other["Y"])
                 other["b"] += state["b"]
-                other["rateA"] += state["rateA"]
             else:
                 msg(model, name).exception(f"invalid powerline composition value '{get_int(model, name, 'composition')}' encountered")
         return TS_NEVER
