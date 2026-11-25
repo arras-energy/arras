@@ -42,7 +42,9 @@ jobs:
         with:
           python-version: "3.12" # must satisfy requires-python
           cache: pip
-          cache-dependency-path: pyproject.toml
+          cache-dependency-path: |
+            pyproject.toml
+            requirements.txt
 
       - name: Install dependencies
         run: |
@@ -51,7 +53,7 @@ jobs:
 
       - name: Create docs
         run: |
-          pdoc -o docs arras assert climate tape
+          pdoc -o docs arras assert climate tape pypower
 
       - name: Add coverage report
         # coverage-report artifact of the Validation run that triggered this one,

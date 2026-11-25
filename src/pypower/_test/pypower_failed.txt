@@ -1,0 +1,5 @@
+*** SOLVER FAILURE DIAGNOSTICS ***
+
+- No generation violations detected
+- No flow violations detected
+- No voltage violations detected

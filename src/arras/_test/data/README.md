@@ -15,4 +15,8 @@ case14.json
   `objects` (44: 14 `bus`, 20 `branch`, 5 `gen`, 5 `gencost`).
 - Used by `test_model.py` to check that `arras.model.Model` reads JSON that
   gridlabd wrote, registers its classes, and writes it back as JSON and GLM.
+  The test leaves out the `pypower` package's entry point, because the
+  module's classes changed after 4.3.11 (e.g. `gen.mu_Pmax` is in
+  `pu./MW`), so the file's objects do not fit the classes the package
+  publishes.
 - Size: 87 kB.

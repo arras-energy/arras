@@ -1,0 +1,34 @@
+#define CASE=14
+#include "case.glm"
+
+module pypower
+{
+	solver_method NR;
+}
+
+modify pp_bus_1.weather_file test_case14_weather.csv;
+modify pp_bus_1.weather_variables Sh,Sn,Sg,Wd,Ws,Td,Tw,RH,PW;
+
+module tape
+{
+	csv_header_type NAME;
+}
+
+object recorder
+{
+	parent pp_bus_1;
+	property S,Sh,Sn,Sg,Wd,Ws,Td,Tw,RH,PW;
+	file "test_case14_weather_pp_bus_1_record.csv";
+	interval 3600;
+}
+
+#set suppress_repeat_messages=FALSE
+
+clock
+{
+	timezone "America/Los_Angeles";
+	starttime "2020-08-01 00:00:00";
+	stoptime "2020-09-01 00:00:00";
+}
+
+// gridlabd compares test_case14_weather_pp_bus_1_record.csv with its output (the tests do)

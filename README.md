@@ -163,7 +163,29 @@ The `tape` module plays values from files into a model and records properties to
 ['timestamp,power[W]', '2020-01-01 00:00:00 UTC,+1500 W', '2020-01-01 01:00:00 UTC,+1500 W']
 ```
 
-The file operations of gridlabd's separate `tape_file` module are part of the `tape` package; the `memory` and `plot` tape modes are not implemented. See the [`tape` documentation](https://arras-energy.github.io/arras/tape.html) for its classes `player`, `shaper`, `recorder`, `multi_recorder`, `collector`, `histogram`, `group_recorder`, `violation_recorder`, `metrics_collector`, `metrics_collector_writer`, and `multiplayer`, and the differences from gridlabd. A distribution can provide other modules the same way, as an `arras.modules` entry point (see [`arras.model`](https://arras-energy.github.io/arras/arras/model.html)).
+The file operations of gridlabd's separate `tape_file` module are part of the `tape` package; the `memory` and `plot` tape modes are not implemented. See the [`tape` documentation](https://arras-energy.github.io/arras/tape.html) for its classes `player`, `shaper`, `recorder`, `multi_recorder`, `collector`, `histogram`, `group_recorder`, `violation_recorder`, `metrics_collector`, `metrics_collector_writer`, and `multiplayer`, and the differences from gridlabd. 
+
+The `pypower` module describes a transmission network as PYPOWER case tables (buses, branches, generators, generator costs, DC lines) and solves its power flow, or optimal power flow, whenever its inputs change. Loads, powerplants, powerlines, transformers, shunts, and relays reduce detailed models to those tables, and Python functions in a controllers module can control them:
+
+```python
+>>> from arras import Model, Runner
+>>> m = Model()
+>>> m.read_glm("""
+... clock { starttime "2020-01-01 00:00:00 UTC"; stoptime "2020-01-01 00:00:00 UTC"; }
+... module pypower;
+... object bus { name b1; type REF; baseKV 230 kV; object gen { name g1; Pmax 200 MW; Qmax 100 MVAr; Qmin -100 MVAr; }; }
+... object bus { name b2; type PQ; baseKV 230 kV; Pd 50 MW; Qd 20 MVAr; }
+... object branch { from b1; to b2; r 0.01; x 0.1; b 0.02; rateA 100 MVA; }
+... """)
+>>> Runner(model=m).returncode
+0
+>>> round(float(m.get_property("b2", "Vm")), 4), round(float(m.get_property("g1", "Pg")), 2)
+(0.9741, 50.3)
+```
+
+PYPOWER 5.1.16, the version gridlabd pins, is vendored in the package, so `arras` needs numpy and scipy. See the [`pypower` documentation](https://arras-energy.github.io/arras/pypower.html) for its classes `bus`, `branch`, `dcline`, `gen`, `gencost`, `geodata`, `load`, `powerplant`, `powerline`, `relay`, `scada`, `shunt`, `transformer`, and `weather`, the controllers module, and the differences from gridlabd.
+
+A distribution can provide other modules the same way, as an `arras.modules` entry point (see [`arras.model`](https://arras-energy.github.io/arras/arras/model.html)).
 
 ## Testing
 
@@ -173,7 +195,7 @@ pip install -e . pytest pytest-cov
 pytest --cov
 ```
 
-See `src/arras/_test/README.md`, `src/assert/_test/README.md`, `src/climate/_test/README.md`, and `src/tape/_test/README.md` for what the tests check. The coverage report for `main` is published at https://arras-energy.github.io/arras/coverage/.
+See `src/arras/_test/README.md`, `src/assert/_test/README.md`, `src/climate/_test/README.md`, `src/tape/_test/README.md`, and `src/pypower/_test/README.md` for what the tests check. The coverage report for `main` is published at https://arras-energy.github.io/arras/coverage/.
 
 ## Source Code Repositories
 

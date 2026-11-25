@@ -1,0 +1,663 @@
+object assert
+{
+    parent pp_bus_1;
+    target Vm;
+    relation ==;
+    value 1.039;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_1;
+    target Va;
+    relation ==;
+    value -13.54;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_2;
+    target Vm;
+    relation ==;
+    value 1.048;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_2;
+    target Va;
+    relation ==;
+    value -9.79;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_3;
+    target Vm;
+    relation ==;
+    value 1.031;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_3;
+    target Va;
+    relation ==;
+    value -12.28;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_4;
+    target Vm;
+    relation ==;
+    value 1.004;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_4;
+    target Va;
+    relation ==;
+    value -12.63;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_5;
+    target Vm;
+    relation ==;
+    value 1.006;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_5;
+    target Va;
+    relation ==;
+    value -11.19;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_6;
+    target Vm;
+    relation ==;
+    value 1.008;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_6;
+    target Va;
+    relation ==;
+    value -10.41;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_7;
+    target Vm;
+    relation ==;
+    value 0.998;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_7;
+    target Va;
+    relation ==;
+    value -12.76;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_8;
+    target Vm;
+    relation ==;
+    value 0.998;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_8;
+    target Va;
+    relation ==;
+    value -13.34;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_9;
+    target Vm;
+    relation ==;
+    value 1.038;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_9;
+    target Va;
+    relation ==;
+    value -14.18;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_10;
+    target Vm;
+    relation ==;
+    value 1.018;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_10;
+    target Va;
+    relation ==;
+    value -8.17;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_11;
+    target Vm;
+    relation ==;
+    value 1.013;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_11;
+    target Va;
+    relation ==;
+    value -8.94;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_12;
+    target Vm;
+    relation ==;
+    value 1.001;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_12;
+    target Va;
+    relation ==;
+    value -9.00;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_13;
+    target Vm;
+    relation ==;
+    value 1.015;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_13;
+    target Va;
+    relation ==;
+    value -8.93;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_14;
+    target Vm;
+    relation ==;
+    value 1.012;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_14;
+    target Va;
+    relation ==;
+    value -10.72;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_15;
+    target Vm;
+    relation ==;
+    value 1.016;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_15;
+    target Va;
+    relation ==;
+    value -11.35;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_16;
+    target Vm;
+    relation ==;
+    value 1.033;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_16;
+    target Va;
+    relation ==;
+    value -10.03;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_17;
+    target Vm;
+    relation ==;
+    value 1.034;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_17;
+    target Va;
+    relation ==;
+    value -11.12;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_18;
+    target Vm;
+    relation ==;
+    value 1.032;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_18;
+    target Va;
+    relation ==;
+    value -11.99;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_19;
+    target Vm;
+    relation ==;
+    value 1.050;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_19;
+    target Va;
+    relation ==;
+    value -5.41;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_20;
+    target Vm;
+    relation ==;
+    value 0.991;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_20;
+    target Va;
+    relation ==;
+    value -6.82;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_21;
+    target Vm;
+    relation ==;
+    value 1.032;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_21;
+    target Va;
+    relation ==;
+    value -7.63;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_22;
+    target Vm;
+    relation ==;
+    value 1.050;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_22;
+    target Va;
+    relation ==;
+    value -3.18;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_23;
+    target Vm;
+    relation ==;
+    value 1.045;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_23;
+    target Va;
+    relation ==;
+    value -3.38;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_24;
+    target Vm;
+    relation ==;
+    value 1.038;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_24;
+    target Va;
+    relation ==;
+    value -9.91;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_25;
+    target Vm;
+    relation ==;
+    value 1.058;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_25;
+    target Va;
+    relation ==;
+    value -8.37;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_26;
+    target Vm;
+    relation ==;
+    value 1.053;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_26;
+    target Va;
+    relation ==;
+    value -9.44;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_27;
+    target Vm;
+    relation ==;
+    value 1.038;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_27;
+    target Va;
+    relation ==;
+    value -11.36;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_28;
+    target Vm;
+    relation ==;
+    value 1.050;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_28;
+    target Va;
+    relation ==;
+    value -5.93;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_29;
+    target Vm;
+    relation ==;
+    value 1.050;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_29;
+    target Va;
+    relation ==;
+    value -3.17;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_30;
+    target Vm;
+    relation ==;
+    value 1.050;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_30;
+    target Va;
+    relation ==;
+    value -7.37;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_31;
+    target Vm;
+    relation ==;
+    value 0.982;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_31;
+    target Va;
+    relation ==;
+    value 0.00;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_32;
+    target Vm;
+    relation ==;
+    value 0.984;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_32;
+    target Va;
+    relation ==;
+    value -0.19;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_33;
+    target Vm;
+    relation ==;
+    value 0.997;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_33;
+    target Va;
+    relation ==;
+    value -0.19;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_34;
+    target Vm;
+    relation ==;
+    value 1.012;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_34;
+    target Va;
+    relation ==;
+    value -1.63;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_35;
+    target Vm;
+    relation ==;
+    value 1.049;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_35;
+    target Va;
+    relation ==;
+    value 1.78;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_36;
+    target Vm;
+    relation ==;
+    value 1.064;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_36;
+    target Va;
+    relation ==;
+    value 4.47;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_37;
+    target Vm;
+    relation ==;
+    value 1.028;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_37;
+    target Va;
+    relation ==;
+    value -1.58;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_38;
+    target Vm;
+    relation ==;
+    value 1.026;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_38;
+    target Va;
+    relation ==;
+    value 3.89;
+    within ${ARES};
+}
+
+object assert
+{
+    parent pp_bus_39;
+    target Vm;
+    relation ==;
+    value 1.030;
+    within ${MRES};
+}
+object assert
+{
+    parent pp_bus_39;
+    target Va;
+    relation ==;
+    value -14.54;
+    within ${ARES};
+}
+

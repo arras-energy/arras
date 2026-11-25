@@ -1,0 +1,16 @@
+#set suppress_repeat_messages=FALSE
+#define CASE=14
+#include "case.glm"
+
+module pypower
+{
+	//solver_method GS;
+	save_case TRUE;
+}
+
+module assert;
+#define MRES=0.05 // magnitude test resolution
+#define ARES=0.2 // angle test resolution
+
+#include "case${CASE}_verify.glm"
+

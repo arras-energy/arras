@@ -1,0 +1,9 @@
+#set suppress_repeat_messages=FALSE
+#define CASE=118
+#include "case.glm"
+
+module assert;
+#define MRES=0.02 // magnitude test resolution
+#define ARES=0.5 // angle test resolution
+
+#include "case${CASE}_verify.glm"
