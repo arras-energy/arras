@@ -64,6 +64,11 @@ Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
    or `CA` (30, -90, 150 deg), the voltage the current flows under;
    gridlabd's `load_update_fxn()` uses the line-to-neutral angles (0,
    -120, 120 deg), so a delta current is 30 deg behind its power factor.
+2. On a delta-connected load, the ZIP form computes the current and
+   impedance parts at the nominal line-to-line voltage, `sqrt(3)` times
+   `nominal_voltage`, so each part draws its share of `base_power_X` at
+   nominal voltage; gridlabd uses `nominal_voltage`, so the current part
+   draws `sqrt(3)` times its share and the impedance part 3 times.
 
 References
 ----------
@@ -96,12 +101,22 @@ ACCUMULATOR = {"power": "power", "current": "current", "impedance": "shunt"}
 BASE_ANGLES = (0.0, -2*math.pi/3, 2*math.pi/3)
 """Nominal line-to-neutral angles of phases A, B, and C"""
 
+def is_delta(model:Any, name:str) -> bool:
+    """Whether a load object is delta-connected (has phase `D`)"""
+    return get_int(model, name, "phases") & PHASE_D == PHASE_D
+
 def nominal_angle(model:Any, name:str, k:int) -> float:
     """Nominal angle of the voltage across the load on phase `k` of a load
     object: line-to-neutral, or line-to-line (`AB`, `BC`, `CA`, 30 deg
     ahead) when the load is delta-connected"""
-    delta = get_int(model, name, "phases") & PHASE_D == PHASE_D
-    return BASE_ANGLES[k] + (math.pi/6 if delta else 0.0)
+    return BASE_ANGLES[k] + (math.pi/6 if is_delta(model, name) else 0.0)
+
+def nominal_magnitude(model:Any, name:str) -> float:
+    """Nominal magnitude of the voltage across each load of a load object:
+    `nominal_voltage` (line-to-neutral), or `sqrt(3)` times it
+    (line-to-line) when the load is delta-connected"""
+    vnom = get_double(model, name, "nominal_voltage")
+    return vnom*math.sqrt(3) if is_delta(model, name) else vnom
 
 def _load_properties() -> tuple:
     result = []
@@ -223,7 +238,7 @@ class Load(Node):
                 real = base*fractions[kind]*abs(pf)
                 imag = real*math.sqrt(1/(pf*pf) - 1)
             return complex(real, -imag if pf < 0 else imag)
-        vnom = get_double(model, name, "nominal_voltage")
+        vnom = nominal_magnitude(model, name)
         result = {}
         result[f"constant_power_{x}"] = apparent("power") if fractions["power"] != 0 else 0j
         if fractions["current"] != 0:

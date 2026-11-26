@@ -82,11 +82,12 @@ object load {{ name n1; phases ABCD; nominal_voltage {VNOM}; constant_power_A 10
     expected = helpers.reference({"n0": {}, "n1": {"D": (100e3+40e3j, 0, 0)}}, [("n0", "n1", 2000)], "n0")
     assert np.max(np.abs(helpers.voltages(r.model, "n1") - expected["n1"])) < 1e-3
 
-@pytest.mark.parametrize("phases, shift", [("ABCN", 0.0), ("ABCD", math.pi/6)])
-def test_zip(helpers, phases, shift):
+@pytest.mark.parametrize("phases, shift, scale", [("ABCN", 0.0, 1.0), ("ABCD", math.pi/6, math.sqrt(3))])
+def test_zip(helpers, phases, shift, scale):
     """ZIP form: power, current, and impedance fractions of the base power
-    at their power factors, the current referred to the nominal angle of
-    the voltage across the load (line-to-line when delta-connected)"""
+    at their power factors, at the nominal voltage across the load
+    (line-to-line when delta-connected), so that each draws its share of
+    the base power at nominal voltage"""
     glm = f"""
 object node {{ name n0; phases ABCN; nominal_voltage {VNOM}; bustype SWING; }}
 object load {{ name n1; phases {phases}; parent n0; base_power_B 100000; power_fraction_B 0.5; current_fraction_B 0.3; impedance_fraction_B 0.2;
@@ -96,9 +97,12 @@ object load {{ name n1; phases {phases}; parent n0; base_power_B 100000; power_f
     p = 50000*0.9
     assert powerflow.get_complex(m, "n1", "constant_power_B") == pytest.approx(complex(p, p*math.sqrt(1/0.81 - 1)))
     s = complex(30000*0.8, -30000*0.8*math.sqrt(1/0.64 - 1))
-    i = s.conjugate()/VNOM
+    i = s.conjugate()/(VNOM*scale)
     assert powerflow.get_complex(m, "n1", "constant_current_B") == pytest.approx(cmath.rect(abs(i), cmath.phase(i) - 2*math.pi/3 + shift))
-    assert powerflow.get_complex(m, "n1", "constant_impedance_B") == pytest.approx(VNOM**2/20000)
+    assert powerflow.get_complex(m, "n1", "constant_impedance_B") == pytest.approx((VNOM*scale)**2/20000)
+    vload = cmath.rect(VNOM*scale, -2*math.pi/3 + shift)
+    assert vload*powerflow.get_complex(m, "n1", "constant_current_B").conjugate() == pytest.approx(s)
+    assert abs(vload)**2/powerflow.get_complex(m, "n1", "constant_impedance_B").conjugate() == pytest.approx(20000)
 
 def test_zip_sum_warning(helpers):
     glm = f"""
