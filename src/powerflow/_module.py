@@ -79,10 +79,35 @@ def solver_init() -> bool:
         return False
     return True
 
-def build(model:Any, state:ModuleState) -> tuple[Network,dict[tuple[str,int],int],list[str]]:
-    """Network of the model: buses of the top nodes' phases, branches of
-    the closed links, loads of the nodes and their children"""
+def isolated(model:Any) -> set[tuple[str,int]]:
+    """Phases `(top node, phase index)` taken out of the network by
+    switching devices (`Link.SWITCH`): the phases a device does not connect
+    now, at its to node, when the to node has no other link (gridlabd
+    `link::NR_init()`, strictly radial mode)"""
+    counts: dict[str,int] = {}
+    links = objects_of(model, "link")
+    ends = {}
+    for name in links:
+        fnode = top_node(model, ref(model, name, "from"))
+        tnode = top_node(model, ref(model, name, "to"))
+        ends[name] = tnode
+        for node in ((fnode,) if fnode == tnode else (fnode, tnode)):
+            counts[node] = counts.get(node, 0) + 1
+    result = set()
+    for name in links:
+        cls = behavior(model, name)
+        if not cls.SWITCH or counts.get(ends[name], 0) != 1:
+            continue
+        removed = (get_int(model, name, "phases") & 0x07) & ~cls.connected_phases(model, name)
+        result |= {(ends[name], k) for k, bit in enumerate(PHASE_BITS) if removed & bit}
+    return result
+
+def build(model:Any, state:ModuleState, dead:set[tuple[str,int]]|None=None) -> tuple[Network,dict[tuple[str,int],int],list[str]]:
+    """Network of the model: buses of the top nodes' phases (except the
+    `dead` ones), branches of the closed links, loads of the nodes and
+    their children"""
     # pylint: disable=too-many-locals,too-many-branches
+    dead = dead or set()
     net = Network()
     buses: dict[tuple[str,int],int] = {}
     nodes = objects_of(model, "node")
@@ -96,7 +121,7 @@ def build(model:Any, state:ModuleState) -> tuple[Network,dict[tuple[str,int],int
         bustype = get_int(model, name, "bustype")
         btype = "REF" if bustype in (SWING, SWING_PQ) else ("PV" if bustype == PV else "PQ")
         for k, bit in enumerate(PHASE_BITS):
-            if phases & bit:
+            if phases & bit and (name, k) not in dead:
                 v0 = get_complex(model, name, f"voltage_{'ABC'[k]}")
                 if v0 == 0:
                     v0 = nominal(vbase, k)
@@ -155,8 +180,11 @@ def solver_sync(t0:int) -> int:
     if not nodes:
         return TS_NEVER
     method = method_name(model)
+    for name in objects_of(model, "link"):
+        behavior(model, name).before_solve(model, name, t0)
     try:
-        net, buses, links = build(model, state)
+        dead = isolated(model)
+        net, buses, links = build(model, state, dead)
         result = solve(net, method, tol=PF_TOL, max_it=max(1, int(g(model, "NR_iteration_limit") or 500)))
     except (SolverError, np.linalg.LinAlgError) as err:
         gl_error(f"powerflow: {err}")
@@ -177,27 +205,34 @@ def solver_sync(t0:int) -> int:
     if not result.success:
         # gridlabd node::sync(), solver_nr() result < 0: keep the voltages reached and iterate
         gl_verbose(f"Newton-Raphson failed to converge, sticking at same iteration ({result.message}).")
-        _write_voltages(model, nodes, buses, result.V)
+        _write_voltages(model, nodes, buses, result.V, dead)
         _write_flows(model, net, links, result.V, method == "DC")
         return t0
-    changed = _write_voltages(model, nodes, buses, result.V)
+    changed = _write_voltages(model, nodes, buses, result.V, dead)
     _write_flows(model, net, links, result.V, method == "DC")
-    return t0 if changed else TS_NEVER
+    for name in objects_of(model, "link"):
+        if behavior(model, name).after_solve(model, name, t0):
+            changed = True
+    if changed:
+        return t0
+    events = [t for t in (behavior(model, name).next_event(model, name) for name in objects_of(model, "link")) if t is not None and t > t0]
+    return -min(events) if events else TS_NEVER
 
-def _write_voltages(model:Any, nodes:list[str], buses:dict[tuple[str,int],int], V:np.ndarray) -> bool: # pylint: disable=invalid-name
+def _write_voltages(model:Any, nodes:list[str], buses:dict[tuple[str,int],int], V:np.ndarray, dead:set[tuple[str,int]]) -> bool: # pylint: disable=invalid-name,too-many-arguments,too-many-positional-arguments
     changed = False
     for name in nodes:
         top = top_node(model, name)
         maxerr = get_double(model, name, "maximum_voltage_error")
         for k, x in enumerate("ABC"):
             index = buses.get((top, k))
-            if index is None:
+            if index is None and (top, k) not in dead:
                 continue
+            value = 0j if index is None else complex(V[index])
             prop = f"voltage_{x}"
             old = get_complex(model, name, prop)
-            if abs(V[index] - old) > maxerr:
+            if abs(value - old) > maxerr:
                 changed = True
-            set_complex(model, name, prop, complex(V[index]), notation(model, name, prop))
+            set_complex(model, name, prop, value, notation(model, name, prop))
         set_line_voltages(model, name)
     return changed
 

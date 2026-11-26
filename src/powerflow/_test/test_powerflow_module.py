@@ -13,7 +13,7 @@ from arras.module import Module
 from arras.model import Model
 
 MODULES = ["powerflow", "powerflow.solver", "powerflow.powerflow_object", "powerflow.powerflow_library",
-    "powerflow.node", "powerflow.link", "powerflow.line", "powerflow.line_configuration"]
+    "powerflow.node", "powerflow.link", "powerflow.fuse", "powerflow.line", "powerflow.line_configuration"]
 
 @pytest.mark.parametrize("name", MODULES)
 def test_doctests(name):
@@ -26,7 +26,7 @@ def test_load():
     classes in gridlabd's order with their parents, and its globals"""
     m = Model()
     m.read_glm("module powerflow;\n")
-    assert [x.name for x in powerflow.classes()] == ["powerflow_object", "powerflow_library", "node", "link", "line", "line_configuration"]
+    assert [x.name for x in powerflow.classes()] == ["powerflow_object", "powerflow_library", "node", "link", "fuse", "line", "line_configuration"]
     assert {"init", "sync"} <= set(Module.find("powerflow").solvers)
     assert Class.find("node", module="powerflow").parent.name == "powerflow_object"
     assert Class.find("link", module="powerflow").parent.name == "powerflow_object"

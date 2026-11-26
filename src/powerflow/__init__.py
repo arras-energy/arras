@@ -11,7 +11,7 @@ with PYPOWER's Newton-Raphson, fast-decoupled, or DC solvers, which
 replace gridlabd's own Newton-Raphson solver.
 
 This first version implements the base of gridlabd's class hierarchy:
-`powerflow_object`, `node`, and `link`, then `line` with its
+`powerflow_object`, `node`, and `link`, then `fuse`, and `line` with its
 `line_configuration` (and the empty `powerflow_library`, which gridlabd
 registers between them). The other classes (overhead and underground
 lines with their conductors and spacings, transformers, regulators,
@@ -41,6 +41,7 @@ Classes
 | `powerflow_library` | `powerflow.powerflow_library.PowerflowLibrary` | empty base of the library objects |
 | `node` | `powerflow.node.Node` | bus with loads; voltages from the solution |
 | `link` | `powerflow.link.Link` | branch between two nodes; flows from the solution |
+| `fuse` | `powerflow.fuse.Fuse` | link whose phases blow above a current limit and are replaced later |
 | `line` | `powerflow.line.Line` | link with the impedance and capacitance of a `line_configuration` and a length |
 | `line_configuration` | `powerflow.line_configuration.LineConfiguration` | line impedance and capacitance matrices per mile |
 
@@ -85,7 +86,7 @@ expected to:
 2. register the classes for module `powerflow` in
    `arras.oclass.Class.registry` (unless they are registered already), in
    gridlabd's registration order, `node` and `link` inheriting from
-   `powerflow_object` and `line` from `link`, with the properties, types, units, keywords,
+   `powerflow_object`, and `fuse` and `line` from `link`, with the properties, types, units, keywords,
    defaults, flags, descriptions, pass configurations, and technology
    readiness levels that gridlabd publishes; and
 3. create the globals in the model.
@@ -129,7 +130,7 @@ node:
     ... object node { name n2; phases ABCN; nominal_voltage 2401.8; power_A 100000+50000j; power_B 50000; }
     ... ''')
     >>> [oclass.name for oclass in powerflow.classes()]
-    ['powerflow_object', 'powerflow_library', 'node', 'link', 'line', 'line_configuration']
+    ['powerflow_object', 'powerflow_library', 'node', 'link', 'fuse', 'line', 'line_configuration']
     >>> Runner(model=m).returncode
     0
     >>> m.get_property("link:1", "flow_direction")
@@ -177,7 +178,7 @@ References
 
 - `arras-energy/gridlabd`: `module/powerflow/` (`init.cpp`,
   `powerflow.h`, `powerflow_object.cpp`, `powerflow_library.cpp`,
-  `node.cpp`, `link.cpp`, `line.cpp`, `line_configuration.cpp`,
+  `node.cpp`, `link.cpp`, `fuse.cpp`, `line.cpp`, `line_configuration.cpp`,
   `solver_nr.cpp`)
 - [Powerflow module](https://docs.gridlabd.us/index.html?owner=arras-energy&project=gridlabd&doc=/Module/Powerflow.md)
   (`docs/Module/Powerflow.md`)
@@ -196,11 +197,12 @@ from .powerflow_object import PowerflowObject
 from .powerflow_library import PowerflowLibrary
 from .node import Node
 from .link import Link
+from .fuse import Fuse
 from .line import Line
 from .line_configuration import LineConfiguration
 from . import solver
 
-CLASSES = (PowerflowObject, PowerflowLibrary, Node, Link, Line, LineConfiguration)
+CLASSES = (PowerflowObject, PowerflowLibrary, Node, Link, Fuse, Line, LineConfiguration)
 """Behavior of each class of the module, in gridlabd's registration order"""
 
 for _cls in CLASSES:
@@ -287,9 +289,9 @@ GLOBALS: tuple[tuple[str,Any,str,dict[str,Any]],...] = (
 `Globals.create()` options; type `alias` is a second name of the global
 `target`, as gridlabd publishes two names for one variable"""
 
-__all__ = ["PowerflowError", "PowerflowObject", "PowerflowLibrary", "Node", "Link", "Line",
+__all__ = ["PowerflowError", "PowerflowObject", "PowerflowLibrary", "Node", "Link", "Fuse", "Line",
     "LineConfiguration", "load", "classes", "init", "behavior", "solver", "powerflow_object",
-    "powerflow_library", "node", "link", "line", "line_configuration", "get_complex", "get_double"]
+    "powerflow_library", "node", "link", "fuse", "line", "line_configuration", "get_complex", "get_double"]
 
 def load(model:Any) -> None:
     """Load the module into a model (the `arras.modules` entry point that

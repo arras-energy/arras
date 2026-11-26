@@ -155,3 +155,17 @@ def test_all_reference():
     net.add_bus("a", 1, 1, "REF")
     result = solve(net)
     assert result.success and result.V[0] == 1
+
+def test_island_through_coupling():
+    """A phase cut off from the source is an island even though the mutual
+    coupling of a downstream line ties it to the other phases"""
+    net = Network()
+    src = [net.add_bus(f"s.{x}", VB, nominal(VB, k), "REF") for k, x in enumerate("ABC")]
+    mid = [net.add_bus(f"m.{x}", VB, nominal(VB, k)) for k, x in enumerate("ABC")]
+    end = [net.add_bus(f"e.{x}", VB, nominal(VB, k)) for k, x in enumerate("ABC")]
+    y = np.diag([0, 1e4, 1e4]).astype(complex)
+    net.add_branch(src, mid, y, -y, -y, y)
+    Y = np.linalg.inv(Z)
+    net.add_branch(mid, end, Y, -Y, -Y, Y)
+    with pytest.raises(SolverError, match="no swing bus found for m.A, e.A"):
+        solve(net)

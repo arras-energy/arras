@@ -58,8 +58,10 @@ Given a network, `solve()` is expected to return the voltages at which:
   voltages, and no losses or reactive flows.
 
 Bus types follow PYPOWER: `REF` buses keep their voltage, `PV` buses
-their voltage magnitude, `PQ` buses neither. Each island (connected part
-of the network) needs at least one `REF` bus.
+their voltage magnitude, `PQ` buses neither. Each island needs at least
+one `REF` bus; islands follow the same-phase conduction paths of the
+branches, so a phase cut off from every source is an island even when
+the mutual coupling of a line still ties it to the other phases.
 
 Examples
 --------
@@ -295,12 +297,21 @@ class Network: # pylint: disable=too-many-instance-attributes
         return S
 
     def islands(self) -> list[np.ndarray]:
-        """Bus indexes of each island"""
+        """Bus indexes of each island: buses joined by conduction paths,
+        which are the same-phase terms of the branches (`Yft[p, p]` not 0);
+        the mutual coupling between phases and phase-to-phase loads do not
+        join islands, since they cannot supply a phase that has no
+        conductor to a source"""
         n = len(self.labels)
         if n == 0:
             return []
-        Y = self.ybus(loads=False) # pylint: disable=invalid-name
-        graph = (abs(Y) > 0).astype(int)
+        rows, cols = [], []
+        for fbus, tbus, _, yft, _, _ in self.branches:
+            for p in range(3):
+                if fbus[p] >= 0 and tbus[p] >= 0 and yft[p, p] != 0:
+                    rows.append(fbus[p])
+                    cols.append(tbus[p])
+        graph = sp.csr_matrix((np.ones(len(rows)), (rows, cols)), shape=(n, n))
         count, labels = connected_components(graph, directed=False)
         return [np.flatnonzero(labels == k) for k in range(count)]
 

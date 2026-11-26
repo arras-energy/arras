@@ -51,6 +51,19 @@ their parent (loads added, voltages copied, grandchildren moved, nominal
 voltage replaced); a link to a child node deferred until the node
 initializes.
 
+test_powerflow_fuse.py
+----------------------
+
+`fuse`: registration (parent, readiness level, defaults, keywords); the
+`(1+j)/R` admittance of each phase with the default resistance; a phase
+blowing above `current_limit` with gridlabd's warnings, the node it feeds
+losing that phase, and the replacement after `mean_replacement_time` (a
+soft event) and blowing again; a blown fuse in a loop; a blown fuse
+cutting off more than its node failing the run; `status OPEN`;
+exponential replacement durations repeatable with `randomseed`; the
+initialization warnings and errors (triplex, negative limit, FD_XB and
+DC); FBS solved with NR.
+
 test_powerflow_line.py
 ----------------------
 
@@ -74,7 +87,8 @@ through a coupled line with NR, FD_XB, and FD_BX against an independent
 fixed-point solution; constant-current, constant-impedance, and delta
 loads; branch currents and losses; PV and reference buses; the DC
 solution's angles and flows; parallel branches; a branch on two phases;
-argument errors, islands without a reference bus, non-convergence.
+argument errors, islands without a reference bus (also a phase cut off
+but coupled to the others by a line), non-convergence.
 
 test_powerflow_flows.py
 -----------------------

@@ -259,6 +259,36 @@ class Link(PowerflowObject):
         return (get_int(model, name, "phases"), cls.closed(model, name), g(model, "default_resistance"))
 
     #
+    # Switching devices and solution hooks (overridden by fuse, switch, ...)
+    #
+    SWITCH = False
+    """`True` for switching devices (gridlabd `SpecialLnk == SWITCH`): when
+    one opens phases and its to node has no other link, those phases of
+    the to node are taken out of the network (voltage 0), as gridlabd's NR
+    does in strictly radial mode"""
+
+    @classmethod
+    def connected_phases(cls, model:Any, name:str) -> int:
+        """Phase bits (A, B, C) the link connects now: its phases when
+        closed, none when open"""
+        return get_int(model, name, "phases") & 0x07 if cls.closed(model, name) else 0
+
+    @classmethod
+    def before_solve(cls, model:Any, name:str, t0:int) -> None: # pylint: disable=unused-argument
+        """Called before each solution (fuses restore replaced phases)"""
+
+    @classmethod
+    def after_solve(cls, model:Any, name:str, t0:int) -> bool: # pylint: disable=unused-argument
+        """Called after each solution with the flows written; `True` asks
+        for another solution at the same time (fuses blow)"""
+        return False
+
+    @classmethod
+    def next_event(cls, model:Any, name:str) -> int|None: # pylint: disable=unused-argument
+        """Time of the link's next change (a soft event), or `None`"""
+        return None
+
+    #
     # Results
     #
     @classmethod

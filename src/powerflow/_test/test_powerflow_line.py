@@ -48,7 +48,7 @@ def test_registration():
     """`line` inherits from `link`; `line_configuration` and
     `powerflow_library` are registered in gridlabd's order"""
     Model().read_glm("module powerflow;\n")
-    assert [x.name for x in powerflow.classes()] == ["powerflow_object", "powerflow_library", "node", "link", "line", "line_configuration"]
+    assert [x.name for x in powerflow.classes()] == ["powerflow_object", "powerflow_library", "node", "link", "fuse", "line", "line_configuration"]
     line = Class.find("line", module="powerflow")
     assert line.parent.name == "link"
     assert line.find_property("length").unit == "ft" and line.find_property("length").flags & 0x0008
