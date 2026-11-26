@@ -172,6 +172,18 @@ warning; meter power consumption; DC, and FD on a center-tapped
 transformer. A three-phase meter's currents and powers from the link
 that feeds it, a tiered bill, and a swing meter.
 
+test_powerflow_zipload.py
+-------------------------
+
+`zipload`, `triplex_zipload`, and `pqload`: registration (parents,
+readiness levels, defaults, units); schedule parsing (wildcards, ranges,
+wrapping ranges, lists, errors); a zipload's constant terms against the
+equivalent load; heating degrees and the schedule value of the hour; the
+per-unit voltage check; a missing weather property; load data from a CSV
+file and a missing row; a triplex zipload's 240 V load; a pqload's
+power, impedance, and current against the equivalent load, and its
+weather inputs.
+
 test_powerflow_solver.py
 ------------------------
 

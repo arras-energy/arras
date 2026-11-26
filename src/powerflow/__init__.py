@@ -20,7 +20,8 @@ classes), and the `overhead_line`, `underground_line`, and
 `capacitor`, `load`, and `meter` subclasses of `node`, and the triplex
 classes (`triplex_node`, `triplex_meter`, `triplex_load`, with
 `triplex_line` and the center-tapped transformer solved on split-phase
-buses). The other classes ( loads, meters, triplex nodes, ...) derive from these
+buses), and the weather-driven loads `pqload`, `zipload`, and
+`triplex_zipload`. The other classes ( loads, meters, triplex nodes, ...) derive from these
 and are to be added as behavior classes that derive from
 `powerflow.node.Node`, `powerflow.link.Link`, and `powerflow.line.Line`.
 
@@ -68,11 +69,14 @@ Classes
 | `triplex_line_conductor` | `powerflow.triplex_line_conductor.TriplexLineConductor` | triplex conductor data |
 | `triplex_load` | `powerflow.triplex_load.TriplexLoad` | triplex node with constant power, current, and impedance loads (or their ZIP form) |
 | `switch` | `powerflow.switch.Switch` | link with a banked or individual switch on each phase |
+| `pqload` | `powerflow.pqload.PQLoad` | load whose impedance, current, and power follow the weather |
 | `restoration` | `powerflow.restoration.Restoration` | post-fault reconfiguration settings (initialization; the algorithm needs `fault_check`) |
 | `power_metrics` | `powerflow.power_metrics.PowerMetrics` | IEEE 1366 reliability indices, computed when the reliability module calls it |
 | `recloser` | `powerflow.recloser.Recloser` | switch with reclosing settings (reclosing needs `fault_check`) |
 | `sectionalizer` | `powerflow.sectionalizer.Sectionalizer` | switch that opens after an upstream recloser (needs `fault_check`) |
+| `triplex_zipload` | `powerflow.triplex_zipload.TriplexZipLoad` | triplex load whose ZIP form follows the weather and a schedule |
 | `pole_configuration` | `powerflow.pole_configuration.PoleConfiguration` | utility pole design data |
+| `zipload` | `powerflow.zipload.ZipLoad` | load whose ZIP form follows the weather and a schedule |
 
 Globals
 -------
@@ -159,7 +163,7 @@ node:
     ... object node { name n2; phases ABCN; nominal_voltage 2401.8; power_A 100000+50000j; power_B 50000; }
     ... ''')
     >>> [oclass.name for oclass in powerflow.classes()]
-    ['powerflow_object', 'powerflow_library', 'node', 'link', 'capacitor', 'fuse', 'meter', 'line', 'line_spacing', 'overhead_line', 'underground_line', 'overhead_line_conductor', 'underground_line_conductor', 'line_configuration', 'transformer_configuration', 'transformer', 'load', 'regulator_configuration', 'regulator', 'triplex_node', 'triplex_meter', 'triplex_line', 'triplex_line_configuration', 'triplex_line_conductor', 'switch', 'restoration', 'power_metrics', 'recloser', 'sectionalizer', 'triplex_load', 'pole_configuration']
+    ['powerflow_object', 'powerflow_library', 'node', 'link', 'capacitor', 'fuse', 'meter', 'line', 'line_spacing', 'overhead_line', 'underground_line', 'overhead_line_conductor', 'underground_line_conductor', 'line_configuration', 'transformer_configuration', 'transformer', 'load', 'regulator_configuration', 'regulator', 'triplex_node', 'triplex_meter', 'triplex_line', 'triplex_line_configuration', 'triplex_line_conductor', 'switch', 'pqload', 'restoration', 'power_metrics', 'recloser', 'sectionalizer', 'triplex_load', 'triplex_zipload', 'pole_configuration', 'zipload']
     >>> Runner(model=m).returncode
     0
     >>> m.get_property("link:1", "flow_direction")
@@ -240,6 +244,9 @@ from .load import Load
 from .triplex_node import TriplexNode
 from .triplex_meter import TriplexMeter
 from .triplex_load import TriplexLoad
+from .pqload import PQLoad
+from .zipload import ZipLoad
+from .triplex_zipload import TriplexZipLoad
 from .switch import Switch
 from .recloser import Recloser
 from .sectionalizer import Sectionalizer
@@ -258,7 +265,8 @@ from . import solver
 CLASSES = (PowerflowObject, PowerflowLibrary, Node, Link, Capacitor, Fuse, Meter, Line, LineSpacing, OverheadLine, UndergroundLine,
     OverheadLineConductor, UndergroundLineConductor, LineConfiguration, TransformerConfiguration,
     Transformer, Load, RegulatorConfiguration, Regulator, TriplexNode, TriplexMeter, TriplexLine, TriplexLineConfiguration, TriplexLineConductor,
-    Switch, Restoration, PowerMetrics, Recloser, Sectionalizer, TriplexLoad, PoleConfiguration)
+    Switch, PQLoad, Restoration, PowerMetrics, Recloser, Sectionalizer, TriplexLoad, TriplexZipLoad, PoleConfiguration,
+    ZipLoad)
 """Behavior of each class of the module, in gridlabd's registration order"""
 
 for _cls in CLASSES:
@@ -350,10 +358,10 @@ GLOBALS: tuple[tuple[str,Any,str,dict[str,Any]],...] = (
 `target`, as gridlabd publishes two names for one variable"""
 
 __all__ = ["PowerflowError", "PowerflowObject", "PowerflowLibrary", "Node", "Link", "Fuse", "Line",
-    "LineSpacing", "OverheadLine", "UndergroundLine", "TriplexLine", "Transformer", "Regulator", "Switch", "Recloser", "Sectionalizer", "Capacitor", "Load", "Meter", "TriplexNode", "TriplexMeter", "TriplexLoad", "OverheadLineConductor", "UndergroundLineConductor", "LineConfiguration",
+    "LineSpacing", "OverheadLine", "UndergroundLine", "TriplexLine", "Transformer", "Regulator", "Switch", "Recloser", "Sectionalizer", "Capacitor", "Load", "Meter", "TriplexNode", "TriplexMeter", "TriplexLoad", "PQLoad", "ZipLoad", "TriplexZipLoad", "OverheadLineConductor", "UndergroundLineConductor", "LineConfiguration",
     "TransformerConfiguration", "RegulatorConfiguration", "TriplexLineConfiguration", "TriplexLineConductor", "Restoration",
     "PowerMetrics", "PoleConfiguration", "load", "classes", "init", "behavior", "solver",
-    "powerflow_object", "powerflow_library", "node", "link", "fuse", "line", "line_spacing", "overhead_line", "underground_line", "triplex_line", "transformer", "regulator", "switch", "recloser", "sectionalizer", "capacitor", "meter", "triplex_node", "triplex_meter", "triplex_load",
+    "powerflow_object", "powerflow_library", "node", "link", "fuse", "line", "line_spacing", "overhead_line", "underground_line", "triplex_line", "transformer", "regulator", "switch", "recloser", "sectionalizer", "capacitor", "meter", "triplex_node", "triplex_meter", "triplex_load", "pqload", "zipload", "triplex_zipload",
     "overhead_line_conductor", "underground_line_conductor", "line_configuration",
     "transformer_configuration", "regulator_configuration", "triplex_line_configuration", "triplex_line_conductor", "restoration",
     "power_metrics", "pole_configuration", "get_complex", "get_double"]
