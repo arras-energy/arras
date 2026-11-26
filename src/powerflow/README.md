@@ -1,0 +1,100 @@
+# powerflow
+
+Python implementation of the gridlabd `powerflow` module for Arras Energy. Users load it with `module powerflow;` in a GLM model, and solve the unbalanced three-phase power flow of a distribution network at each time step with PYPOWER's Newton-Raphson, fast-decoupled, or DC solvers (`powerflow.solver`). See the package documentation (`powerflow/__init__.py`) for the globals, the solver, and the differences from gridlabd, and `DESIGN.md` decision group 12 for the design decisions.
+
+## Class hierarchy
+
+Solid arrows are published inheritance (gridlabd `PT_INHERIT`): the class has its parent's properties and is `isa()` its parent. Dotted arrows are C++ relations only: the class derives from the other in gridlabd's C++ code, or answers `isa()` for it, without inheriting its properties.
+
+```mermaid
+classDiagram
+    direction LR
+    class powerflow_object {
+        <<abstract>>
+        phases
+        nominal_voltage
+    }
+    class node {
+        bustype
+        voltage_A/B/C
+        power_X / current_X / shunt_X
+    }
+    class link_["link"] {
+        from
+        to
+        status
+        power_in / power_out / losses
+    }
+    class fuse {
+        current_limit
+        phase_X_status
+        mean_replacement_time
+    }
+    class line {
+        configuration
+        length
+    }
+    class powerflow_library {
+        <<library>>
+    }
+    class line_configuration {
+        z11..z33
+        c11..c33
+    }
+    class triplex_line_configuration {
+        z11 z12 z21 z22
+    }
+    powerflow_object <|-- node
+    powerflow_object <|-- link_
+    link_ <|-- fuse
+    link_ <|-- line
+    powerflow_library <|.. line_spacing
+    powerflow_library <|.. overhead_line_conductor
+    powerflow_library <|.. underground_line_conductor
+    powerflow_library <|.. triplex_line_conductor
+    powerflow_library <|.. line_configuration
+    line_configuration <|.. triplex_line_configuration
+    powerflow_library <|.. transformer_configuration
+    powerflow_library <|.. regulator_configuration
+    powerflow_library <|.. pole_configuration
+    powerflow_library <|.. restoration
+    powerflow_library <|.. power_metrics
+```
+
+## Classes
+
+Classes are listed in gridlabd's registration order. TRL is the technology readiness level gridlabd gives the class (9 proven, 8 qualified, 7 prototype).
+
+| Class | Parent | Python class | TRL | Function |
+| ----- | ------ | ------------ | --- | -------- |
+| `powerflow_object` | — | `powerflow_object.PowerflowObject` | 9 | Abstract base of network objects: phases and nominal voltage, with the phase checks every node and link runs at initialization. |
+| `powerflow_library` | — | `powerflow_library.PowerflowLibrary` | 9 | Empty base of the library (data) objects, registered to keep gridlabd's class order. `LibraryObject` adds the initialization checks of the library classes. |
+| `node` | `powerflow_object` | `node.Node` | 9 | A bus: one solver bus per phase. Holds the wye and delta constant-power, constant-current, and constant-impedance loads; its voltages are written from each solution. Swing, PV, and PQ bus types; child nodes fold into their parent. |
+| `link` | `powerflow_object` | `link.Link` | 9 | A branch between two nodes, with its 3x3 admittance blocks; its currents, powers, losses, and flow direction are written from each solution. Base of the line, switch, and transformer classes (admittance and solution hooks). A plain `link` is a small resistance on each phase. |
+| `fuse` | `link` | `fuse.Fuse` | 8 | A link whose phases blow when their current exceeds `current_limit` and are replaced after `mean_replacement_time` (a soft event). A node fed only by the fuse loses the blown phases. |
+| `line` | `link` | `line.Line` | 9 | A line of a given length, the pi model of its configuration's impedance and capacitance matrices (capacitance only with `powerflow::line_capacitance`). Base of the overhead, underground, and triplex lines. |
+| `line_spacing` | — | `line_spacing.LineSpacing` | 9 | Distances between the phase and neutral wires and to earth, for overhead and underground line impedances. |
+| `overhead_line_conductor` | — | `overhead_line_conductor.OverheadLineConductor` | 9 | Resistance, geometric mean radius, diameter, ratings, weight, and strength of an overhead conductor. |
+| `underground_line_conductor` | — | `underground_line_conductor.UndergroundLineConductor` | 9 | Dimensions, resistances, and ratings of a concentric-neutral or tape-shielded underground cable. |
+| `line_configuration` | — | `line_configuration.LineConfiguration` | 9 | Impedance (ohm/mile) and capacitance (nF/mile) matrices of a line, or the conductors and spacing they are computed from. |
+| `transformer_configuration` | — | `transformer_configuration.TransformerConfiguration` | 9 | Connection, voltages, kVA ratings, series and shunt impedances (per unit), losses, and thermal and in-rush data of a transformer. |
+| `regulator_configuration` | — | `regulator_configuration.RegulatorConfiguration` | 9 | Connection, band, delays, taps, transducer ratios, line drop compensation, and control mode of a voltage regulator. |
+| `triplex_line_configuration` | — | `triplex_line_configuration.TriplexLineConfiguration` | 9 | Conductors, insulation, and diameter of a split-phase secondary cable, or its 2x2 impedance matrix. A `line_configuration` for `isa()`. |
+| `triplex_line_conductor` | — | `triplex_line_conductor.TriplexLineConductor` | 9 | Resistance, geometric mean radius, and ratings of a triplex conductor. |
+| `restoration` | — | `restoration.Restoration` | 7 | Settings for reconfiguring the network after a fault: feeder and microgrid limits, vertices, links, and voltage limits. Initialization only; the algorithm runs when `fault_check` is ported. |
+| `power_metrics` | — | `power_metrics.PowerMetrics` | 8 | IEEE 1366 reliability indices (SAIFI, SAIDI, CAIDI, ASAI, MAIFI), computed when the reliability module calls it. |
+| `pole_configuration` | — | `pole_configuration.PoleConfiguration` | 9 | Material, dimensions, design loads, overload and strength factors, and degradation of a utility pole. Creates `powerflow::climate_impact_zone`. |
+
+## Other modules of the package
+
+| Module | Function |
+| ------ | -------- |
+| `solver.py` | The three-phase network (`Network`) and its solution with PYPOWER's `newtonpf()`, `fdpf()`, and `dcpf()` (`solve()`). |
+| `_module.py` | The module's `init` and `sync` solvers: builds the network from the model's nodes and links, solves it, and writes the results. |
+| `_common.py` | Constants, messages, object and module state, and property access shared by the classes. |
+| `_base.py` | Class registration from each behavior class's attributes. |
+| `_test/` | The tests (see `_test/README.md`). |
+
+## Not yet ported
+
+The other gridlabd powerflow classes derive from the classes above and are to be added as behavior classes that subclass `Node`, `Link`, or `Line`: `overhead_line`, `underground_line`, `triplex_line`, `switch`, `recloser`, `sectionalizer`, `transformer`, `regulator`, `capacitor`, `load`, `meter`, the triplex node classes, `fault_check`, and the others listed in gridlabd's `module/powerflow/init.cpp`. The proposed order is in `DESIGN.md`, open question 12.

@@ -367,6 +367,7 @@ src/pypower/       gridlabd pypower module (decision group 11), entry point pypo
     data/          gridlabd pypower autotests ported to arras; cases, make_cases.py, gridlabd outputs
 
 src/powerflow/     gridlabd powerflow module, first step (decision group 12), entry point powerflow:load
+  README.md        class hierarchy diagram and class table
   __init__.py      package docs; load(model), classes(), init(name,t)
   powerflow_object.py PowerflowObject: class powerflow_object (abstract)
   node.py          Node: class node; voltages, child nodes
