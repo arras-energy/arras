@@ -131,16 +131,41 @@ def test_init_warnings(helpers, fuse, message):
 @pytest.mark.parametrize("glm,module,message", [
     (SOURCE + "object fuse { name f1; phases AS; from n0; to n1; } object node { name n1; phases AS; nominal_voltage 120; }", "", "init_fuse(obj=1;f1): fuses cannot be placed on triplex circuits"),
     (fuse_feeder("current_limit -1;"), "", "fuse:f1 has a negative current limit value!"),
-    (fuse_feeder(), "solver_method FD_XB;", "Fuses are not supported by this solver method"),
-    (fuse_feeder(), "solver_method DC;", "Fuses are not supported by this solver method"),
 ])
 def test_init_errors(helpers, glm, module, message):
     r = helpers.run(glm, module=module, lines=False)
     assert r.returncode != 0
     assert any(message in x for x in helpers.errors(r)), r.stderr
 
-def test_fbs(helpers):
-    """FBS is solved with NR, so fuses work with it"""
-    r = helpers.run(fuse_feeder("current_limit 50;"), module="solver_method FBS;", lines=False)
+@pytest.mark.parametrize("method", ["NR", "FBS", "FD_XB", "FD_BX", "DC"])
+def test_replaced_under_every_solver(helpers, method):
+    """With every solver method, a fuse blows and is replaced at its
+    replacement time (a soft event), then blows again"""
+    r = helpers.run(fuse_feeder("current_limit 50; mean_replacement_time 1800;"), module=f"solver_method {method};", stop="2020-01-01 01:10:00", lines=False)
     assert r.returncode == 0, r.stderr
+    blew = [x.split("]")[0] for x in r.stderr if "just blew" in x]
+    assert blew == ["WARNING [2020-01-01 00:00:00 UTC", "WARNING [2020-01-01 00:30:00 UTC", "WARNING [2020-01-01 01:00:00 UTC"]
     assert r.model.get_property("f1", "phase_A_status") == "BLOWN"
+
+@pytest.mark.parametrize("method", ["FD_XB", "FD_BX"])
+def test_fd_same_as_nr(helpers, method):
+    """The fast-decoupled methods solve the fuse's NR admittance (1+j)/R:
+    same voltages as NR"""
+    nr = helpers.run(fuse_feeder(), lines=False)
+    fd = helpers.run(fuse_feeder(), module=f"solver_method {method};", lines=False)
+    assert fd.returncode == 0, fd.stderr
+    assert np.max(np.abs(helpers.voltages(fd.model, "n1") - helpers.voltages(nr.model, "n1"))) < 1e-6
+    y = complex(1, 1)/1e-4
+    drop = powerflow.get_complex(fd.model, "n0", "voltage_A") - powerflow.get_complex(fd.model, "n1", "voltage_A")
+    assert abs(drop*y - powerflow.get_complex(fd.model, "f1", "current_in_A")) < 1e-6
+
+def test_dc_magnitude(helpers):
+    """DC uses the magnitude of the fuse impedance, R/sqrt(2), so the flow
+    goes from the source to the load"""
+    r = helpers.run(fuse_feeder(), module="solver_method DC;", lines=False)
+    assert r.returncode == 0, r.stderr
+    m = r.model
+    assert powerflow.get_complex(m, "f1", "power_in_A").real == pytest.approx(200000)
+    assert m.get_property("f1", "flow_direction") == "CF|BF|AF"
+    angle = np.angle(powerflow.get_complex(m, "n0", "voltage_A")) - np.angle(powerflow.get_complex(m, "n1", "voltage_A"))
+    assert angle == pytest.approx(200000*(1e-4/np.sqrt(2))/helpers.VNOM**2)

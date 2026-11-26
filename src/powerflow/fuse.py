@@ -31,15 +31,17 @@ expected to:
    warning when it is 0;
 4. set `mean_replacement_time` to 3600 s with a warning when it is not
    positive, then set `mean_repair_time` to it;
-5. with `NR` (and `FBS`, which is solved with NR): set `fuse_resistance`
-   to `powerflow::default_resistance` when it is negative (the default,
-   -1 Ohm), or with a warning when it is 0; with `FD_XB`, `FD_BX`, or `DC`:
-   fail, as gridlabd fails with methods other than FBS and NR;
+5. set `fuse_resistance` to `powerflow::default_resistance` when it is
+   negative (the default, -1 Ohm), or with a warning when it is 0,
+   whatever the solver method;
 6. when `status` is `OPEN`, set every phase to `BLOWN`.
 
 In the network, each phase the fuse has that is `GOOD` is the admittance
-`(1+j)/fuse_resistance` (gridlabd's `From_Y`), with no coupling between
-phases; a `BLOWN` phase, or every phase when `status` is `OPEN`, connects
+`(1+j)/fuse_resistance`, the admittance gridlabd's NR solver uses
+(`From_Y`), with every solver method and no coupling between phases. The
+DC method uses the magnitude of the corresponding impedance,
+`fuse_resistance/sqrt(2)`, instead of its reactance (`-fuse_resistance/2`,
+which would reverse the flow); a `BLOWN` phase, or every phase when `status` is `OPEN`, connects
 nothing. A fuse is a switching device: when it disconnects phases of a
 node that has no other link, those phases are taken out of the network and
 their voltages set to 0, as gridlabd's NR does.
@@ -56,7 +58,8 @@ During a run, at each solution:
   plus a duration drawn from an exponential distribution of that mean when
   `repair_dist_type` is `EXPONENTIAL` (truncated to whole seconds, and
   written to `mean_repair_time`); the time step is then solved again;
-- the earliest replacement time is a soft event of the module.
+- the earliest replacement time is a soft event of the module, with every
+  solver method, so the fuse is replaced at that time.
 
 Caveats
 -------
@@ -85,6 +88,11 @@ Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
    time that something else causes.
 3. With `FBS` (solved with NR), there is no warning that fuses only work
    for the attached node, since that is an FBS limitation.
+4. Fuses work with `FD_XB`, `FD_BX`, and `DC` (gridlabd fails their
+   initialization with methods other than FBS and NR, and has neither FD
+   nor DC), with NR's admittance; DC uses its impedance magnitude.
+5. `fuse_resistance` is checked with every method; gridlabd checks it
+   with NR only.
 
 References
 ----------
@@ -99,7 +107,7 @@ from typing import Any
 import numpy as np
 
 from ._base import prop, keywords
-from ._common import (PHASE_S, PHASE_BITS, LS_OPEN, SM_FBS, SM_NR, TS_NEVER, g, msg,
+from ._common import (PHASE_S, PHASE_BITS, LS_OPEN, TS_NEVER, g, msg,
     object_state, get_int, get_double, get_complex, set_double, PowerflowError)
 from .link import Link
 
@@ -121,6 +129,7 @@ class Fuse(Link):
     PARENT = "link"
     TRL = TRL_QUALIFIED
     SWITCH = True
+    MAGNITUDE = True
     PROPERTIES = (
         ("phase_A_status", "enumeration", prop(default="GOOD", keywords=_STATE_KEYWORDS)),
         ("phase_B_status", "enumeration", prop(default="GOOD", keywords=_STATE_KEYWORDS)),
@@ -148,8 +157,6 @@ class Fuse(Link):
             out.warning(f"Fuse:{name} has a negative or 0 mean replacement time - defaulting to 1 hour")
             set_double(model, name, "mean_replacement_time", 3600.0)
         set_double(model, name, "mean_repair_time", get_double(model, name, "mean_replacement_time"))
-        if g(model, "solver_method") not in (SM_NR, SM_FBS):
-            raise PowerflowError("Fuses are not supported by this solver method")
         resistance = get_double(model, name, "fuse_resistance")
         if resistance == 0:
             out.warning(f"Fuse:{name} fuse_resistance has been set to zero. This will result singular matrix. Setting to the global default.")

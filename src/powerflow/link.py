@@ -58,7 +58,9 @@ module solves, and receives from each solution, phase by phase:
 
 An open link carries nothing (its outputs are 0 and its flow is `AN|BN|CN`).
 With the `DC` solver, each phase carries its real power from the DC
-solution, with no losses.
+solution, with no losses, and its flow direction follows the sign of that
+power (the magnitudes in and out are equal, so gridlabd's rule would
+always give no flow).
 
 Admittance of the link classes
 ------------------------------
@@ -261,6 +263,10 @@ class Link(PowerflowObject):
     #
     # Switching devices and solution hooks (overridden by fuse, switch, ...)
     #
+    MAGNITUDE = False
+    """`True` when the DC method uses the magnitude of the link's impedance
+    (`powerflow.solver.Network.magnitude`)"""
+
     SWITCH = False
     """`True` for switching devices (gridlabd `SpecialLnk == SWITCH`): when
     one opens phases and its to node has no other link, those phases of
@@ -300,13 +306,15 @@ class Link(PowerflowObject):
         s_out = vt*np.conj(i_out)
         write_flows(model, name, s_in, s_out, i_in, i_out)
 
-def write_flows(model:Any, name:str, s_in:np.ndarray, s_out:np.ndarray, i_in:np.ndarray, i_out:np.ndarray) -> None: # pylint: disable=too-many-arguments,too-many-positional-arguments
-    """Write a link's outputs from its per-phase powers and currents"""
+def write_flows(model:Any, name:str, s_in:np.ndarray, s_out:np.ndarray, i_in:np.ndarray, i_out:np.ndarray, lossless:bool=False) -> None: # pylint: disable=too-many-arguments,too-many-positional-arguments
+    """Write a link's outputs from its per-phase powers and currents; with
+    `lossless` (the DC method), the flow direction follows the sign of the
+    real power, since the powers in and out are equal"""
     loss = s_in - s_out
     loss = np.where(loss.real < 0, -loss.real + 1j*loss.imag, loss)
     direction = FD_UNKNOWN
     for k, shift in enumerate((0, 4, 8)):
-        diff = abs(s_in[k]) - abs(s_out[k])
+        diff = s_in[k].real if lossless else abs(s_in[k]) - abs(s_out[k])
         if diff > ROUNDOFF:
             direction |= FD_A_NORMAL << shift
         elif diff < -ROUNDOFF:

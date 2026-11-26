@@ -177,6 +177,7 @@ def test_dc(helpers):
     assert powerflow.get_complex(m, "l01", "power_in").imag == 0
     p = powerflow.get_complex(m, "l12", "power_in_A").real
     assert p > 0 and np.angle(powerflow.get_complex(m, "n2", "voltage_A")) < 0
+    assert m.get_property("l01", "flow_direction") == "CF|BF|AF"
 
 def test_pv_node(helpers):
     """A PV node keeps its voltage magnitude"""

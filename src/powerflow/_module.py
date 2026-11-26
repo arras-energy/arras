@@ -143,7 +143,7 @@ def build(model:Any, state:ModuleState, dead:set[tuple[str,int]]|None=None) -> t
         mask = cls.phase_mask(model, name)
         fbus = [buses.get((fnode, k), -1) if mask[k] else -1 for k in range(3)]
         tbus = [buses.get((tnode, k), -1) if mask[k] else -1 for k in range(3)]
-        net.add_branch(fbus, tbus, *cached[1])
+        net.add_branch(fbus, tbus, *cached[1], magnitude=cls.MAGNITUDE)
         links.append(name)
     return net, buses, links
 
@@ -250,7 +250,7 @@ def _write_flows(model:Any, net:Network, links:list[str], V:np.ndarray, dc:bool)
             with np.errstate(divide="ignore", invalid="ignore"):
                 i_in = np.where(vf != 0, np.conj(s/np.where(vf != 0, vf, 1)), 0)
                 i_out = np.where(vt != 0, np.conj(s/np.where(vt != 0, vt, 1)), 0)
-            write_flows(model, name, s, s, i_in, i_out)
+            write_flows(model, name, s, s, i_in, i_out, lossless=True)
         else:
             i_in, i_out = currents[index]
             behavior(model, name).set_flows(model, name, vf, vt, i_in, i_out)
