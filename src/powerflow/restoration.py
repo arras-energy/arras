@@ -48,8 +48,12 @@ iterations, voltage limits 0.95 and 1.05 pu.
 Caveats
 -------
 
-- `fault_check` is not ported, so restoration never runs; only the
-  initialization is implemented.
+- `fault_check` is not ported, so restoration never runs.
+  `Restoration.perform_restoration()`, the entry point `fault_check` calls,
+  fails with gridlabd's "Restoration: fault_check object not found."; the
+  reconfiguration algorithm (gridlabd's `PerformRestoration()` and its
+  graph search) is to be ported with `fault_check` and the switch,
+  sectionalizer, and recloser classes it operates.
 
 Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
 -----------------------------------------------------------------
@@ -149,3 +153,14 @@ class Restoration(LibraryObject):
         if filename:
             with open(filename, "wt", encoding="utf-8"):
                 pass
+
+    @classmethod
+    def perform_restoration(cls, model:Any, name:str, faulting_link:int) -> int: # pylint: disable=unused-argument
+        """`perform_restoration` (gridlabd `PerformRestoration()`), which
+        `fault_check` calls after a fault: requires a `fault_check` object,
+        as gridlabd does (raises `PowerflowError`); the reconfiguration
+        itself is to be ported with `fault_check` and the switching
+        classes"""
+        if not objects_of(model, "fault_check"):
+            raise PowerflowError("Restoration: fault_check object not found.")
+        raise PowerflowError("restoration: the reconfiguration algorithm is not ported yet")

@@ -238,3 +238,11 @@ def test_restoration_unnamed_link(helpers):
     r = run(helpers, 'object node { phases ABC; nominal_voltage 120; } object restoration { name rs; feeder_power_limit "1e6"; feeder_vertex_list "node:0"; feeder_power_links "node:0"; }')
     assert r.returncode != 0
     assert any("Restoration: failed to find power calculation function for link:Unnamed" in x for x in helpers.errors(r)), r.stderr
+
+def test_perform_restoration_needs_fault_check(helpers):
+    """The entry point fault_check calls fails without fault_check, as in
+    gridlabd"""
+    from powerflow.restoration import Restoration # pylint: disable=import-outside-toplevel
+    m = helpers.model("object restoration { name rs; }", lines=False)
+    with pytest.raises(powerflow.PowerflowError, match="Restoration: fault_check object not found."):
+        Restoration.perform_restoration(m, "rs", -99)

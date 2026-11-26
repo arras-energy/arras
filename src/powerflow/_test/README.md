@@ -74,7 +74,8 @@ defaults, the `climate_impact_zone` global); valid objects of every class
 (last one set wins); center-tapped impedances from losses and copied
 secondary impedances; the shunt warning only for a shunt impedance that
 is not the default; the pole diameter; the `restoration` output file
-emptied, FBS refused, and unnamed links reported as `Unnamed`; the
+emptied, FBS refused, unnamed links reported as `Unnamed`, and
+`perform_restoration()` failing without `fault_check`; the
 initialization errors and warnings of each class with gridlabd's
 messages; `triplex_line_configuration` accepted by a `line` as a
 `line_configuration`; the `power_metrics` indices, resets, extra data,
