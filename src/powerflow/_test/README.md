@@ -213,6 +213,15 @@ input power over the efficiency, input currents); the frequency ramp at
 1 s steps and its soft event; an off drive taking out what it feeds; a
 steady start; initialization errors and warnings.
 
+test_powerflow_series_reactor.py
+--------------------------------
+
+`series_reactor`: registration; NR, FD_XB, and FD_BX solutions against
+an independent per-phase computation, and the losses; impedance parts
+taken in the order set; a zero impedance's admittance; an open reactor
+taking out its to node; DC angles from the reactance or the impedance
+magnitude.
+
 test_powerflow_solver.py
 ------------------------
 

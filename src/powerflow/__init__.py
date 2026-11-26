@@ -22,7 +22,7 @@ classes (`triplex_node`, `triplex_meter`, `triplex_load`, with
 `triplex_line` and the center-tapped transformer solved on split-phase
 buses), the weather-driven loads `pqload`, `zipload`, and
 `triplex_zipload`, the `substation` and `motor` nodes, and the `vfd`
-link. The other classes ( loads, meters, triplex nodes, ...) derive from these
+and `series_reactor` links. The other classes ( loads, meters, triplex nodes, ...) derive from these
 and are to be added as behavior classes that derive from
 `powerflow.node.Node`, `powerflow.link.Link`, and `powerflow.line.Line`.
 
@@ -72,6 +72,7 @@ Classes
 | `switch` | `powerflow.switch.Switch` | link with a banked or individual switch on each phase |
 | `substation` | `powerflow.substation.Substation` | swing node set from sequence voltages or a `pypower` load, metering the distribution load |
 | `pqload` | `powerflow.pqload.PQLoad` | load whose impedance, current, and power follow the weather |
+| `series_reactor` | `powerflow.series_reactor.SeriesReactor` | link with an uncoupled series impedance on each phase |
 | `restoration` | `powerflow.restoration.Restoration` | post-fault reconfiguration settings (initialization; the algorithm needs `fault_check`) |
 | `motor` | `powerflow.motor.Motor` | node with a single-phase or three-phase induction motor (steady-state models) |
 | `power_metrics` | `powerflow.power_metrics.PowerMetrics` | IEEE 1366 reliability indices, computed when the reliability module calls it |
@@ -167,7 +168,7 @@ node:
     ... object node { name n2; phases ABCN; nominal_voltage 2401.8; power_A 100000+50000j; power_B 50000; }
     ... ''')
     >>> [oclass.name for oclass in powerflow.classes()]
-    ['powerflow_object', 'powerflow_library', 'node', 'link', 'capacitor', 'fuse', 'meter', 'line', 'line_spacing', 'overhead_line', 'underground_line', 'overhead_line_conductor', 'underground_line_conductor', 'line_configuration', 'transformer_configuration', 'transformer', 'load', 'regulator_configuration', 'regulator', 'triplex_node', 'triplex_meter', 'triplex_line', 'triplex_line_configuration', 'triplex_line_conductor', 'switch', 'substation', 'pqload', 'restoration', 'motor', 'power_metrics', 'recloser', 'sectionalizer', 'triplex_load', 'triplex_zipload', 'vfd', 'pole_configuration', 'zipload']
+    ['powerflow_object', 'powerflow_library', 'node', 'link', 'capacitor', 'fuse', 'meter', 'line', 'line_spacing', 'overhead_line', 'underground_line', 'overhead_line_conductor', 'underground_line_conductor', 'line_configuration', 'transformer_configuration', 'transformer', 'load', 'regulator_configuration', 'regulator', 'triplex_node', 'triplex_meter', 'triplex_line', 'triplex_line_configuration', 'triplex_line_conductor', 'switch', 'substation', 'pqload', 'series_reactor', 'restoration', 'motor', 'power_metrics', 'recloser', 'sectionalizer', 'triplex_load', 'triplex_zipload', 'vfd', 'pole_configuration', 'zipload']
     >>> Runner(model=m).returncode
     0
     >>> m.get_property("link:1", "flow_direction")
@@ -263,6 +264,7 @@ from .triplex_line_configuration import TriplexLineConfiguration
 from .triplex_line_conductor import TriplexLineConductor
 from .restoration import Restoration
 from .substation import Substation
+from .series_reactor import SeriesReactor
 from .motor import Motor
 from .vfd import VFD
 from .power_metrics import PowerMetrics
@@ -272,7 +274,7 @@ from . import solver
 CLASSES = (PowerflowObject, PowerflowLibrary, Node, Link, Capacitor, Fuse, Meter, Line, LineSpacing, OverheadLine, UndergroundLine,
     OverheadLineConductor, UndergroundLineConductor, LineConfiguration, TransformerConfiguration,
     Transformer, Load, RegulatorConfiguration, Regulator, TriplexNode, TriplexMeter, TriplexLine, TriplexLineConfiguration, TriplexLineConductor,
-    Switch, Substation, PQLoad, Restoration, Motor, PowerMetrics, Recloser, Sectionalizer, TriplexLoad, TriplexZipLoad, VFD, PoleConfiguration,
+    Switch, Substation, PQLoad, SeriesReactor, Restoration, Motor, PowerMetrics, Recloser, Sectionalizer, TriplexLoad, TriplexZipLoad, VFD, PoleConfiguration,
     ZipLoad)
 """Behavior of each class of the module, in gridlabd's registration order"""
 
@@ -367,11 +369,11 @@ GLOBALS: tuple[tuple[str,Any,str,dict[str,Any]],...] = (
 __all__ = ["PowerflowError", "PowerflowObject", "PowerflowLibrary", "Node", "Link", "Fuse", "Line",
     "LineSpacing", "OverheadLine", "UndergroundLine", "TriplexLine", "Transformer", "Regulator", "Switch", "Recloser", "Sectionalizer", "Capacitor", "Load", "Meter", "TriplexNode", "TriplexMeter", "TriplexLoad", "PQLoad", "ZipLoad", "TriplexZipLoad", "OverheadLineConductor", "UndergroundLineConductor", "LineConfiguration",
     "TransformerConfiguration", "RegulatorConfiguration", "TriplexLineConfiguration", "TriplexLineConductor", "Restoration",
-    "PowerMetrics", "PoleConfiguration", "Substation", "Motor", "VFD", "load", "classes", "init", "behavior", "solver",
+    "PowerMetrics", "PoleConfiguration", "Substation", "SeriesReactor", "Motor", "VFD", "load", "classes", "init", "behavior", "solver",
     "powerflow_object", "powerflow_library", "node", "link", "fuse", "line", "line_spacing", "overhead_line", "underground_line", "triplex_line", "transformer", "regulator", "switch", "recloser", "sectionalizer", "capacitor", "meter", "triplex_node", "triplex_meter", "triplex_load", "pqload", "zipload", "triplex_zipload",
     "overhead_line_conductor", "underground_line_conductor", "line_configuration",
     "transformer_configuration", "regulator_configuration", "triplex_line_configuration", "triplex_line_conductor", "restoration",
-    "power_metrics", "pole_configuration", "substation", "motor", "vfd", "get_complex", "get_double"]
+    "power_metrics", "pole_configuration", "substation", "series_reactor", "motor", "vfd", "get_complex", "get_double"]
 
 def load(model:Any) -> None:
     """Load the module into a model (the `arras.modules` entry point that

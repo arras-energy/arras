@@ -138,6 +138,10 @@ classDiagram
     node <|-- substation
     node <|-- motor
     link_ <|-- vfd
+    class series_reactor {
+        phase_X_impedance
+    }
+    link_ <|-- series_reactor
     switch <|-- recloser
     switch <|-- sectionalizer
     powerflow_library <|.. line_spacing
@@ -186,6 +190,7 @@ Classes are listed in gridlabd's registration order. TRL is the technology readi
 | `switch` | `link` | `switch.Switch` | 8 | A switch on each phase: closed phases are the switch impedance, open ones connect nothing (isolating a to node fed only by them); banked majority rule or individual phases. |
 | `substation` | `node` | `substation.Substation` | 7 | A swing node whose voltages come from sequence voltages or a `pypower` `load` parent (to which it posts the distribution load); meters the distribution power, current, and energy. |
 | `pqload` | `load` | `pqload.PQLoad` | 7 | A load whose constant power, current, and impedance are linear in the weather (temperature, humidity, solar, wind, rain). |
+| `series_reactor` | `link` | `series_reactor.SeriesReactor` | 9 | A link with an uncoupled series impedance on each phase (a zero impedance is gridlabd's 1e4+1e4j S admittance). |
 | `restoration` | — | `restoration.Restoration` | 7 | Settings for reconfiguring the network after a fault: feeder and microgrid limits, vertices, links, and voltage limits. Initialization only; the algorithm runs when `fault_check` is ported. |
 | `motor` | `node` | `motor.Motor` | 1 | A node with a single-phase (capacitor-run) or three-phase induction motor: steady-state models, protection (trip and reconnect), triplex connections; its current is solved with the solution's voltage. |
 | `power_metrics` | — | `power_metrics.PowerMetrics` | 8 | IEEE 1366 reliability indices (SAIFI, SAIDI, CAIDI, ASAI, MAIFI), computed when the reliability module calls it. |
