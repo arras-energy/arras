@@ -80,6 +80,19 @@ classDiagram
         max_number_of_tries
     }
     link_ <|-- switch
+    class capacitor {
+        capacitor_X
+        switchX
+        control
+    }
+    class load {
+        constant_power_X
+        constant_current_X
+        constant_impedance_X
+        base_power_X
+    }
+    node <|-- capacitor
+    node <|-- load
     switch <|-- recloser
     switch <|-- sectionalizer
     powerflow_library <|.. line_spacing
@@ -105,6 +118,7 @@ Classes are listed in gridlabd's registration order. TRL is the technology readi
 | `powerflow_library` | — | `powerflow_library.PowerflowLibrary` | 9 | Empty base of the library (data) objects, registered to keep gridlabd's class order. `LibraryObject` adds the initialization checks of the library classes. |
 | `node` | `powerflow_object` | `node.Node` | 9 | A bus: one solver bus per phase. Holds the wye and delta constant-power, constant-current, and constant-impedance loads; its voltages are written from each solution. Swing, PV, and PQ bus types; child nodes fold into their parent. |
 | `link` | `powerflow_object` | `link.Link` | 9 | A branch between two nodes, with its 3x3 admittance blocks; its currents, powers, losses, and flow direction are written from each solution. Base of the line, switch, and transformer classes (admittance and solution hooks). A plain `link` is a small resistance on each phase. |
+| `capacitor` | `node` | `capacitor.Capacitor` | 9 | A switched shunt capacitor bank (wye or delta) with manual, voltage, VAr, VAr-voltage, or current control, dwell and delay times, and bank control. |
 | `fuse` | `link` | `fuse.Fuse` | 8 | A link whose phases blow when their current exceeds `current_limit` and are replaced after `mean_replacement_time` (a soft event). A node fed only by the fuse loses the blown phases. |
 | `line` | `link` | `line.Line` | 9 | A line of a given length, the pi model of its configuration's impedance and capacitance matrices (capacitance only with `powerflow::line_capacitance`). Base of the overhead, underground, and triplex lines. |
 | `line_spacing` | — | `line_spacing.LineSpacing` | 9 | Distances between the phase and neutral wires and to earth, for overhead and underground line impedances. |
@@ -115,6 +129,7 @@ Classes are listed in gridlabd's registration order. TRL is the technology readi
 | `line_configuration` | — | `line_configuration.LineConfiguration` | 9 | Impedance (ohm/mile) and capacitance (nF/mile) matrices of a line, or the conductors and spacing they are computed from. |
 | `transformer_configuration` | — | `transformer_configuration.TransformerConfiguration` | 9 | Connection, voltages, kVA ratings, series and shunt impedances (per unit), losses, and thermal and in-rush data of a transformer. |
 | `transformer` | `link` | `transformer.Transformer` | 9 | A transformer with gridlabd's NR admittance for its configuration's connection: wye-wye, single-phase, delta-delta (phase by phase), or delta-wye (30-degree shift); center-tapped transformers are not solved yet. |
+| `load` | `node` | `load.Load` | 9 | A node with constant power, current, and impedance loads (phase, explicit wye, explicit delta) or their ZIP form at given power factors. |
 | `regulator_configuration` | — | `regulator_configuration.RegulatorConfiguration` | 9 | Connection, band, delays, taps, transducer ratios, line drop compensation, and control mode of a voltage regulator. |
 | `regulator` | `link` | `regulator.Regulator` | 9 | A step voltage regulator: tap-ratio autotransformer with a small resistance; manual taps or automatic control of the output, remote-node, or line-drop-compensated voltage with gridlabd's dwell and delay timing. |
 | `triplex_line` | `line` | `triplex_line.TriplexLine` | 9 | A split-phase secondary line (lines 1 and 2 and a neutral): initializes and computes gridlabd's `b_mat` and `tn`, but is not solved until the triplex nodes and center-tapped transformer are ported. |
@@ -139,4 +154,4 @@ Classes are listed in gridlabd's registration order. TRL is the technology readi
 
 ## Not yet ported
 
-The other gridlabd powerflow classes derive from the classes above and are to be added as behavior classes that subclass `Node`, `Link`, or `Line`: `capacitor`, `load`, `meter`, the triplex node classes, `fault_check`, and the others listed in gridlabd's `module/powerflow/init.cpp`. The proposed order is in `DESIGN.md`, open question 12.
+The other gridlabd powerflow classes derive from the classes above and are to be added as behavior classes that subclass `Node`, `Link`, or `Line`: `meter`, the triplex node classes, `fault_check`, and the others listed in gridlabd's `module/powerflow/init.cpp`. The proposed order is in `DESIGN.md`, open question 12.

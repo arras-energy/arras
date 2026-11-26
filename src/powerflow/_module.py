@@ -153,13 +153,16 @@ def _add_loads(model:Any, name:str, net:Network, buses:dict[tuple[str,int],int])
     top = top_node(model, name)
     vbase = get_double(model, top, "nominal_voltage")
     delta = get_int(model, name, "phases") & PHASE_D == PHASE_D
+    terms = behavior(model, name).load_terms(model, name)
+    def value(kind:str, suffix:str) -> complex:
+        return get_complex(model, name, f"{kind}_{suffix}") + terms.get((kind, suffix), 0j)
     def wye(k:int, suffix:str) -> None:
-        s, i, y = (get_complex(model, name, f"{kind}_{suffix}") for kind in ("power", "current", "shunt"))
+        s, i, y = (value(kind, suffix) for kind in ("power", "current", "shunt"))
         if (s, i, y) != (0, 0, 0) and (top, k) in buses:
             net.add_wye_load(buses[(top, k)], s, i, y, nominal(vbase, k))
     def phase_to_phase(k:int, suffix:str) -> None:
         a, b = PAIRS[k]
-        s, i, y = (get_complex(model, name, f"{kind}_{suffix}") for kind in ("power", "current", "shunt"))
+        s, i, y = (value(kind, suffix) for kind in ("power", "current", "shunt"))
         if (s, i, y) != (0, 0, 0) and (top, a) in buses and (top, b) in buses:
             net.add_delta_load(buses[(top, a)], buses[(top, b)], s, i, y, nominal(vbase, a) - nominal(vbase, b))
     for k, x in enumerate("ABC"):
@@ -181,7 +184,7 @@ def solver_sync(t0:int) -> int:
     if not nodes:
         return TS_NEVER
     method = method_name(model)
-    for name in objects_of(model, "link"):
+    for name in nodes + objects_of(model, "link"):
         behavior(model, name).before_solve(model, name, t0)
     try:
         dead = isolated(model)
@@ -211,12 +214,12 @@ def solver_sync(t0:int) -> int:
         return t0
     changed = _write_voltages(model, nodes, buses, result.V, dead)
     _write_flows(model, net, links, result.V, method)
-    for name in objects_of(model, "link"):
+    for name in nodes + objects_of(model, "link"):
         if behavior(model, name).after_solve(model, name, t0):
             changed = True
     if changed:
         return t0
-    events = [t for t in (behavior(model, name).next_event(model, name) for name in objects_of(model, "link")) if t is not None and t > t0]
+    events = [t for t in (behavior(model, name).next_event(model, name) for name in nodes + objects_of(model, "link")) if t is not None and t > t0]
     return -min(events) if events else TS_NEVER
 
 def _write_voltages(model:Any, nodes:list[str], buses:dict[tuple[str,int],int], V:np.ndarray, dead:set[tuple[str,int]]) -> bool: # pylint: disable=invalid-name,too-many-arguments,too-many-positional-arguments

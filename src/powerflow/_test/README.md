@@ -142,6 +142,19 @@ at initialization and during the run; individual phases; the published
 phase; the triplex error; the recloser defaults, warnings, tries reset,
 and `change_recloser_state`; the sectionalizer's `change_sectionalizer_state`.
 
+test_powerflow_load.py
+----------------------
+
+`load` and `capacitor`: registration; the unbalanced feeder with its
+loads in `load` objects (complex and part properties, explicit delta,
+constant current, impedance) against `reference()` with NR and FD_BX, and
+the measured voltages; a part changed during a run; a delta (phase `D`)
+load; the ZIP form and its sum warning; frequency-dependent impedances;
+the triplex error. A closed capacitor against a node with the same shunt
+admittance; a manual change after the time delay; VOLT control closing
+the capacitors and counting the switches; banked VAR control after the
+dwell time; a delta capacitor on a wye node; initialization errors.
+
 test_powerflow_solver.py
 ------------------------
 

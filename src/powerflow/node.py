@@ -239,6 +239,31 @@ class Node(PowerflowObject):
             set_double(model, name, "maximum_voltage_error", nominal*float(g(model, "default_maximum_voltage_error") or 0.0))
         init_voltages(model, name)
 
+    #
+    # Load terms and solution hooks (overridden by load, capacitor, ...)
+    #
+    @classmethod
+    def load_terms(cls, model:Any, name:str) -> dict[tuple[str,str],complex]: # pylint: disable=unused-argument
+        """Loads the node adds to its accumulators, as `{(kind, suffix):
+        value}` with `kind` `power`, `current`, or `shunt` and `suffix` as in
+        the accumulator names (`A`, `AN`, `AB`, ...); none by default"""
+        return {}
+
+    @classmethod
+    def before_solve(cls, model:Any, name:str, t0:int) -> None:
+        """Called before each solution"""
+
+    @classmethod
+    def after_solve(cls, model:Any, name:str, t0:int) -> bool: # pylint: disable=unused-argument
+        """Called after each solution with the voltages and flows written;
+        `True` asks for another solution at the same time"""
+        return False
+
+    @classmethod
+    def next_event(cls, model:Any, name:str) -> int|None: # pylint: disable=unused-argument
+        """Time of the node's next change (a soft event), or `None`"""
+        return None
+
 def init_failed(model:Any, name:str, err:Exception) -> None:
     """`INIT_CATCHALL()`: the error message gridlabd writes when `init()`
     throws"""
