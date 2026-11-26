@@ -264,6 +264,21 @@ class Link(PowerflowObject):
         return y + yf, -y, -y, y + yt
 
     @classmethod
+    def bus_slots(cls, model:Any, name:str) -> tuple[list[int],list[int]]:
+        """Bus slots of the from and to nodes that the rows and columns of
+        the admittance blocks connect (-1 for none): the link's phases at
+        both ends (split-phase links override it)"""
+        mask = cls.phase_mask(model, name)
+        slots = [k if mask[k] else -1 for k in range(3)]
+        return slots, list(slots)
+
+    @classmethod
+    def paths(cls, model:Any, name:str) -> list[tuple[int,...]]|None: # pylint: disable=unused-argument
+        """Conduction paths of the admittance blocks (`powerflow.solver.Network.paths`):
+        `None` for the same slot at both ends"""
+        return None
+
+    @classmethod
     def dc_model(cls, model:Any, name:str) -> tuple[np.ndarray|None,float]: # pylint: disable=unused-argument
         """Self series impedances (3, ohms, or `None` for the diagonal of
         `inv(-Yft)`) and phase shift (radians) of the link in the DC and

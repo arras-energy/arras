@@ -218,6 +218,19 @@ class Network: # pylint: disable=too-many-instance-attributes
     delta: list[tuple[int,int,complex,complex,complex,complex]] = field(default_factory=list)
     """Delta loads `(bus a, bus b, S, I, Y, vnom)`"""
 
+    split: list[tuple[int,int,complex,complex,complex,complex]] = field(default_factory=list)
+    """Split-phase (line 1 to line 2) loads `(bus 1, bus 2, S, I, Y, vnom)`"""
+
+    paths: list[list[tuple[int,int,int,int]]|None] = field(default_factory=list)
+    """For each branch: its conduction paths as `(end a, slot a, end b, slot
+    b)` with end 0 the from end and 1 the to end, whose admittance is the
+    negative of the block term between them, or `None` for the same slot
+    at both ends (`(0, p, 1, p)`); a split-phase transformer conducts from
+    its primary slot to both secondary slots, and the coupling between the
+    two lines of a split-phase branch at one end is a path too, since the
+    lines are in phase (so the fast-decoupled matrices and the DC method
+    keep them)"""
+
     def add_bus(self, label:str, vbase:float, v0:complex, btype:str="PQ") -> int:
         """Add a bus; returns its index
 
@@ -245,18 +258,19 @@ class Network: # pylint: disable=too-many-instance-attributes
         return len(self.labels) - 1
 
     def add_branch(self, fbus:Any, tbus:Any, Yff:Any, Yft:Any, Ytf:Any, Ytt:Any, magnitude:bool=False, # pylint: disable=invalid-name,too-many-arguments,too-many-positional-arguments
-            self_impedance:Any=None, shift:float=0.0) -> None:
+            self_impedance:Any=None, shift:float=0.0, paths:list[tuple[int,...]]|None=None) -> None:
         """Add a branch: buses of phases A, B, C at each end (-1 for a phase
         not connected) and the 3x3 admittance blocks (S) such that
         `I_from = Yff V_from + Yft V_to` and `I_to = Ytf V_from + Ytt V_to`
         (currents into the branch); `magnitude`: see `Network.magnitude`;
         `self_impedance`: see `Network.impedances`; `shift`: see
-        `Network.shifts`"""
+        `Network.shifts`; `paths`: see `Network.paths`"""
         blocks = [np.asarray(x, dtype=complex).reshape(3, 3) for x in (Yff, Yft, Ytf, Ytt)]
         self.branches.append((tuple(int(x) for x in fbus), tuple(int(x) for x in tbus), *blocks))
         self.magnitude.append(bool(magnitude))
         self.impedances.append(None if self_impedance is None else np.asarray(self_impedance, dtype=complex).reshape(3))
         self.shifts.append(float(shift))
+        self.paths.append(None if paths is None else [tuple(int(x) for x in ((0, path[0], 1, path[1]) if len(path) == 2 else path)) for path in paths])
 
     def add_wye_load(self, bus:int, S:complex=0j, I:complex=0j, Y:complex=0j, vnom:complex|None=None) -> None: # pylint: disable=invalid-name,too-many-arguments,too-many-positional-arguments
         """Add a phase-to-ground load: constant power `S` (VA), current
@@ -266,6 +280,16 @@ class Network: # pylint: disable=too-many-instance-attributes
         if vnom is None:
             vnom = complex(self.vbase[bus])
         self.wye.append((bus, complex(S), complex(I), complex(Y), complex(vnom)))
+
+    def add_split_load(self, bus_1:int, bus_2:int, S:complex=0j, I:complex=0j, Y:complex=0j, vnom:complex|None=None) -> None: # pylint: disable=invalid-name,too-many-arguments,too-many-positional-arguments
+        """Add a load across the two lines of a split-phase node, whose
+        buses hold the line-to-neutral voltages in gridlabd's convention
+        (line 2 measured from the neutral to the line, so the load voltage
+        is `V_1 + V_2`); both buses draw its current (see `add_wye_load()`;
+        `vnom` is the nominal 240 V voltage)"""
+        if vnom is None:
+            vnom = complex(self.vbase[bus_1]*2)
+        self.split.append((bus_1, bus_2, complex(S), complex(I), complex(Y), complex(vnom)))
 
     def add_delta_load(self, bus_a:int, bus_b:int, S:complex=0j, I:complex=0j, Y:complex=0j, vnom:complex|None=None) -> None: # pylint: disable=invalid-name,too-many-arguments,too-many-positional-arguments
         """Add a phase-to-phase load from bus `a` to bus `b` (see
@@ -319,9 +343,13 @@ class Network: # pylint: disable=too-many-instance-attributes
                 stamp(b, b, y)
                 stamp(a, b, -y)
                 stamp(b, a, -y)
+            for a, b, _, _, y, _ in self.split:
+                for i in (a, b):
+                    for j in (a, b):
+                        stamp(i, j, y)
         return sp.csr_matrix((vals, (rows, cols)), shape=(n, n), dtype=complex)
 
-    def load_power(self, V:np.ndarray, real_only:bool=False) -> np.ndarray: # pylint: disable=invalid-name
+    def load_power(self, V:np.ndarray, real_only:bool=False) -> np.ndarray: # pylint: disable=invalid-name,too-many-locals
         """Power drawn at each bus (VA) by the constant-power and
         constant-current loads at voltages `V` (V); with `real_only`, the
         constant-impedance loads are included too (for the DC method)"""
@@ -343,6 +371,17 @@ class Network: # pylint: disable=too-many-instance-attributes
                 current += y*vab
             S[a] += V[a]*current.conjugate()
             S[b] -= V[b]*current.conjugate()
+        for a, b, s, i, y, vnom in self.split:
+            v12 = V[a] + V[b]
+            if v12 == 0:
+                continue
+            current = (s/v12).conjugate()
+            if vnom != 0:
+                current += (vnom*i.conjugate()*abs(v12)/(v12*abs(vnom))).conjugate()
+            if real_only:
+                current += y*v12
+            S[a] += V[a]*current.conjugate()
+            S[b] += V[b]*current.conjugate()
         return S
 
     def islands(self) -> list[np.ndarray]:
@@ -355,11 +394,10 @@ class Network: # pylint: disable=too-many-instance-attributes
         if n == 0:
             return []
         rows, cols = [], []
-        for fbus, tbus, _, yft, _, _ in self.branches:
-            for p in range(3):
-                if fbus[p] >= 0 and tbus[p] >= 0 and yft[p, p] != 0:
-                    rows.append(fbus[p])
-                    cols.append(tbus[p])
+        for index in range(len(self.branches)):
+            for path in self.conducting(index):
+                rows.append(self.path_bus(index, path[0], path[1]))
+                cols.append(self.path_bus(index, path[2], path[3]))
         graph = sp.csr_matrix((np.ones(len(rows)), (rows, cols)), shape=(n, n))
         count, labels = connected_components(graph, directed=False)
         return [np.flatnonzero(labels == k) for k in range(count)]
@@ -370,15 +408,35 @@ class Network: # pylint: disable=too-many-instance-attributes
         `-Yft` (the diagonal of the inverse of the series impedance, so the
         mutual coupling is in it; the fast-decoupled matrices use these)"""
         result = []
-        for index, (fbus, tbus, _, yft, _, _) in enumerate(self.branches):
+        for index in range(len(self.branches)):
             z = self.self_impedance(index)
-            for p in range(3):
-                if fbus[p] >= 0 and tbus[p] >= 0 and yft[p, p] != 0:
-                    y = 1/z[p] if z is not None and z[p] != 0 else -yft[p, p]
-                    if self.rotated(index):
-                        y = -1j*y
-                    result.append((fbus[p], tbus[p], y, self.magnitude[index]))
+            for path in self.conducting(index):
+                ea, sa, eb, sb = path
+                same = (ea, eb) == (0, 1) and sa == sb
+                y = 1/z[sa] if z is not None and same and z[sa] != 0 else -self.block(index, ea, eb)[sa, sb]
+                if self.rotated(index):
+                    y = -1j*y
+                result.append((self.path_bus(index, ea, sa), self.path_bus(index, eb, sb), y, self.magnitude[index]))
         return result
+
+    def block(self, index:int, end_a:int, end_b:int) -> np.ndarray:
+        """Admittance block of a branch between two ends (0 from, 1 to)"""
+        return self.branches[index][2 + 2*end_a + end_b]
+
+    def path_bus(self, index:int, end:int, slot:int) -> int:
+        """Bus of a branch end's slot"""
+        return self.branches[index][end][slot]
+
+    def path_list(self, index:int) -> list[tuple[int,int,int,int]]:
+        """`Network.paths` of a branch, or the same-slot paths"""
+        paths = self.paths[index] if index < len(self.paths) else None
+        return [(0, p, 1, p) for p in range(3)] if paths is None else paths
+
+    def conducting(self, index:int) -> list[tuple[int,int,int,int]]:
+        """The paths of a branch that connect two buses and conduct (their
+        block term not 0)"""
+        return [path for path in self.path_list(index) if self.path_bus(index, path[0], path[1]) >= 0
+            and self.path_bus(index, path[2], path[3]) >= 0 and self.block(index, path[0], path[2])[path[1], path[3]] != 0]
 
     def self_impedance(self, index:int) -> np.ndarray|None:
         """`Network.impedances` of a branch (`None` when not set)"""
@@ -388,15 +446,18 @@ class Network: # pylint: disable=too-many-instance-attributes
         """`Network.shifts` of a branch (0 when not set)"""
         return self.shifts[index] if index < len(self.shifts) else 0.0
 
-    def self_impedances(self, index:int) -> dict[int,complex]:
-        """Self series impedance of each phase a branch connects (ohms), by
-        phase: `Network.impedances` when set, else the diagonal of
-        `inv(-Yft)`"""
+    def self_impedances(self, index:int) -> dict[tuple[int,int,int,int],complex]:
+        """Self series impedance of each path of a branch (ohms): for the
+        same-slot paths, `Network.impedances` when set, else the diagonal of
+        `inv(-Yft)`; for explicit paths, the inverse of the negative block
+        term"""
         fbus, tbus, _, yft, _, _ = self.branches[index]
+        if index < len(self.paths) and self.paths[index] is not None:
+            return {path: complex(1/-self.block(index, path[0], path[2])[path[1], path[3]]) for path in self.conducting(index)}
         z = self.self_impedance(index)
         if z is None:
-            return _self_impedances(fbus, tbus, yft)
-        return {p: complex(z[p]) for p in range(3) if fbus[p] >= 0 and tbus[p] >= 0 and z[p] != 0}
+            return {(0, p, 1, p): v for p, v in _self_impedances(fbus, tbus, yft).items()}
+        return {(0, p, 1, p): complex(z[p]) for p in range(3) if fbus[p] >= 0 and tbus[p] >= 0 and z[p] != 0}
 
     def is_magnitude(self, index:int) -> bool:
         """`Network.magnitude` of a branch (`False` when not set)"""
@@ -564,10 +625,11 @@ def dc_reactances(net:Network, vb:np.ndarray|None=None) -> list[tuple[int,int,fl
 def _dc_branches(net:Network, vb:np.ndarray) -> list[tuple[int,int,float,float]]:
     """`dc_reactances()` with each branch phase's shift (radians)"""
     result = []
-    for index, (fbus, tbus, *_) in enumerate(net.branches):
-        for p, z in net.self_impedances(index).items():
+    for index in range(len(net.branches)):
+        for (ea, sa, eb, sb), z in net.self_impedances(index).items():
             x = _dc_x(z, net.is_magnitude(index))
-            result.append((fbus[p], tbus[p], x*net.sbase/(vb[fbus[p]]*vb[tbus[p]]), net.shift(index)))
+            i, j = net.path_bus(index, ea, sa), net.path_bus(index, eb, sb)
+            result.append((i, j, x*net.sbase/(vb[i]*vb[j]), net.shift(index) if ea != eb else 0.0))
     return result
 
 def _dc_x(z:complex, magnitude:bool) -> float:
@@ -590,16 +652,28 @@ def branch_currents(net:Network, V:np.ndarray, rotate:bool=False) -> list[tuple[
 
 def dc_branch_power(net:Network, V:np.ndarray) -> list[np.ndarray]: # pylint: disable=invalid-name
     """Real power of each branch phase (W) in the DC solution at voltages
-    `V` (V), from its from end to its to end (0 for a phase not
-    connected)"""
-    vb = np.array(net.vbase)
+    `V` (V), from its from end to its to end, by from slot (0 for a phase
+    not connected)"""
     result = []
-    for index, (fbus, tbus, *_) in enumerate(net.branches):
+    for index in range(len(net.branches)):
         flows = np.zeros(3)
-        for p, z in net.self_impedances(index).items():
-            i, j = fbus[p], tbus[p]
-            x = _dc_x(z, net.is_magnitude(index))
-            xpu = x*net.sbase/(vb[i]*vb[j])
-            flows[p] = (np.angle(V[i]) - np.angle(V[j]) - net.shift(index))/xpu*net.sbase
+        for (ea, sa, eb, sb), power in dc_path_power(net, V, index).items():
+            if ea == 0:
+                flows[sa] += power
+            if eb == 0:
+                flows[sb] -= power
         result.append(flows)
+    return result
+
+def dc_path_power(net:Network, V:np.ndarray, index:int) -> dict[tuple[int,int,int,int],float]: # pylint: disable=invalid-name
+    """Real power (W) of each path of a branch in the DC solution, from end
+    a to end b (see `Network.paths`)"""
+    vb = np.array(net.vbase)
+    result = {}
+    for path, z in net.self_impedances(index).items():
+        ea, sa, eb, sb = path
+        i, j = net.path_bus(index, ea, sa), net.path_bus(index, eb, sb)
+        x = _dc_x(z, net.is_magnitude(index))
+        xpu = x*net.sbase/(vb[i]*vb[j])
+        result[path] = (np.angle(V[i]) - np.angle(V[j]) - (net.shift(index) if ea != eb else 0.0))/xpu*net.sbase
     return result

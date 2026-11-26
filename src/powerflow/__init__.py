@@ -16,8 +16,11 @@ library classes (`powerflow_library` and the configuration, spacing,
 conductor, `restoration`, `power_metrics`, and `pole_configuration`
 classes), and the `overhead_line`, `underground_line`, and
 `triplex_line` subclasses of `line`, `transformer`, `regulator`, and
-`switch` with its subclasses `recloser` and `sectionalizer`, and the
-`capacitor` and `load` subclasses of `node`. The other classes ( loads, meters, triplex nodes, ...) derive from these
+`switch` with its subclasses `recloser` and `sectionalizer`, the
+`capacitor`, `load`, and `meter` subclasses of `node`, and the triplex
+classes (`triplex_node`, `triplex_meter`, `triplex_load`, with
+`triplex_line` and the center-tapped transformer solved on split-phase
+buses). The other classes ( loads, meters, triplex nodes, ...) derive from these
 and are to be added as behavior classes that derive from
 `powerflow.node.Node`, `powerflow.link.Link`, and `powerflow.line.Line`.
 
@@ -45,6 +48,7 @@ Classes
 | `link` | `powerflow.link.Link` | branch between two nodes; flows from the solution |
 | `capacitor` | `powerflow.capacitor.Capacitor` | node with switched shunt capacitors (manual, voltage, VAr, VAr-voltage, or current control) |
 | `fuse` | `powerflow.fuse.Fuse` | link whose phases blow above a current limit and are replaced later |
+| `meter` | `powerflow.meter.Meter` | node that meters the power through it: energy, demand, interval statistics, bills |
 | `line` | `powerflow.line.Line` | link with the impedance and capacitance of a `line_configuration` and a length |
 | `line_spacing` | `powerflow.line_spacing.LineSpacing` | distances between the wires of a line |
 | `overhead_line` | `powerflow.overhead_line.OverheadLine` | line whose matrices come from overhead conductors and spacing (Carson's equations) |
@@ -57,9 +61,12 @@ Classes
 | `regulator_configuration` | `powerflow.regulator_configuration.RegulatorConfiguration` | voltage regulator settings |
 | `transformer` | `powerflow.transformer.Transformer` | link with gridlabd's NR admittance of a wye-wye, delta-delta, delta-wye, or single-phase transformer |
 | `regulator` | `powerflow.regulator.Regulator` | link of a step voltage regulator, with manual, output voltage, remote node, or line drop compensation control |
-| `triplex_line` | `powerflow.triplex_line.TriplexLine` | split-phase secondary line (matrices only; not solved yet) |
+| `triplex_node` | `powerflow.triplex_node.TriplexNode` | split-phase node (lines 1 and 2, grounded neutral) |
+| `triplex_meter` | `powerflow.triplex_meter.TriplexMeter` | triplex node that meters the power through it |
+| `triplex_line` | `powerflow.triplex_line.TriplexLine` | split-phase secondary line joining lines 1 and 2 of triplex nodes |
 | `triplex_line_configuration` | `powerflow.triplex_line_configuration.TriplexLineConfiguration` | triplex line conductors or impedance matrix |
 | `triplex_line_conductor` | `powerflow.triplex_line_conductor.TriplexLineConductor` | triplex conductor data |
+| `triplex_load` | `powerflow.triplex_load.TriplexLoad` | triplex node with constant power, current, and impedance loads (or their ZIP form) |
 | `switch` | `powerflow.switch.Switch` | link with a banked or individual switch on each phase |
 | `restoration` | `powerflow.restoration.Restoration` | post-fault reconfiguration settings (initialization; the algorithm needs `fault_check`) |
 | `power_metrics` | `powerflow.power_metrics.PowerMetrics` | IEEE 1366 reliability indices, computed when the reliability module calls it |
@@ -152,7 +159,7 @@ node:
     ... object node { name n2; phases ABCN; nominal_voltage 2401.8; power_A 100000+50000j; power_B 50000; }
     ... ''')
     >>> [oclass.name for oclass in powerflow.classes()]
-    ['powerflow_object', 'powerflow_library', 'node', 'link', 'capacitor', 'fuse', 'line', 'line_spacing', 'overhead_line', 'underground_line', 'overhead_line_conductor', 'underground_line_conductor', 'line_configuration', 'transformer_configuration', 'transformer', 'load', 'regulator_configuration', 'regulator', 'triplex_line', 'triplex_line_configuration', 'triplex_line_conductor', 'switch', 'restoration', 'power_metrics', 'recloser', 'sectionalizer', 'pole_configuration']
+    ['powerflow_object', 'powerflow_library', 'node', 'link', 'capacitor', 'fuse', 'meter', 'line', 'line_spacing', 'overhead_line', 'underground_line', 'overhead_line_conductor', 'underground_line_conductor', 'line_configuration', 'transformer_configuration', 'transformer', 'load', 'regulator_configuration', 'regulator', 'triplex_node', 'triplex_meter', 'triplex_line', 'triplex_line_configuration', 'triplex_line_conductor', 'switch', 'restoration', 'power_metrics', 'recloser', 'sectionalizer', 'triplex_load', 'pole_configuration']
     >>> Runner(model=m).returncode
     0
     >>> m.get_property("link:1", "flow_direction")
@@ -221,6 +228,7 @@ from .node import Node
 from .link import Link
 from .capacitor import Capacitor
 from .fuse import Fuse
+from .meter import Meter
 from .line import Line
 from .line_spacing import LineSpacing
 from .overhead_line import OverheadLine
@@ -229,6 +237,9 @@ from .triplex_line import TriplexLine
 from .transformer import Transformer
 from .regulator import Regulator
 from .load import Load
+from .triplex_node import TriplexNode
+from .triplex_meter import TriplexMeter
+from .triplex_load import TriplexLoad
 from .switch import Switch
 from .recloser import Recloser
 from .sectionalizer import Sectionalizer
@@ -244,10 +255,10 @@ from .power_metrics import PowerMetrics
 from .pole_configuration import PoleConfiguration, CLIMATE_IMPACT_ZONES
 from . import solver
 
-CLASSES = (PowerflowObject, PowerflowLibrary, Node, Link, Capacitor, Fuse, Line, LineSpacing, OverheadLine, UndergroundLine,
+CLASSES = (PowerflowObject, PowerflowLibrary, Node, Link, Capacitor, Fuse, Meter, Line, LineSpacing, OverheadLine, UndergroundLine,
     OverheadLineConductor, UndergroundLineConductor, LineConfiguration, TransformerConfiguration,
-    Transformer, Load, RegulatorConfiguration, Regulator, TriplexLine, TriplexLineConfiguration, TriplexLineConductor, Switch, Restoration, PowerMetrics, Recloser,
-    Sectionalizer, PoleConfiguration)
+    Transformer, Load, RegulatorConfiguration, Regulator, TriplexNode, TriplexMeter, TriplexLine, TriplexLineConfiguration, TriplexLineConductor,
+    Switch, Restoration, PowerMetrics, Recloser, Sectionalizer, TriplexLoad, PoleConfiguration)
 """Behavior of each class of the module, in gridlabd's registration order"""
 
 for _cls in CLASSES:
@@ -328,6 +339,8 @@ GLOBALS: tuple[tuple[str,Any,str,dict[str,Any]],...] = (
     ("default_continuous_rating", 1000.0, "double", {"unit": "A"}),
     ("default_emergency_rating", 2000.0, "double", {"unit": "A"}),
     ("default_violation_rating", 0.0, "double", {"unit": "A"}),
+    # triplex_meter
+    ("market_price_name", "current_market.clearing_price", "char1024", {}),
     # pole_configuration (keywords in gridlabd's table order)
     ("climate_impact_zone", "NONE", "enumeration", {"keywords": dict(CLIMATE_IMPACT_ZONES), "description": "pole deterioration climate impact zone"}),
 )
@@ -337,10 +350,10 @@ GLOBALS: tuple[tuple[str,Any,str,dict[str,Any]],...] = (
 `target`, as gridlabd publishes two names for one variable"""
 
 __all__ = ["PowerflowError", "PowerflowObject", "PowerflowLibrary", "Node", "Link", "Fuse", "Line",
-    "LineSpacing", "OverheadLine", "UndergroundLine", "TriplexLine", "Transformer", "Regulator", "Switch", "Recloser", "Sectionalizer", "Capacitor", "Load", "OverheadLineConductor", "UndergroundLineConductor", "LineConfiguration",
+    "LineSpacing", "OverheadLine", "UndergroundLine", "TriplexLine", "Transformer", "Regulator", "Switch", "Recloser", "Sectionalizer", "Capacitor", "Load", "Meter", "TriplexNode", "TriplexMeter", "TriplexLoad", "OverheadLineConductor", "UndergroundLineConductor", "LineConfiguration",
     "TransformerConfiguration", "RegulatorConfiguration", "TriplexLineConfiguration", "TriplexLineConductor", "Restoration",
     "PowerMetrics", "PoleConfiguration", "load", "classes", "init", "behavior", "solver",
-    "powerflow_object", "powerflow_library", "node", "link", "fuse", "line", "line_spacing", "overhead_line", "underground_line", "triplex_line", "transformer", "regulator", "switch", "recloser", "sectionalizer", "capacitor",
+    "powerflow_object", "powerflow_library", "node", "link", "fuse", "line", "line_spacing", "overhead_line", "underground_line", "triplex_line", "transformer", "regulator", "switch", "recloser", "sectionalizer", "capacitor", "meter", "triplex_node", "triplex_meter", "triplex_load",
     "overhead_line_conductor", "underground_line_conductor", "line_configuration",
     "transformer_configuration", "regulator_configuration", "triplex_line_configuration", "triplex_line_conductor", "restoration",
     "power_metrics", "pole_configuration", "get_complex", "get_double"]

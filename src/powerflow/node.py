@@ -60,7 +60,12 @@ During a run, the module solver is expected to read, at each sync:
   phase-to-ground and `power_XY`, `current_XY`, `shunt_XY` phase-to-phase
   loads whatever the connection. A constant-current load's current turns
   with the voltage angle and its power follows the voltage magnitude, as
-  gridlabd computes it;
+  gridlabd computes it. A split-phase node (phase `S`) has lines 1 and 2
+  (bus slots 0 and 1, `voltage_A` and `voltage_B`, both at the angle of its
+  phase since gridlabd measures line 2 from the neutral to the line), and
+  `power_A`, `power_B`, `power_C` are its line 1, line 2, and line 1 to 2
+  loads, as gridlabd keeps them; `triplex_node` publishes them as `_1`,
+  `_2`, `_12`;
 
 and to write `voltage_A`, `voltage_B`, `voltage_C` and the line voltages
 of each node from the solution.
@@ -204,7 +209,7 @@ class Node(PowerflowObject):
             raise PowerflowError("Gauss_Seidel is a deprecated solver and has been removed")
         if float(g(model, "default_resistance") or 0.0) <= 0:
             raise PowerflowError("INIT: The global default_resistance was less than or equal to zero. default_resistance must be greater than zero.")
-        if get_double(model, name, "mean_repair_time") < 0:
+        if model.objects[name].oclass.find_property("mean_repair_time") and get_double(model, name, "mean_repair_time") < 0:
             out.warning(f"node:{name} has a negative mean_repair_time, set to 1 hour")
             set_double(model, name, "mean_repair_time", 0.0)
         parent = ref(model, name, "parent")
@@ -237,7 +242,76 @@ class Node(PowerflowObject):
             raise PowerflowError("nominal_voltage is not set")
         if maxerr == 0:
             set_double(model, name, "maximum_voltage_error", nominal*float(g(model, "default_maximum_voltage_error") or 0.0))
+        cls.init_voltages(model, name)
+
+    @classmethod
+    def init_voltages(cls, model:Any, name:str) -> None:
+        """Initial voltages (see the module description, step 6)"""
         init_voltages(model, name)
+
+    #
+    # Buses (overridden by the split-phase nodes)
+    #
+    VOLTAGES = ("voltage_A", "voltage_B", "voltage_C")
+    """Voltage properties of the bus slots 0, 1, 2 (A, B, C; lines 1, 2,
+    and the neutral of a split-phase node)"""
+
+    SUFFIXES = ("A", "B", "C")
+    """Load accumulator suffixes of a split-phase node's line 1, line 2,
+    and line 1 to 2 loads (gridlabd keeps them in `power[0..2]`)"""
+
+    @classmethod
+    def split(cls, model:Any, name:str) -> bool:
+        """`True` when the node is split-phase (phase `S`)"""
+        return get_int(model, name, "phases") & PHASE_S == PHASE_S
+
+    @classmethod
+    def base_phase(cls, model:Any, name:str) -> int:
+        """Index of the phase a split-phase node is on"""
+        phases = get_int(model, name, "phases")
+        return 0 if phases & PHASE_A else (1 if phases & PHASE_B else 2)
+
+    @classmethod
+    def bus_slots(cls, model:Any, name:str) -> list[tuple[int,str,float,complex]]:
+        """The node's buses: `(slot, label, base voltage, initial voltage)`;
+        a split-phase node has lines 1 and 2 in slots 0 and 1, both at the
+        angle of its phase (gridlabd measures line 2 from the neutral to
+        the line)"""
+        vbase = get_double(model, name, "nominal_voltage")
+        phases = get_int(model, name, "phases")
+        result = []
+        if cls.split(model, name):
+            angle = (0.0, -2*math.pi/3, 2*math.pi/3)[cls.base_phase(model, name)]
+            for slot, label in ((0, "1"), (1, "2")):
+                v0 = get_complex(model, name, cls.VOLTAGES[slot])
+                result.append((slot, label, vbase, v0 if v0 != 0 else cmath.rect(vbase, angle)))
+            return result
+        for k, bit in enumerate((PHASE_A, PHASE_B, PHASE_C)):
+            if phases & bit:
+                v0 = get_complex(model, name, cls.VOLTAGES[k])
+                result.append((k, "ABC"[k], vbase, v0 if v0 != 0 else cmath.rect(vbase, (0.0, -2*math.pi/3, 2*math.pi/3)[k])))
+        return result
+
+    @classmethod
+    def write_voltages(cls, model:Any, name:str, values:dict[int,complex]) -> bool:
+        """Write the voltages of the bus slots (0 for a slot taken out of
+        the network); `True` when one changed by more than
+        `maximum_voltage_error`"""
+        from pypower._common import notation # pylint: disable=import-outside-toplevel
+        maxerr = get_double(model, name, "maximum_voltage_error")
+        changed = False
+        for slot, value in values.items():
+            prop_ = cls.VOLTAGES[slot]
+            if abs(value - get_complex(model, name, prop_)) > maxerr:
+                changed = True
+            set_complex(model, name, prop_, value, notation(model, name, prop_))
+        cls.line_voltages(model, name)
+        return changed
+
+    @classmethod
+    def line_voltages(cls, model:Any, name:str) -> None:
+        """Set the line-to-line voltages"""
+        set_line_voltages(model, name)
 
     #
     # Load terms and solution hooks (overridden by load, capacitor, ...)

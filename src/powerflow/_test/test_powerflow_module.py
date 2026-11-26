@@ -17,7 +17,8 @@ MODULES = ["powerflow", "powerflow.solver", "powerflow.powerflow_object", "power
     "powerflow.overhead_line", "powerflow.underground_line", "powerflow.triplex_line",
     "powerflow.transformer", "powerflow.regulator",
     "powerflow.switch", "powerflow.recloser", "powerflow.sectionalizer",
-    "powerflow.capacitor", "powerflow.load",
+    "powerflow.capacitor", "powerflow.load", "powerflow.meter",
+    "powerflow.triplex_node", "powerflow.triplex_meter", "powerflow.triplex_load",
     "powerflow.overhead_line_conductor", "powerflow.underground_line_conductor", "powerflow.line_configuration",
     "powerflow.transformer_configuration", "powerflow.regulator_configuration", "powerflow.triplex_line_configuration", "powerflow.triplex_line_conductor",
     "powerflow.restoration", "powerflow.power_metrics", "powerflow.pole_configuration"]
@@ -33,10 +34,10 @@ def test_load():
     classes in gridlabd's order with their parents, and its globals"""
     m = Model()
     m.read_glm("module powerflow;\n")
-    assert [x.name for x in powerflow.classes()] == ["powerflow_object", "powerflow_library", "node", "link", "capacitor", "fuse", "line", "line_spacing",
+    assert [x.name for x in powerflow.classes()] == ["powerflow_object", "powerflow_library", "node", "link", "capacitor", "fuse", "meter", "line", "line_spacing",
         "overhead_line", "underground_line", "overhead_line_conductor", "underground_line_conductor", "line_configuration",
-        "transformer_configuration", "transformer", "load", "regulator_configuration", "regulator", "triplex_line", "triplex_line_configuration", "triplex_line_conductor", "switch", "restoration", "power_metrics", "recloser",
-        "sectionalizer", "pole_configuration"]
+        "transformer_configuration", "transformer", "load", "regulator_configuration", "regulator", "triplex_node", "triplex_meter", "triplex_line", "triplex_line_configuration", "triplex_line_conductor", "switch", "restoration", "power_metrics", "recloser",
+        "sectionalizer", "triplex_load", "pole_configuration"]
     assert {"init", "sync"} <= set(Module.find("powerflow").solvers)
     assert Class.find("node", module="powerflow").parent.name == "powerflow_object"
     assert Class.find("link", module="powerflow").parent.name == "powerflow_object"
@@ -144,7 +145,8 @@ def test_init_defaults(helpers):
     assert m.get_property("n3", "phases") == "AS"
     assert any("neutral phase ignored on split connection." in x for x in helpers.warnings(r))
     assert any("negative mean_repair_time" in x for x in helpers.warnings(r))
-    assert any("split-phase nodes are not supported yet" in x for x in helpers.errors(r))
+    assert r.returncode == 0, r.stderr
+    assert powerflow.get_complex(m, "n3", "voltage_AB") == pytest.approx(240), "split-phase voltage_AB is 1 to 2"
 
 def test_phases_from_parent(helpers):
     m = helpers.model("""

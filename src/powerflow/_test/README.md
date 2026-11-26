@@ -155,6 +155,23 @@ admittance; a manual change after the time delay; VOLT control closing
 the capacitors and counting the switches; banked VAR control after the
 dwell time; a delta capacitor on a wye node; initialization errors.
 
+test_powerflow_triplex.py
+-------------------------
+
+`meter`, `triplex_node`, `triplex_meter`, `triplex_load`, and split-phase
+solutions: registration (parents, `isa("node")`, the
+`market_price_name` global); a center-tapped transformer and triplex line
+feeder with unbalanced 120 V and 240 V loads against an independent
+physical solution (Kersting's center-tapped transformer with gridlabd's
+impedance split, the triplex line with its neutral Kron-reduced); the
+triplex meter's currents (line 2 physical, neutral), power, and demand;
+energies and interval energy over two hours; a uniform bill; price
+errors and tier filling; triplex node accumulators equal to a
+triplex_load; the triplex ZIP form and its warning; the missing phase S
+warning; meter power consumption; DC, and FD on a center-tapped
+transformer. A three-phase meter's currents and powers from the link
+that feeds it, a tiered bill, and a swing meter.
+
 test_powerflow_solver.py
 ------------------------
 

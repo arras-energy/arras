@@ -29,8 +29,7 @@ under-determined) or the three conductors (`conductor_1`, `conductor_2`,
 3. unless the configuration gives the matrix, fail when a conductor is
    missing or is not a `triplex_line_conductor`;
 4. compute its matrices as gridlabd's `triplex_line::recalc()` (Kersting,
-   chapter 11) does, failing with methods other than NR (and FBS, which
-   is solved with NR):
+   chapter 11) does, with every solver method:
 
    - conductor spacings `D12 = (diameter + 2 insulation_thickness)/12` and
      `D13 = D23 = (diameter + insulation_thickness)/12` (feet), which must
@@ -48,10 +47,12 @@ under-determined) or the three conductors (`conductor_1`, `conductor_2`,
 Caveats
 -------
 
-- Split-phase nodes (`triplex_node`, `triplex_meter`) and the center-tapped
-  transformer are not ported, and the solver refuses split-phase nodes,
-  so triplex lines initialize and compute their matrices but cannot be
-  solved yet: a closed `triplex_line` in a network fails the solution.
+- In the network, a triplex line joins lines 1 and 2 of its nodes (bus
+  slots 0 and 1), whose voltages follow gridlabd's convention (line 2
+  measured from the neutral to the line, so in phase with line 1); its
+  admittance is `inv(b_mat diag(1, -1))`, the neutral being Kron-reduced
+  (grounded at both ends). Its `current_in_B` and `current_out_B` are in
+  the same convention (the negative of the physical line 2 current).
 - The ratings gridlabd derives from the conductors are not used.
 
 Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
@@ -59,6 +60,9 @@ Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
 
 1. A missing configuration, or one that is not a `line_configuration`,
    fails with `line`'s message; gridlabd dereferences it without a check.
+2. Triplex lines work with every solver method; gridlabd refuses methods
+   other than NR and FBS ("triplex_line:unsupported solver method",
+   "Only NR and FBS support z-matrix components.").
 
 References
 ----------
@@ -73,10 +77,9 @@ from typing import Any
 
 import numpy as np
 
-from ._common import PHASE_S, SM_NR, SM_FBS, isa, g, msg, ref, get_int, get_double, object_state, PowerflowError
-from .line import Line, carson, label
+from ._common import PHASE_S, isa, msg, ref, get_int, get_double, object_state, PowerflowError
+from .line import Line, carson, label, snapshot
 from .line_configuration import LineConfiguration
-from .solver import SolverError
 
 CONDUCTORS = {"triplex_line_configuration": ("conductor_1", "conductor_2", "conductor_N"),
     "line_configuration": ("conductor_A", "conductor_B", "conductor_C")}
@@ -126,14 +129,11 @@ class TriplexLine(Line):
         config = ref(model, name, "configuration")
         z = LineConfiguration.impedance(model, config)
         miles = get_double(model, name, "length")/5280.0
-        nr = g(model, "solver_method") in (SM_NR, SM_FBS)
         b_mat = np.zeros((3, 3), dtype=complex)
         tn = np.zeros(3, dtype=complex)
         if z[0, 0] != 0 or z[1, 1] != 0:
             if warn:
                 out.warning("Using a 2x2 z-matrix, instead of geometric values, is an under-determined system. Ground and/or neutral currents will be incorrect.")
-            if not nr:
-                raise PowerflowError("Only NR and FBS support z-matrix components.")
             b_mat[:2, :2] = z[:2, :2]*miles
         else:
             real, imag, additive = carson(model)
@@ -152,8 +152,6 @@ class TriplexLine(Line):
             zp = [complex(r[k] + real, imag*(math.log(1/gmr[k]) + additive)) for k in range(3)]
             zp12, zp13 = (complex(real, imag*(math.log(1/d) + additive)) for d in (d12, d13))
             zp23 = zp13
-            if not nr:
-                raise PowerflowError("triplex_line:unsupported solver method")
             zs = np.zeros((3, 3), dtype=complex)
             zs[0, 0] = zp[0] - zp13*zp13/zp[2]
             zs[0, 1] = zp12 - zp13*zp23/zp[2]
@@ -167,7 +165,31 @@ class TriplexLine(Line):
         return b_mat, tn
 
     @classmethod
+    def bus_slots(cls, model:Any, name:str) -> tuple[list[int],list[int]]:
+        """Lines 1 and 2 (slots 0 and 1) at both ends"""
+        return [0, 1, -1], [0, 1, -1]
+
+    @classmethod
+    def paths(cls, model:Any, name:str) -> list[tuple[int,...]]|None:
+        """Lines 1 and 2 conduct to both lines at the other end and are
+        coupled at each end: in the nodes' convention the two lines are in
+        phase, so the fast-decoupled and DC methods keep the coupling"""
+        return [(0, 0, 1, 0), (0, 1, 1, 1), (0, 0, 1, 1), (0, 1, 1, 0), (0, 0, 0, 1), (1, 0, 1, 1)]
+
+    @classmethod
     def admittance(cls, model:Any, name:str) -> tuple[np.ndarray,np.ndarray,np.ndarray,np.ndarray]:
-        """Refused: split-phase networks are not supported by the solver
-        yet (raises `powerflow.solver.SolverError`)"""
-        raise SolverError(f"triplex_line {name}: triplex lines are not supported by the solver yet")
+        """Series admittance of lines 1 and 2 in the nodes' convention (line
+        2 measured from the neutral to the line): `inv(b_mat D)` with `D =
+        diag(1, -1)`, since `b_mat` gives the drop of that voltage from the
+        physical currents; no shunt"""
+        b_mat, _ = cls.triplex_matrices(model, name)
+        y = np.zeros((3, 3), dtype=complex)
+        y[:2, :2] = np.linalg.inv(b_mat[:2, :2] @ np.diag([1, -1]))
+        return y, -y, -y, y.copy()
+
+    @classmethod
+    def admittance_key(cls, model:Any, name:str) -> tuple:
+        """The line's key and the configuration's conductors"""
+        config = ref(model, name, "configuration")
+        related = [ref(model, config, x) for x in CONDUCTORS["triplex_line_configuration"]] if config and model.objects[config].oclass.find_property("conductor_1") else []
+        return super().admittance_key(model, name) + (snapshot(model, config, *related),)

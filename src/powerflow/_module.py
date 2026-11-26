@@ -6,14 +6,11 @@ from typing import Any
 
 import numpy as np
 
-from pypower._common import notation
-
-from ._common import (MODULE, TS_NEVER, TS_INVALID, PHASE_D, PHASE_S, PHASE_BITS, PQ, PV, SWING,
+from ._common import (MODULE, TS_NEVER, TS_INVALID, PHASE_D, PHASE_BITS, PQ, PV, SWING,
     SWING_PQ, SM_FBS, SM_GS, SM_NR, SM_FD_XB, SM_FD_BX, SM_DC, CEH_IGNORE, CEH_COLLAPSE, BEHAVIORS,
-    runner, gl_error, gl_warning, gl_verbose, g, objects_of, ref, get_int, get_double, get_complex,
-    set_complex)
-from .solver import Network, SolverError, solve, nominal, branch_currents, dc_branch_power
-from .node import set_line_voltages, top_node
+    runner, gl_error, gl_warning, gl_verbose, g, objects_of, ref, get_int, get_double, get_complex)
+from .solver import Network, SolverError, solve, nominal, branch_currents, dc_path_power
+from .node import top_node
 
 METHOD_NAMES = {SM_NR: "NR", SM_FD_XB: "FD_XB", SM_FD_BX: "FD_BX", SM_DC: "DC"}
 """PYPOWER solver of each `powerflow::solver_method` value (`FBS` is solved
@@ -114,18 +111,11 @@ def build(model:Any, state:ModuleState, dead:set[tuple[str,int]]|None=None) -> t
     for name in nodes:
         if top_node(model, name) != name:
             continue
-        phases = get_int(model, name, "phases")
-        if phases & PHASE_S == PHASE_S:
-            raise SolverError(f"node {name}: split-phase nodes are not supported yet")
-        vbase = get_double(model, name, "nominal_voltage")
         bustype = get_int(model, name, "bustype")
         btype = "REF" if bustype in (SWING, SWING_PQ) else ("PV" if bustype == PV else "PQ")
-        for k, bit in enumerate(PHASE_BITS):
-            if phases & bit and (name, k) not in dead:
-                v0 = get_complex(model, name, f"voltage_{'ABC'[k]}")
-                if v0 == 0:
-                    v0 = nominal(vbase, k)
-                buses[(name, k)] = net.add_bus(f"{name}.{'ABC'[k]}", vbase, v0, btype)
+        for slot, label, vbase, v0 in behavior(model, name).bus_slots(model, name):
+            if (name, slot) not in dead:
+                buses[(name, slot)] = net.add_bus(f"{name}.{label}", vbase, v0, btype)
     for name in nodes:
         _add_loads(model, name, net, buses)
     links = []
@@ -140,22 +130,37 @@ def build(model:Any, state:ModuleState, dead:set[tuple[str,int]]|None=None) -> t
         if cached is None or cached[0] != key:
             cached = (key, cls.admittance(model, name))
             state.admittances[name] = cached
-        mask = cls.phase_mask(model, name)
-        fbus = [buses.get((fnode, k), -1) if mask[k] else -1 for k in range(3)]
-        tbus = [buses.get((tnode, k), -1) if mask[k] else -1 for k in range(3)]
+        fslots, tslots = cls.bus_slots(model, name)
+        fbus = [buses.get((fnode, k), -1) if k >= 0 else -1 for k in fslots]
+        tbus = [buses.get((tnode, k), -1) if k >= 0 else -1 for k in tslots]
         impedance, shift = cls.dc_model(model, name)
-        net.add_branch(fbus, tbus, *cached[1], magnitude=cls.MAGNITUDE, self_impedance=impedance, shift=shift)
+        net.add_branch(fbus, tbus, *cached[1], magnitude=cls.MAGNITUDE, self_impedance=impedance, shift=shift, paths=cls.paths(model, name))
         links.append(name)
     return net, buses, links
 
-def _add_loads(model:Any, name:str, net:Network, buses:dict[tuple[str,int],int]) -> None:
+def _add_loads(model:Any, name:str, net:Network, buses:dict[tuple[str,int],int]) -> None: # pylint: disable=too-many-locals
     """Loads of a node, on the buses of its top node"""
     top = top_node(model, name)
     vbase = get_double(model, top, "nominal_voltage")
     delta = get_int(model, name, "phases") & PHASE_D == PHASE_D
-    terms = behavior(model, name).load_terms(model, name)
+    cls = behavior(model, name)
+    terms = cls.load_terms(model, name)
     def value(kind:str, suffix:str) -> complex:
-        return get_complex(model, name, f"{kind}_{suffix}") + terms.get((kind, suffix), 0j)
+        prop_ = f"{kind}_{suffix}"
+        stored = get_complex(model, name, prop_) if model.objects[name].oclass.find_property(prop_) else 0j
+        return stored + terms.get((kind, suffix), 0j)
+    if cls.split(model, name):
+        angle = (0.0, -2*np.pi/3, 2*np.pi/3)[behavior(model, top).base_phase(model, top)]
+        vnom = complex(np.cos(angle), np.sin(angle))*vbase
+        one, two, both = cls.SUFFIXES
+        for slot, suffix in ((0, one), (1, two)):
+            s, i, y = (value(kind, suffix) for kind in ("power", "current", "shunt"))
+            if (s, i, y) != (0, 0, 0) and (top, slot) in buses:
+                net.add_wye_load(buses[(top, slot)], s, i, y, vnom)
+        s, i, y = (value(kind, both) for kind in ("power", "current", "shunt"))
+        if (s, i, y) != (0, 0, 0) and (top, 0) in buses and (top, 1) in buses:
+            net.add_split_load(buses[(top, 0)], buses[(top, 1)], s, i, y, 2*vnom)
+        return
     def wye(k:int, suffix:str) -> None:
         s, i, y = (value(kind, suffix) for kind in ("power", "current", "shunt"))
         if (s, i, y) != (0, 0, 0) and (top, k) in buses:
@@ -226,36 +231,36 @@ def _write_voltages(model:Any, nodes:list[str], buses:dict[tuple[str,int],int], 
     changed = False
     for name in nodes:
         top = top_node(model, name)
-        maxerr = get_double(model, name, "maximum_voltage_error")
-        for k, x in enumerate("ABC"):
-            index = buses.get((top, k))
-            if index is None and (top, k) not in dead:
+        values = {}
+        for slot in range(3):
+            index = buses.get((top, slot))
+            if index is None and (top, slot) not in dead:
                 continue
-            value = 0j if index is None else complex(V[index])
-            prop = f"voltage_{x}"
-            old = get_complex(model, name, prop)
-            if abs(value - old) > maxerr:
-                changed = True
-            set_complex(model, name, prop, value, notation(model, name, prop))
-        set_line_voltages(model, name)
+            values[slot] = 0j if index is None else complex(V[index])
+        if behavior(model, name).write_voltages(model, name, values):
+            changed = True
     return changed
 
 def _write_flows(model:Any, net:Network, links:list[str], V:np.ndarray, method:str) -> None: # pylint: disable=invalid-name,too-many-locals
     from .link import write_flows # pylint: disable=import-outside-toplevel
     dc = method == "DC"
-    if dc:
-        powers = dc_branch_power(net, V)
     currents = branch_currents(net, V, method in ("FD_XB", "FD_BX"))
     for index, name in enumerate(links):
         fbus, tbus = net.branches[index][0], net.branches[index][1]
         vf = np.array([V[k] if k >= 0 else 0j for k in fbus])
         vt = np.array([V[k] if k >= 0 else 0j for k in tbus])
         if dc:
-            s = powers[index].astype(complex)
+            s_in, s_out = np.zeros(3, dtype=complex), np.zeros(3, dtype=complex)
+            for (ea, sa, eb, sb), power in dc_path_power(net, V, index).items():
+                for end, slot, sign in ((ea, sa, 1), (eb, sb, -1)):
+                    if end == 0:
+                        s_in[slot] += sign*power
+                    else:
+                        s_out[slot] -= sign*power
             with np.errstate(divide="ignore", invalid="ignore"):
-                i_in = np.where(vf != 0, np.conj(s/np.where(vf != 0, vf, 1)), 0)
-                i_out = np.where(vt != 0, np.conj(s/np.where(vt != 0, vt, 1)), 0)
-            write_flows(model, name, s, s, i_in, i_out, lossless=True)
+                i_in = np.where(vf != 0, np.conj(s_in/np.where(vf != 0, vf, 1)), 0)
+                i_out = np.where(vt != 0, np.conj(s_out/np.where(vt != 0, vt, 1)), 0)
+            write_flows(model, name, s_in, s_out, i_in, i_out, lossless=True)
         else:
             i_in, i_out = currents[index]
             behavior(model, name).set_flows(model, name, vf, vt, i_in, i_out)

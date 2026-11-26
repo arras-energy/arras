@@ -13,7 +13,6 @@ from arras.model import Model
 from powerflow.overhead_line import OverheadLine
 from powerflow.underground_line import UndergroundLine
 from powerflow.triplex_line import TriplexLine
-from powerflow.solver import SolverError
 
 NODES = """
 object node { name n0; phases ABCN; nominal_voltage 2401.7771; bustype SWING; }
@@ -202,17 +201,10 @@ def test_triplex_geometric(helpers):
     assert b_mat[1, 0] == pytest.approx(-b_mat[0, 1]) and b_mat[1, 1] == pytest.approx(-b_mat[0, 0])
     assert tn[0] == pytest.approx(-zp13/zp11, rel=1e-4) and tn[2] == 0
 
-def test_triplex_not_solved(helpers):
-    m = helpers.model(TRIPLEX, lines=False)
-    with pytest.raises(SolverError, match="not supported by the solver yet"):
-        TriplexLine.admittance(m, "t01")
-
 @pytest.mark.parametrize("glm,method,message", [
     (TRIPLEX.replace("phases AS; from", "phases A; from"), "NR", "is triplex but doesn't have phases S set"),
     (TRIPLEX.replace("insulation_thickness 0.08 in; diameter 0.368 in;", ""), "NR", "diameter and/or insulation_thickness are incorrectly set"),
     (TRIPLEX.replace("conductor_2 tlc;", ""), "NR", "configuration doesn't have a valid phase conductor!"),
-    (TRIPLEX, "FD_XB", "triplex_line:unsupported solver method"),
-    (TRIPLEX.replace("insulation_thickness 0.08 in;", "z11 1+1j; z22 1+1j;"), "DC", "Only NR and FBS support z-matrix components."),
 ])
 def test_triplex_messages(helpers, glm, method, message):
     r = helpers.run(glm, module=f"solver_method {method};", lines=False)

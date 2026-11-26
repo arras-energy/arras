@@ -33,11 +33,16 @@ gridlabd's `link::init()` builds `YSfrom`, `From_Y`, `To_Y`, `YSto`):
   [0,-1,1]]/(nt sqrt 3)` and `B` is its transpose (the secondary lags the
   primary by 30 degrees), and for a step-up transformer `C` and `B` are
   exchanged (the secondary leads by 30 degrees);
-- `SINGLE_PHASE_CENTER_TAPPED`: initializes, but the solver refuses it
-  (split-phase nodes are not ported).
+- `SINGLE_PHASE_CENTER_TAPPED`: from its primary phase to lines 1 and 2
+  of its split-phase to node, gridlabd's NR model (`Transformer.center_tapped()`:
+  primary and half-winding impedances from `impedance` split 0.5R+0.8jX on
+  the primary and R+0.4jX on each half, or `impedance`, `impedance1`,
+  `impedance2` when `impedance1` is set, on the bases of the phase's kVA
+  rating, and the magnetizing impedance), in the nodes' convention for
+  line 2.
 
-The shunt (magnetizing) impedance is not in gridlabd's NR admittance, so it
-is not used. The fast-decoupled and DC methods use the self impedance
+The shunt (magnetizing) impedance is not in gridlabd's NR admittance of
+the three-phase connections, so it is not used there. The fast-decoupled and DC methods use the self impedance
 `zt*nt` of each phase (the series impedance seen across the nominal
 voltages of the two nodes), and the DC method the 30-degree shift of a
 delta-wye transformer.
@@ -98,7 +103,6 @@ from ._base import prop
 from ._common import (PHASE_A, PHASE_B, PHASE_C, PHASE_N, PHASE_D, PHASE_S, isa, ref, msg, get_int,
     get_double, get_complex, object_state, PowerflowError)
 from .link import Link
-from .solver import SolverError
 from .transformer_configuration import WYE_WYE, DELTA_DELTA, DELTA_GWYE, SINGLE_PHASE, SINGLE_PHASE_CENTER_TAPPED
 
 STEP_DOWN = np.array([[1, 0, -1], [-1, 1, 0], [0, -1, 1]], dtype=float)
@@ -208,11 +212,16 @@ class Transformer(Link):
 
     @classmethod
     def admittance(cls, model:Any, name:str) -> tuple[np.ndarray,np.ndarray,np.ndarray,np.ndarray]:
-        """gridlabd's NR admittance (see the module description); raises
-        `powerflow.solver.SolverError` for center-tapped transformers"""
+        """gridlabd's NR admittance (see the module description)"""
         connect = cls.connect_type(model, name)
         if connect == SINGLE_PHASE_CENTER_TAPPED:
-            raise SolverError(f"transformer {name}: center-tapped transformers are not supported by the solver yet")
+            y = cls.center_tapped(model, name)
+            yff, yft, ytf, ytt = (np.zeros((3, 3), dtype=complex) for _ in range(4))
+            yff[0, 0] = y[0, 0]
+            yft[0, :2] = y[0, 1:]
+            ytf[:2, 0] = y[1:, 0]
+            ytt[:2, :2] = y[1:, 1:]
+            return yff, yft, ytf, ytt
         nt, zt = cls.ratio_impedance(model, name)
         mask = np.ones(3) if connect in (DELTA_DELTA, DELTA_GWYE) else cls.phase_mask(model, name)
         yt = np.diag(mask/zt).astype(complex)
@@ -221,6 +230,58 @@ class Transformer(Link):
             c = (STEP_DOWN if nt > 1 else STEP_DOWN.T)/alpha
             return yt/nt**2, -c.T @ yt, -yt @ c, yt.copy()
         return yt/nt**2, -yt/nt, -yt/nt, yt.copy()
+
+    @classmethod
+    def center_tapped(cls, model:Any, name:str) -> np.ndarray:
+        """Admittance (3x3, siemens) of a center-tapped transformer between
+        its primary and lines 1 and 2, in the nodes' convention (line 2
+        measured from the neutral to the line), from gridlabd's NR model:
+        primary impedance `z0`, magnetizing impedance `zc` after it, an ideal
+        transformer of ratio `nt` to each half winding, and half-winding
+        impedances `z1`, `z2`"""
+        # pylint: disable=too-many-locals
+        config = ref(model, name, "configuration")
+        degradation = get_double(model, name, "degradation_factor")
+        vprimary = get_double(model, config, "primary_voltage")
+        vsecondary = get_double(model, config, "secondary_voltage")
+        nt = vprimary/vsecondary*(1 - degradation)
+        vbase = vsecondary/(1 - degradation)
+        phases = get_int(model, name, "phases")
+        x = "A" if phases & PHASE_A else ("B" if phases & PHASE_B else "C")
+        rating = get_double(model, config, f"power{x}_rating")*1000
+        high, low = vprimary*vprimary/rating, vbase*vbase/rating
+        z, z1, z2, zs = (get_complex(model, config, key) for key in ("impedance", "impedance1", "impedance2", "shunt_impedance"))
+        if z1 == 0:
+            z0 = complex(0.5*z.real, 0.8*z.imag)*high
+            z1 = z2 = complex(z.real, 0.4*z.imag)*low
+        else:
+            z0, z1, z2 = z*high, z1*low, z2*low
+        zc = high*zs.real*1j*zs.imag/zs
+        y = np.zeros((3, 3), dtype=complex)
+        for col in range(3):
+            v = np.zeros(3, dtype=complex)
+            v[col] = 1
+            vs, v1, v2 = v[0], v[1], -v[2] # line 2 in the physical direction
+            a = np.array([[z0, 0, 0, nt], [1, 1/nt, -1/nt, -nt/zc], [0, z1, 0, 1], [0, 0, z2, -1]], dtype=complex)
+            ip, j1, j2, _ = np.linalg.solve(a, np.array([vs, 0, v1, v2], dtype=complex))
+            y[:, col] = (ip, j1, -j2)
+        return y
+
+    @classmethod
+    def bus_slots(cls, model:Any, name:str) -> tuple[list[int],list[int]]:
+        """A center-tapped transformer's primary phase at the from end and
+        lines 1 and 2 at the to end; the phases otherwise"""
+        if cls.connect_type(model, name) != SINGLE_PHASE_CENTER_TAPPED:
+            return super().bus_slots(model, name)
+        phases = get_int(model, name, "phases")
+        primary = 0 if phases & PHASE_A else (1 if phases & PHASE_B else 2)
+        return [primary, -1, -1], [0, 1, -1]
+
+    @classmethod
+    def paths(cls, model:Any, name:str) -> list[tuple[int,...]]|None:
+        """A center-tapped transformer conducts from its primary to both
+        lines, which are coupled through the primary impedance"""
+        return [(0, 0, 1, 0), (0, 0, 1, 1), (1, 0, 1, 1)] if cls.connect_type(model, name) == SINGLE_PHASE_CENTER_TAPPED else None
 
     @classmethod
     def dc_model(cls, model:Any, name:str) -> tuple[np.ndarray|None,float]:
@@ -237,8 +298,9 @@ class Transformer(Link):
     def admittance_key(cls, model:Any, name:str) -> tuple:
         """The link's key, the ratio and impedance, and the connection"""
         config = ref(model, name, "configuration")
-        values = tuple(get_complex(model, config, x) if x == "impedance" else get_double(model, config, x)
-            for x in ("primary_voltage", "secondary_voltage", "power_rating", "impedance"))
+        values = tuple(get_complex(model, config, x) if x.endswith("impedance") or x[-1] in "12" else get_double(model, config, x)
+            for x in ("primary_voltage", "secondary_voltage", "power_rating", "powerA_rating", "powerB_rating", "powerC_rating",
+                "impedance", "impedance1", "impedance2", "shunt_impedance"))
         return super().admittance_key(model, name) + (config, cls.connect_type(model, name), values, get_double(model, name, "degradation_factor"))
 
 __all__ = ["Transformer"]

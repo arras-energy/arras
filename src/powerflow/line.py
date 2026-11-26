@@ -137,7 +137,7 @@ class Line(Link):
         """`line::init()` after `link::init()`; raises `PowerflowError`"""
         super().init_link(model, name)
         obj = model.objects[name]
-        label = name if name != f"{obj.oclass.name}:{obj.id}" else "Unnamed"
+        unnamed = name if name != f"{obj.oclass.name}:{obj.id}" else "Unnamed"
         fnominal = get_double(model, ref(model, name, "from"), "nominal_voltage")
         tnominal = get_double(model, ref(model, name, "to"), "nominal_voltage")
         if abs(fnominal - tnominal) > 0.001*fnominal:
@@ -146,10 +146,10 @@ class Line(Link):
             raise PowerflowError(f"{ZERO_LENGTH_METHODS.get(g(model, 'solver_method'), 'Newton-Raphson')} method does not support zero length lines at this time")
         if obj.oclass.name == "line":
             out = msg(model, name)
-            out.warning(f"line:{obj.id} - {label} - use of an overhead_line, underground_line, or other line-based subclass is highly recommended!")
+            out.warning(f"line:{obj.id} - {unnamed} - use of an overhead_line, underground_line, or other line-based subclass is highly recommended!")
             config = ref(model, name, "configuration")
             if not isa(model, config, "line_configuration"):
-                raise PowerflowError(f"line:{obj.id} - {label} - configuration object either doesn't exist, or is not a valid configuration object!")
+                raise PowerflowError(f"line:{obj.id} - {unnamed} - configuration object either doesn't exist, or is not a valid configuration object!")
             c = LineConfiguration.capacitance(model, config)
             if (c[0, 0] != 0 or c[1, 1] != 0 or c[2, 2] != 0) and not g(model, "line_capacitance"):
                 out.warning(f"Shunt capacitance of line:{name} specified without setting powerflow::line_capacitance = TRUE. Shunt capacitance will be ignored.")
@@ -168,8 +168,8 @@ class Line(Link):
         zabc = LineConfiguration.impedance(model, config)*miles*terms
         c = LineConfiguration.capacitance(model, config)
         if g(model, "line_capacitance"):
-            frequency = float(g(model, "nominal_frequency") or 60.0)
-            yabc = 1j*2*math.pi*frequency*1e-9*miles*c*terms
+            fnom = float(g(model, "nominal_frequency") or 60.0)
+            yabc = 1j*2*math.pi*fnom*1e-9*miles*c*terms
         else:
             yabc = np.zeros((3, 3), dtype=complex)
         return zabc.astype(complex), yabc.astype(complex)

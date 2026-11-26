@@ -93,6 +93,24 @@ classDiagram
     }
     node <|-- capacitor
     node <|-- load
+    class meter {
+        measured_power
+        measured_real_energy
+        bill_mode
+    }
+    class triplex_node {
+        voltage_1 / voltage_2 / voltage_12
+        power_1 / power_2 / power_12
+    }
+    class triplex_meter
+    class triplex_load {
+        constant_power_1/2/12
+    }
+    node <|-- meter
+    powerflow_object <|-- triplex_node
+    node <|.. triplex_node
+    triplex_node <|-- triplex_meter
+    triplex_node <|-- triplex_load
     switch <|-- recloser
     switch <|-- sectionalizer
     powerflow_library <|.. line_spacing
@@ -120,6 +138,7 @@ Classes are listed in gridlabd's registration order. TRL is the technology readi
 | `link` | `powerflow_object` | `link.Link` | 9 | A branch between two nodes, with its 3x3 admittance blocks; its currents, powers, losses, and flow direction are written from each solution. Base of the line, switch, and transformer classes (admittance and solution hooks). A plain `link` is a small resistance on each phase. |
 | `capacitor` | `node` | `capacitor.Capacitor` | 9 | A switched shunt capacitor bank (wye or delta) with manual, voltage, VAr, VAr-voltage, or current control, dwell and delay times, and bank control. |
 | `fuse` | `link` | `fuse.Fuse` | 8 | A link whose phases blow when their current exceeds `current_limit` and are replaced after `mean_replacement_time` (a soft event). A node fed only by the fuse loses the blown phases. |
+| `meter` | `node` | `meter.Meter` | 9 | A node that meters the power through it: measured voltages, currents, powers, demand, energies, interval statistics, and bills (uniform, tiered, hourly, tiered real-time). |
 | `line` | `link` | `line.Line` | 9 | A line of a given length, the pi model of its configuration's impedance and capacitance matrices (capacitance only with `powerflow::line_capacitance`). Base of the overhead, underground, and triplex lines. |
 | `line_spacing` | — | `line_spacing.LineSpacing` | 9 | Distances between the phase and neutral wires and to earth, for overhead and underground line impedances. |
 | `overhead_line` | `line` | `overhead_line.OverheadLine` | 9 | A line of overhead conductors: impedance by Carson's equations from its configuration's conductors and spacing, the neutral Kron-reduced, and capacitance from the potential coefficients of the conductors and their images (Kersting chapters 4 and 5); or the matrix form when the configuration gives one. |
@@ -128,11 +147,13 @@ Classes are listed in gridlabd's registration order. TRL is the technology readi
 | `underground_line_conductor` | — | `underground_line_conductor.UndergroundLineConductor` | 9 | Dimensions, resistances, and ratings of a concentric-neutral or tape-shielded underground cable. |
 | `line_configuration` | — | `line_configuration.LineConfiguration` | 9 | Impedance (ohm/mile) and capacitance (nF/mile) matrices of a line, or the conductors and spacing they are computed from. |
 | `transformer_configuration` | — | `transformer_configuration.TransformerConfiguration` | 9 | Connection, voltages, kVA ratings, series and shunt impedances (per unit), losses, and thermal and in-rush data of a transformer. |
-| `transformer` | `link` | `transformer.Transformer` | 9 | A transformer with gridlabd's NR admittance for its configuration's connection: wye-wye, single-phase, delta-delta (phase by phase), or delta-wye (30-degree shift); center-tapped transformers are not solved yet. |
+| `transformer` | `link` | `transformer.Transformer` | 9 | A transformer with gridlabd's NR admittance for its configuration's connection: wye-wye, single-phase, delta-delta (phase by phase), delta-wye (30-degree shift), or center-tapped to the lines 1 and 2 of a triplex node. |
 | `load` | `node` | `load.Load` | 9 | A node with constant power, current, and impedance loads (phase, explicit wye, explicit delta) or their ZIP form at given power factors. |
 | `regulator_configuration` | — | `regulator_configuration.RegulatorConfiguration` | 9 | Connection, band, delays, taps, transducer ratios, line drop compensation, and control mode of a voltage regulator. |
 | `regulator` | `link` | `regulator.Regulator` | 9 | A step voltage regulator: tap-ratio autotransformer with a small resistance; manual taps or automatic control of the output, remote-node, or line-drop-compensated voltage with gridlabd's dwell and delay timing. |
-| `triplex_line` | `line` | `triplex_line.TriplexLine` | 9 | A split-phase secondary line (lines 1 and 2 and a neutral): initializes and computes gridlabd's `b_mat` and `tn`, but is not solved until the triplex nodes and center-tapped transformer are ported. |
+| `triplex_node` | `powerflow_object` | `triplex_node.TriplexNode` | 9 | A split-phase node: lines 1 and 2 and a grounded neutral, with 120 V and 240 V loads; a `node` in C++ (`isa`), published from `powerflow_object`. |
+| `triplex_meter` | `triplex_node` | `triplex_meter.TriplexMeter` | 9 | A triplex node that meters the power through it, as `meter` does, with gridlabd's triplex conventions. |
+| `triplex_line` | `line` | `triplex_line.TriplexLine` | 9 | A split-phase secondary line (lines 1 and 2 and a Kron-reduced neutral) between triplex nodes, with gridlabd's `b_mat` from its conductors or 2x2 matrix. |
 | `triplex_line_configuration` | — | `triplex_line_configuration.TriplexLineConfiguration` | 9 | Conductors, insulation, and diameter of a split-phase secondary cable, or its 2x2 impedance matrix. A `line_configuration` for `isa()`. |
 | `triplex_line_conductor` | — | `triplex_line_conductor.TriplexLineConductor` | 9 | Resistance, geometric mean radius, and ratings of a triplex conductor. |
 | `switch` | `link` | `switch.Switch` | 8 | A switch on each phase: closed phases are the switch impedance, open ones connect nothing (isolating a to node fed only by them); banked majority rule or individual phases. |
@@ -140,6 +161,7 @@ Classes are listed in gridlabd's registration order. TRL is the technology readi
 | `power_metrics` | — | `power_metrics.PowerMetrics` | 8 | IEEE 1366 reliability indices (SAIFI, SAIDI, CAIDI, ASAI, MAIFI), computed when the reliability module calls it. |
 | `recloser` | `switch` | `recloser.Recloser` | 0 | A switch with reclosing settings (tries, retry time); the reclosing itself needs `fault_check`. |
 | `sectionalizer` | `switch` | `sectionalizer.Sectionalizer` | 0 | A switch that opens after an upstream recloser operates; needs `fault_check` to open. |
+| `triplex_load` | `triplex_node` | `triplex_load.TriplexLoad` | 9 | A triplex node with constant power, current, and impedance loads on lines 1, 2, and 1 to 2, or their ZIP form. |
 | `pole_configuration` | — | `pole_configuration.PoleConfiguration` | 9 | Material, dimensions, design loads, overload and strength factors, and degradation of a utility pole. Creates `powerflow::climate_impact_zone`. |
 
 ## Other modules of the package
@@ -154,4 +176,4 @@ Classes are listed in gridlabd's registration order. TRL is the technology readi
 
 ## Not yet ported
 
-The other gridlabd powerflow classes derive from the classes above and are to be added as behavior classes that subclass `Node`, `Link`, or `Line`: `meter`, the triplex node classes, `fault_check`, and the others listed in gridlabd's `module/powerflow/init.cpp`. The proposed order is in `DESIGN.md`, open question 12.
+The other gridlabd powerflow classes derive from the classes above and are to be added as behavior classes that subclass `Node`, `Link`, or `Line`: `fault_check`, and the others listed in gridlabd's `module/powerflow/init.cpp`. The proposed order is in `DESIGN.md`, open question 12.

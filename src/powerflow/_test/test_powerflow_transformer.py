@@ -14,7 +14,6 @@ from arras.oclass import Class
 from arras.model import Model
 from powerflow.transformer import Transformer
 from powerflow.regulator import Regulator
-from powerflow.solver import SolverError
 
 VHIGH = 12470/math.sqrt(3)
 VLOW = 4160/math.sqrt(3)
@@ -115,18 +114,6 @@ def test_deferred_configuration(helpers):
     config, rest = glm.split("\n", 3)[1:3], glm.split("\n", 3)[3]
     r = helpers.run(rest + "\n".join(config), lines=False)
     assert r.returncode == 0, r.stderr
-
-def test_center_tapped_refused(helpers):
-    glm = """
-object transformer_configuration { name tc; connect_type SINGLE_PHASE_CENTER_TAPPED; install_type POLETOP; primary_voltage 7200; secondary_voltage 120;
-    power_rating 50; powerA_rating 50; impedance 0.006+0.0136j; }
-object node { name n1; phases ABCN; nominal_voltage 7200; bustype SWING; }
-object transformer { name t12; phases AS; from n1; to n2; configuration tc; }
-object node { name n2; phases AS; nominal_voltage 120; }
-"""
-    m = helpers.model(glm, lines=False)
-    with pytest.raises(SolverError, match="center-tapped transformers are not supported"):
-        Transformer.admittance(m, "t12")
 
 @pytest.mark.parametrize("glm,message", [
     (transformer("WYE_WYE").replace("configuration tc;", ""), "init_transformer(obj=2;t12): no transformer configuration specified."),
