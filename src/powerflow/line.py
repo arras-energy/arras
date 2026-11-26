@@ -26,7 +26,8 @@ expected to:
 1. initialize as a `link` (and wait for its nodes when `link` does);
 2. fail when the nominal voltages of its nodes differ by more than 0.1% of
    the from node's;
-3. fail when its length is 0;
+3. fail when its length is 0, whatever the solver method (every method
+   inverts the line's impedance);
 4. for an object of class `line` itself: warn that a subclass is
    recommended, fail when `configuration` is not a `line_configuration`,
    and warn when the configuration has a shunt capacitance (`c11`, `c22`,
@@ -59,7 +60,10 @@ Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
 
 1. A zero-length line fails whatever the solver method: every method of
    the module inverts the line's impedance. gridlabd fails it only with
-   NR (FBS uses the impedance without inverting it).
+   NR (FBS uses the impedance without inverting it). The message is
+   gridlabd's ("Newton-Raphson method does not support zero length lines
+   at this time") for NR and FBS, and names the method (`FD_XB`, `FD_BX`,
+   `DC`) for the others.
 
 References
 ----------
@@ -76,9 +80,13 @@ from typing import Any
 import numpy as np
 
 from ._base import prop
-from ._common import isa, ref, g, msg, get_double, PowerflowError
+from ._common import isa, ref, g, msg, get_double, PowerflowError, SM_FBS, SM_NR, SM_FD_XB, SM_FD_BX, SM_DC
 from .link import Link
 from .line_configuration import LineConfiguration
+
+ZERO_LENGTH_METHODS = {SM_FBS: "Newton-Raphson", SM_NR: "Newton-Raphson", SM_FD_XB: "FD_XB", SM_FD_BX: "FD_BX", SM_DC: "DC"}
+"""Method named in the zero-length line error: gridlabd's message for NR
+(and FBS, which is solved with NR), the method's keyword for the others"""
 
 class Line(Link):
     """Behavior of class `line`"""
@@ -101,7 +109,7 @@ class Line(Link):
         if abs(fnominal - tnominal) > 0.001*fnominal:
             raise PowerflowError("from and to node nominal voltage mismatch of greater than 0.1%%")
         if get_double(model, name, "length") == 0:
-            raise PowerflowError("Newton-Raphson method does not support zero length lines at this time")
+            raise PowerflowError(f"{ZERO_LENGTH_METHODS.get(g(model, 'solver_method'), 'Newton-Raphson')} method does not support zero length lines at this time")
         if obj.oclass.name == "line":
             out = msg(model, name)
             out.warning(f"line:{obj.id} - {label} - use of an overhead_line, underground_line, or other line-based subclass is highly recommended!")

@@ -132,3 +132,15 @@ def test_init_errors(helpers, glm, message):
     r = helpers.run(config_601() + glm, lines=False)
     assert r.returncode != 0
     assert any(message in x for x in helpers.errors(r)), r.stderr
+
+@pytest.mark.parametrize("method,name", [("NR", "Newton-Raphson"), ("FBS", "Newton-Raphson"), ("FD_XB", "FD_XB"), ("FD_BX", "FD_BX"), ("DC", "DC")])
+def test_zero_length_any_solver(helpers, method, name):
+    """A zero-length line fails with every solver method, not only NR as in
+    gridlabd"""
+    r = helpers.run(config_601() + """
+        object node { name n0; phases ABC; nominal_voltage 2400; bustype SWING; }
+        object node { name n1; phases ABC; nominal_voltage 2400; }
+        object line { name l01; phases ABC; from n0; to n1; length 0; configuration lc601; }
+        """, module=f"solver_method {method};", lines=False)
+    assert r.returncode != 0
+    assert any(f"init_line(obj=3;l01): {name} method does not support zero length lines at this time" in x for x in helpers.errors(r)), r.stderr

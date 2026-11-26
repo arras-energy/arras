@@ -63,7 +63,8 @@ the capacitance left out with a warning; the terms used for a line on two
 phases; the admittance at another nominal frequency; the admittance key
 following the configuration; the initialization errors (nominal voltage
 mismatch, zero length, missing or wrong configuration, same from and to
-node) with gridlabd's messages.
+node) with gridlabd's messages; a zero-length line refused with every
+solver method.
 
 test_powerflow_solver.py
 ------------------------
