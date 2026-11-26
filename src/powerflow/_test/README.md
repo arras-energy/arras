@@ -130,6 +130,18 @@ compensation (the monitored voltage formula); the reverse-flow lock; two
 regulators sharing a configuration; FD_XB and DC solutions;
 initialization errors and the zero-resistance warning.
 
+test_powerflow_switch.py
+------------------------
+
+`switch`, `recloser`, and `sectionalizer`: registration (parents, readiness
+level, defaults); a closed switch's default impedance `default_resistance*(1-j)`
+and its voltage drop and power; the impedance parts and the zero-part
+warning; an open switch isolating its to node; the banked majority rule
+at initialization and during the run; individual phases; the published
+`change_switch_state`; the FD_XB, FD_BX, and DC methods with an open
+phase; the triplex error; the recloser defaults, warnings, tries reset,
+and `change_recloser_state`; the sectionalizer's `change_sectionalizer_state`.
+
 test_powerflow_solver.py
 ------------------------
 

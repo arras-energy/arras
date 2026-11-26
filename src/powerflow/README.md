@@ -70,6 +70,18 @@ classDiagram
     line <|-- triplex_line
     link_ <|-- transformer
     link_ <|-- regulator
+    class switch {
+        operating_mode
+        phase_X_state
+        switch_impedance
+    }
+    class recloser {
+        retry_time
+        max_number_of_tries
+    }
+    link_ <|-- switch
+    switch <|-- recloser
+    switch <|-- sectionalizer
     powerflow_library <|.. line_spacing
     powerflow_library <|.. overhead_line_conductor
     powerflow_library <|.. underground_line_conductor
@@ -85,7 +97,7 @@ classDiagram
 
 ## Classes
 
-Classes are listed in gridlabd's registration order. TRL is the technology readiness level gridlabd gives the class (9 proven, 8 qualified, 7 prototype).
+Classes are listed in gridlabd's registration order. TRL is the technology readiness level gridlabd gives the class (9 proven, 8 qualified, 7 prototype, 0 not given).
 
 | Class | Parent | Python class | TRL | Function |
 | ----- | ------ | ------------ | --- | -------- |
@@ -108,8 +120,11 @@ Classes are listed in gridlabd's registration order. TRL is the technology readi
 | `triplex_line` | `line` | `triplex_line.TriplexLine` | 9 | A split-phase secondary line (lines 1 and 2 and a neutral): initializes and computes gridlabd's `b_mat` and `tn`, but is not solved until the triplex nodes and center-tapped transformer are ported. |
 | `triplex_line_configuration` | — | `triplex_line_configuration.TriplexLineConfiguration` | 9 | Conductors, insulation, and diameter of a split-phase secondary cable, or its 2x2 impedance matrix. A `line_configuration` for `isa()`. |
 | `triplex_line_conductor` | — | `triplex_line_conductor.TriplexLineConductor` | 9 | Resistance, geometric mean radius, and ratings of a triplex conductor. |
+| `switch` | `link` | `switch.Switch` | 8 | A switch on each phase: closed phases are the switch impedance, open ones connect nothing (isolating a to node fed only by them); banked majority rule or individual phases. |
 | `restoration` | — | `restoration.Restoration` | 7 | Settings for reconfiguring the network after a fault: feeder and microgrid limits, vertices, links, and voltage limits. Initialization only; the algorithm runs when `fault_check` is ported. |
 | `power_metrics` | — | `power_metrics.PowerMetrics` | 8 | IEEE 1366 reliability indices (SAIFI, SAIDI, CAIDI, ASAI, MAIFI), computed when the reliability module calls it. |
+| `recloser` | `switch` | `recloser.Recloser` | 0 | A switch with reclosing settings (tries, retry time); the reclosing itself needs `fault_check`. |
+| `sectionalizer` | `switch` | `sectionalizer.Sectionalizer` | 0 | A switch that opens after an upstream recloser operates; needs `fault_check` to open. |
 | `pole_configuration` | — | `pole_configuration.PoleConfiguration` | 9 | Material, dimensions, design loads, overload and strength factors, and degradation of a utility pole. Creates `powerflow::climate_impact_zone`. |
 
 ## Other modules of the package
@@ -124,4 +139,4 @@ Classes are listed in gridlabd's registration order. TRL is the technology readi
 
 ## Not yet ported
 
-The other gridlabd powerflow classes derive from the classes above and are to be added as behavior classes that subclass `Node`, `Link`, or `Line`: `switch`, `recloser`, `sectionalizer`, `capacitor`, `load`, `meter`, the triplex node classes, `fault_check`, and the others listed in gridlabd's `module/powerflow/init.cpp`. The proposed order is in `DESIGN.md`, open question 12.
+The other gridlabd powerflow classes derive from the classes above and are to be added as behavior classes that subclass `Node`, `Link`, or `Line`: `capacitor`, `load`, `meter`, the triplex node classes, `fault_check`, and the others listed in gridlabd's `module/powerflow/init.cpp`. The proposed order is in `DESIGN.md`, open question 12.
