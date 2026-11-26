@@ -57,6 +57,8 @@ module solves, and receives from each solution, phase by phase:
   below `-1e-6` reverse flow, otherwise no flow).
 
 An open link carries nothing (its outputs are 0 and its flow is `AN|BN|CN`).
+A source link (`vfd`) adds no branch: its `to` node is a reference bus at
+the voltages the link sets, and it writes its own flows.
 With the `DC` solver, each phase carries its real power from the DC
 solution, with no losses, and its flow direction follows the sign of that
 power (the magnitudes in and out are equal, so gridlabd's rule would
@@ -303,6 +305,24 @@ class Link(PowerflowObject):
     one opens phases and its to node has no other link, those phases of
     the to node are taken out of the network (voltage 0), as gridlabd's NR
     does in strictly radial mode"""
+
+    SOURCE = False
+    """`True` for links that decouple their nodes (gridlabd `SpecialLnk ==
+    VFD`): the link adds no branch, and its to node is a `REF` bus at the
+    voltages the link writes before each solution"""
+
+    @classmethod
+    def node_loads(cls, model:Any, name:str) -> list[tuple[str,str,str,complex]]: # pylint: disable=unused-argument
+        """Loads the link puts on nodes, as `(node, kind, suffix, value)`
+        with `kind` and `suffix` as in `Node.load_terms()`; none by
+        default"""
+        return []
+
+    @classmethod
+    def isolates(cls, model:Any, name:str) -> set[tuple[str,int]]: # pylint: disable=unused-argument
+        """Phases `(top node, slot)` the link takes out of the network
+        (voltage 0); none by default"""
+        return set()
 
     @classmethod
     def connected_phases(cls, model:Any, name:str) -> int:

@@ -184,13 +184,42 @@ file and a missing row; a triplex zipload's 240 V load; a pqload's
 power, impedance, and current against the equivalent load, and its
 weather inputs.
 
+test_powerflow_substation.py
+----------------------------
+
+`substation`: registration; the sequence-to-phase conversion and each
+reference phase; swing voltages from sequence voltages, with the
+distribution power, current, and voltages against the link it feeds;
+the normal-node mode and the default warnings; the three-phase
+requirement; energy over two hours; a `pypower` load parent (voltage in,
+power, current, and impedance posted) and a nominal voltage mismatch;
+a node parent.
+
+test_powerflow_motor.py
+-----------------------
+
+`motor`: registration; the single-phase model (torque balance, current
+solved with the final voltage, drawn on its phase); the three-phase model
+(sequence flux steady state, torque balance, phase currents drawn,
+power); a stationary start; override off; stall, trip, and reconnect
+timing; the phase count check; the three triplex connections.
+
+test_powerflow_vfd.py
+---------------------
+
+`vfd`: registration and the efficiency fit; a steady drive with NR and
+FD (output source voltage and phases, output power against its loads,
+input power over the efficiency, input currents); the frequency ramp at
+1 s steps and its soft event; an off drive taking out what it feeds; a
+steady start; initialization errors and warnings.
+
 test_powerflow_solver.py
 ------------------------
 
 `powerflow.solver` on networks built in Python: unbalanced wye loads
 through a coupled line with NR, FD_XB, and FD_BX against an independent
 fixed-point solution; constant-current, constant-impedance, and delta
-loads; branch currents and losses; PV and reference buses; the DC
+loads; fixed currents (the line carries them exactly, the swing buses supply them) and split fixed currents; branch currents and losses; PV and reference buses; the DC
 solution's angles and flows; parallel branches; a branch on two phases;
 argument errors, islands without a reference bus (also a phase cut off
 but coupled to the others by a line), non-convergence.

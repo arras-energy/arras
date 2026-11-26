@@ -32,9 +32,10 @@ sequence reduction:
    are added to the admittance matrix;
 4. the matrix and the injections are put in per unit (`Sbase` 1 MVA by
    default, the bus base voltages) and passed to PYPOWER;
-5. constant-power and constant-current loads depend on the voltages
-   (delta loads on phase-to-phase voltages, constant-current loads on
-   voltage magnitudes and angles as gridlabd defines them), so the
+5. constant-power, constant-current, and fixed-current loads depend on
+   the voltages (delta loads on phase-to-phase voltages, constant-current
+   loads on voltage magnitudes and angles as gridlabd defines them, a
+   fixed current, gridlabd's pre-rotated current, draws `V conj(I)`), so the
    injections are computed at the voltages of the last solution and
    PYPOWER is called again until the injections change by less than the
    solution tolerance (`max_outer` calls at most).
@@ -175,7 +176,7 @@ class Result:
     iterations"""
 
 @dataclass
-class Network: # pylint: disable=too-many-instance-attributes
+class Network: # pylint: disable=too-many-instance-attributes,too-many-public-methods
     """A three-phase network in phase coordinates (see the module
     description); values in SI units (V, A, VA, S)"""
 
@@ -220,6 +221,12 @@ class Network: # pylint: disable=too-many-instance-attributes
 
     split: list[tuple[int,int,complex,complex,complex,complex]] = field(default_factory=list)
     """Split-phase (line 1 to line 2) loads `(bus 1, bus 2, S, I, Y, vnom)`"""
+
+    fixed: list[tuple[int,int,complex]] = field(default_factory=list)
+    """Fixed-current loads `(bus a, bus b, I)`: a current `I` (A) drawn at
+    bus `a` whatever the voltage (gridlabd's pre-rotated current), or
+    across the two lines of a split-phase node (both buses draw `I`) when
+    bus `b` is not -1"""
 
     paths: list[list[tuple[int,int,int,int]]|None] = field(default_factory=list)
     """For each branch: its conduction paths as `(end a, slot a, end b, slot
@@ -298,6 +305,12 @@ class Network: # pylint: disable=too-many-instance-attributes
             vnom = complex(self.vbase[bus_a]*math.sqrt(3))
         self.delta.append((bus_a, bus_b, complex(S), complex(I), complex(Y), complex(vnom)))
 
+    def add_fixed_load(self, bus_a:int, current:complex, bus_b:int=-1) -> None:
+        """Add a fixed-current load: the current (A) drawn at bus `a`, or
+        across the lines `a` and `b` of a split-phase node, whatever the
+        voltage (see `Network.fixed`)"""
+        self.fixed.append((bus_a, bus_b, complex(current)))
+
     #
     # Matrices
     #
@@ -350,8 +363,8 @@ class Network: # pylint: disable=too-many-instance-attributes
         return sp.csr_matrix((vals, (rows, cols)), shape=(n, n), dtype=complex)
 
     def load_power(self, V:np.ndarray, real_only:bool=False) -> np.ndarray: # pylint: disable=invalid-name,too-many-locals
-        """Power drawn at each bus (VA) by the constant-power and
-        constant-current loads at voltages `V` (V); with `real_only`, the
+        """Power drawn at each bus (VA) by the constant-power,
+        constant-current, and fixed-current loads at voltages `V` (V); with `real_only`, the
         constant-impedance loads are included too (for the DC method)"""
         S = np.zeros(len(self.labels), dtype=complex) # pylint: disable=invalid-name
         for bus, s, i, y, vnom in self.wye:
@@ -382,7 +395,20 @@ class Network: # pylint: disable=too-many-instance-attributes
                 current += y*v12
             S[a] += V[a]*current.conjugate()
             S[b] += V[b]*current.conjugate()
+        for a, b, current in self.fixed:
+            S[a] += V[a]*current.conjugate()
+            if b >= 0:
+                S[b] += V[b]*current.conjugate()
         return S
+
+    def injections(self, V:np.ndarray) -> np.ndarray: # pylint: disable=invalid-name
+        """Current (A) each bus supplies at voltages `V` (V): into its
+        branches and its constant-impedance loads (`Ybus V`) and its other
+        loads (gridlabd's `current_inj` after `NR_current_update()`)"""
+        current = np.asarray(self.ybus() @ V, dtype=complex).ravel()
+        load = self.load_power(V)
+        with np.errstate(divide="ignore", invalid="ignore"):
+            return current + np.where(V != 0, np.conj(load/np.where(V != 0, V, 1)), 0)
 
     def islands(self) -> list[np.ndarray]:
         """Bus indexes of each island: buses joined by conduction paths,

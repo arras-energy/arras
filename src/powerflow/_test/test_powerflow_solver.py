@@ -63,6 +63,29 @@ def test_zip_and_delta(method):
     expected = fixed_point(Z, wye=LOADS, delta=delta, current=current, shunt=shunt)
     assert np.max(np.abs(result.V[dst] - expected)) < 1e-4
 
+@pytest.mark.parametrize("method", ["NR", "FD_XB"])
+def test_fixed_current(method):
+    """A fixed current is drawn whatever the voltage: the line carries it
+    exactly, and the swing buses supply it (`Network.injections()`)"""
+    fixed = (40-10j, 30+5j, 25)
+    net, src, dst = feeder(Z, (0, 0, 0))
+    for k in range(3):
+        net.add_fixed_load(dst[k], fixed[k])
+    result = solve(net, method)
+    assert result.success
+    V = result.V
+    assert np.allclose(V[dst], [nominal(VB, k) for k in range(3)] - Z @ np.array(fixed), atol=1e-6)
+    supplied = net.injections(V)
+    assert np.allclose(supplied[src], fixed, atol=1e-5) and np.allclose(supplied[dst], 0, atol=1e-5) # the mismatch tolerance, 0.01 VA
+
+def test_fixed_split_current():
+    """A split fixed current is drawn on both buses at their voltages"""
+    net = Network()
+    a = net.add_bus("a", 120, 120, "REF")
+    b = net.add_bus("b", 120, 118, "REF")
+    net.add_fixed_load(a, 10-2j, b)
+    assert np.allclose(net.load_power(np.array([120, 118], dtype=complex)), [120*(10+2j), 118*(10+2j)])
+
 def test_branch_currents_balance():
     """Series currents are equal at both ends; power in minus power out is
     the I^2 Z loss"""

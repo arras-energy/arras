@@ -19,6 +19,10 @@ with NR)"""
 PF_TOL = 1e-8
 """PYPOWER mismatch tolerance (per unit of 1 MVA)"""
 
+PRE = "prerotated_current"
+"""Load kind of the fixed (pre-rotated) currents: the node accumulators
+`prerotated_current_X` and the `load_terms()` key"""
+
 PAIRS = ((0, 1), (1, 2), (2, 0))
 """Phase pairs of the phase-to-phase loads AB, BC, CA"""
 
@@ -36,6 +40,7 @@ class ModuleState: # pylint: disable=too-few-public-methods
         self.admittances: dict[str,tuple[tuple,Any]] = {} # link admittance blocks by link name, with their key
         self.solutions = 0 # solver calls in the run
         self.last: Any = None # last solver result
+        self.network: Any = None # (network, buses, voltages) of the last converged solution
 
 def behavior(model:Any, name:str) -> Any:
     """Behavior class of an object: that of its class, or of the nearest
@@ -97,7 +102,26 @@ def isolated(model:Any) -> set[tuple[str,int]]:
             continue
         removed = (get_int(model, name, "phases") & 0x07) & ~cls.connected_phases(model, name)
         result |= {(ends[name], k) for k, bit in enumerate(PHASE_BITS) if removed & bit}
+    for name in links:
+        result |= behavior(model, name).isolates(model, name)
     return result
+
+def sourced(model:Any) -> set[str]:
+    """Top nodes whose voltages a source link sets (`Link.SOURCE`): `REF`
+    buses at the voltages the link writes"""
+    return {top_node(model, ref(model, name, "to")) for name in objects_of(model, "link")
+        if behavior(model, name).SOURCE and behavior(model, name).closed(model, name)}
+
+def bus_currents(model:Any, name:str) -> list[complex]|None:
+    """Currents (A) the top node of a node supplies on each bus slot in the
+    last converged solution (`Network.injections()`), or `None` before one"""
+    network = _state().network
+    if network is None:
+        return None
+    net, buses, V = network # pylint: disable=invalid-name
+    current = net.injections(V)
+    top = top_node(model, name)
+    return [complex(current[buses[(top, k)]]) if (top, k) in buses else 0j for k in range(3)]
 
 def build(model:Any, state:ModuleState, dead:set[tuple[str,int]]|None=None) -> tuple[Network,dict[tuple[str,int],int],list[str]]:
     """Network of the model: buses of the top nodes' phases (except the
@@ -108,20 +132,26 @@ def build(model:Any, state:ModuleState, dead:set[tuple[str,int]]|None=None) -> t
     net = Network()
     buses: dict[tuple[str,int],int] = {}
     nodes = objects_of(model, "node")
+    sources = sourced(model)
     for name in nodes:
         if top_node(model, name) != name:
             continue
         bustype = get_int(model, name, "bustype")
-        btype = "REF" if bustype in (SWING, SWING_PQ) else ("PV" if bustype == PV else "PQ")
+        btype = "REF" if bustype in (SWING, SWING_PQ) or name in sources else ("PV" if bustype == PV else "PQ")
         for slot, label, vbase, v0 in behavior(model, name).bus_slots(model, name):
             if (name, slot) not in dead:
                 buses[(name, slot)] = net.add_bus(f"{name}.{label}", vbase, v0, btype)
+    extra: dict[str,dict[tuple[str,str],complex]] = {}
+    for name in objects_of(model, "link"):
+        for node, kind, suffix, value in behavior(model, name).node_loads(model, name):
+            terms = extra.setdefault(node, {})
+            terms[(kind, suffix)] = terms.get((kind, suffix), 0j) + value
     for name in nodes:
-        _add_loads(model, name, net, buses)
+        _add_loads(model, name, net, buses, extra.get(name))
     links = []
     for name in objects_of(model, "link"):
         cls = behavior(model, name)
-        if not cls.closed(model, name):
+        if not cls.closed(model, name) or cls.SOURCE:
             continue
         fnode = top_node(model, ref(model, name, "from"))
         tnode = top_node(model, ref(model, name, "to"))
@@ -138,13 +168,16 @@ def build(model:Any, state:ModuleState, dead:set[tuple[str,int]]|None=None) -> t
         links.append(name)
     return net, buses, links
 
-def _add_loads(model:Any, name:str, net:Network, buses:dict[tuple[str,int],int]) -> None: # pylint: disable=too-many-locals
-    """Loads of a node, on the buses of its top node"""
+def _add_loads(model:Any, name:str, net:Network, buses:dict[tuple[str,int],int], extra:dict[tuple[str,str],complex]|None=None) -> None: # pylint: disable=too-many-locals,too-many-arguments,too-many-positional-arguments
+    """Loads of a node (and the `extra` terms links put on it,
+    `Link.node_loads()`), on the buses of its top node"""
     top = top_node(model, name)
     vbase = get_double(model, top, "nominal_voltage")
     delta = get_int(model, name, "phases") & PHASE_D == PHASE_D
     cls = behavior(model, name)
-    terms = cls.load_terms(model, name)
+    terms = dict(cls.load_terms(model, name))
+    for key, term in (extra or {}).items():
+        terms[key] = terms.get(key, 0j) + term
     def value(kind:str, suffix:str) -> complex:
         prop_ = f"{kind}_{suffix}"
         stored = get_complex(model, name, prop_) if model.objects[name].oclass.find_property(prop_) else 0j
@@ -160,6 +193,13 @@ def _add_loads(model:Any, name:str, net:Network, buses:dict[tuple[str,int],int])
         s, i, y = (value(kind, both) for kind in ("power", "current", "shunt"))
         if (s, i, y) != (0, 0, 0) and (top, 0) in buses and (top, 1) in buses:
             net.add_split_load(buses[(top, 0)], buses[(top, 1)], s, i, y, 2*vnom)
+        for slot, suffix in ((0, one), (1, two)):
+            fixed = value(PRE, suffix)
+            if fixed != 0 and (top, slot) in buses:
+                net.add_fixed_load(buses[(top, slot)], fixed)
+        fixed = value(PRE, both)
+        if fixed != 0 and (top, 0) in buses and (top, 1) in buses:
+            net.add_fixed_load(buses[(top, 0)], fixed, buses[(top, 1)])
         return
     def wye(k:int, suffix:str) -> None:
         s, i, y = (value(kind, suffix) for kind in ("power", "current", "shunt"))
@@ -177,6 +217,9 @@ def _add_loads(model:Any, name:str, net:Network, buses:dict[tuple[str,int],int])
             wye(k, x)
         wye(k, f"{x}N")
         phase_to_phase(k, ("AB", "BC", "CA")[k])
+        fixed = value(PRE, x)
+        if fixed != 0 and (top, k) in buses:
+            net.add_fixed_load(buses[(top, k)], fixed)
 
 def solver_sync(t0:int) -> int:
     """Module `sync` solver: build and solve the network, then write the
@@ -219,6 +262,7 @@ def solver_sync(t0:int) -> int:
         return t0
     changed = _write_voltages(model, nodes, buses, result.V, dead)
     _write_flows(model, net, links, result.V, method)
+    state.network = (net, buses, result.V)
     for name in nodes + objects_of(model, "link"):
         if behavior(model, name).after_solve(model, name, t0):
             changed = True
@@ -269,4 +313,4 @@ def _write_flows(model:Any, net:Network, links:list[str], V:np.ndarray, method:s
         if name not in links:
             write_flows(model, name, zero, zero, zero, zero)
 
-__all__ = ["ModuleState", "solver_init", "solver_sync", "build", "behavior", "method_name", "SM_NR", "PQ"]
+__all__ = ["ModuleState", "solver_init", "solver_sync", "build", "behavior", "method_name", "bus_currents", "sourced", "SM_NR", "PQ"]

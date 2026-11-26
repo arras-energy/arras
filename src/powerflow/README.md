@@ -123,6 +123,21 @@ classDiagram
     load <|-- zipload
     load <|-- pqload
     triplex_load <|-- triplex_zipload
+    class substation {
+        positive_sequence_voltage
+        distribution_load
+    }
+    class motor {
+        base_power
+        motor_status
+    }
+    class vfd {
+        desired_motor_speed
+        current_output_frequency
+    }
+    node <|-- substation
+    node <|-- motor
+    link_ <|-- vfd
     switch <|-- recloser
     switch <|-- sectionalizer
     powerflow_library <|.. line_spacing
@@ -169,13 +184,16 @@ Classes are listed in gridlabd's registration order. TRL is the technology readi
 | `triplex_line_configuration` | — | `triplex_line_configuration.TriplexLineConfiguration` | 9 | Conductors, insulation, and diameter of a split-phase secondary cable, or its 2x2 impedance matrix. A `line_configuration` for `isa()`. |
 | `triplex_line_conductor` | — | `triplex_line_conductor.TriplexLineConductor` | 9 | Resistance, geometric mean radius, and ratings of a triplex conductor. |
 | `switch` | `link` | `switch.Switch` | 8 | A switch on each phase: closed phases are the switch impedance, open ones connect nothing (isolating a to node fed only by them); banked majority rule or individual phases. |
+| `substation` | `node` | `substation.Substation` | 7 | A swing node whose voltages come from sequence voltages or a `pypower` `load` parent (to which it posts the distribution load); meters the distribution power, current, and energy. |
 | `pqload` | `load` | `pqload.PQLoad` | 7 | A load whose constant power, current, and impedance are linear in the weather (temperature, humidity, solar, wind, rain). |
 | `restoration` | — | `restoration.Restoration` | 7 | Settings for reconfiguring the network after a fault: feeder and microgrid limits, vertices, links, and voltage limits. Initialization only; the algorithm runs when `fault_check` is ported. |
+| `motor` | `node` | `motor.Motor` | 1 | A node with a single-phase (capacitor-run) or three-phase induction motor: steady-state models, protection (trip and reconnect), triplex connections; its current is solved with the solution's voltage. |
 | `power_metrics` | — | `power_metrics.PowerMetrics` | 8 | IEEE 1366 reliability indices (SAIFI, SAIDI, CAIDI, ASAI, MAIFI), computed when the reliability module calls it. |
 | `recloser` | `switch` | `recloser.Recloser` | 0 | A switch with reclosing settings (tries, retry time); the reclosing itself needs `fault_check`. |
 | `sectionalizer` | `switch` | `sectionalizer.Sectionalizer` | 0 | A switch that opens after an upstream recloser operates; needs `fault_check` to open. |
 | `triplex_load` | `triplex_node` | `triplex_load.TriplexLoad` | 9 | A triplex node with constant power, current, and impedance loads on lines 1, 2, and 1 to 2, or their ZIP form. |
 | `triplex_zipload` | `triplex_load` | `triplex_zipload.TriplexZipLoad` | 7 | A triplex load whose 240 V ZIP form follows the weather, a schedule, and load data, as `zipload`. |
+| `vfd` | `link` | `vfd.VFD` | 7 | A variable frequency drive: its `to` node is a voltage source at the output frequency's voltage, ramped over `stable_time`; its `from` node draws the output power over the drive's efficiency. |
 | `pole_configuration` | — | `pole_configuration.PoleConfiguration` | 9 | Material, dimensions, design loads, overload and strength factors, and degradation of a utility pole. Creates `powerflow::climate_impact_zone`. |
 | `zipload` | `load` | `zipload.ZipLoad` | 7 | A load whose ZIP form follows the weather (heating and cooling degrees, solar, wind, rain), an hourly schedule, and load data by geohash, class, and type. |
 

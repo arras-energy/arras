@@ -58,7 +58,9 @@ During a run, the module solver is expected to read, at each sync:
   and admittance (S) loads, or phase-to-phase loads `AB`, `BC`, `CA` when
   the node has phase `D`; `power_XN`, `current_XN`, `shunt_XN` are
   phase-to-ground and `power_XY`, `current_XY`, `shunt_XY` phase-to-phase
-  loads whatever the connection. A constant-current load's current turns
+  loads whatever the connection; `prerotated_current_X` is a current
+  drawn on phase `X` that does not turn with the voltage (gridlabd's
+  pre-rotated current, used by `motor`). A constant-current load's current turns
   with the voltage angle and its power follows the voltage magnitude, as
   gridlabd computes it. A split-phase node (phase `S`) has lines 1 and 2
   (bus slots 0 and 1, `voltage_A` and `voltage_B`, both at the angle of its
