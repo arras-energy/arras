@@ -29,7 +29,9 @@ inputs. Then on every phase:
 
 - `constant_power_X = Pp + j Pq`;
 - `constant_current_X` has magnitude `Im` and angle `Ia` (degrees) from
-  the phase's voltage;
+  the phase's nominal voltage (the line-to-neutral voltage, or the
+  line-to-line voltage `AB`, `BC`, `CA` of a delta load), so that the
+  solution turns it with the voltage, as for any `load` current;
 - `constant_impedance_X = Zp + j Zq` when it is not 0 (the impedance is
   kept otherwise).
 
@@ -51,11 +53,12 @@ Caveats
 Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
 -----------------------------------------------------------------
 
-1. The constant current turns with the voltage once: the network applies
-   the voltage angle to the current referred to the nominal angle;
-   gridlabd adds the voltage angle to `constant_current_X`, which its NR
-   solver rotates again with the voltage. `constant_current_X` is
-   published as gridlabd computes it.
+1. The constant current is referred to the nominal voltage angle, and the
+   solution turns it with the voltage once. gridlabd sets
+   `constant_current_X` to `Im` at `Ia` plus the solved voltage angle,
+   which its NR solver turns again with the voltage, so the current's
+   angle from the voltage is `Ia` plus the voltage angle (e.g. -120 deg
+   more on phase B) and drifts as the voltage angle changes.
 2. A missing weather property fails the initialization (except
    `rainfall`, as in gridlabd); gridlabd writes the error and returns 0
    from `init()`.
@@ -71,8 +74,8 @@ import math
 from typing import Any
 
 from ._base import prop
-from ._common import msg, ref, objects_of, object_state, get_double, get_complex, set_complex, set_double, PowerflowError
-from .load import Load
+from ._common import msg, ref, objects_of, object_state, get_double, get_int, set_complex, set_double, PowerflowError, PHASE_D
+from .load import Load, BASE_ANGLES
 from .zipload import TRL_PROTOTYPE
 
 WEATHER = (("temperature", "input_temp"), ("humidity", "input_humid"), ("solar_flux", "input_solar"),
@@ -160,25 +163,13 @@ class PQLoad(Load):
             set_complex(model, name, "output_impedance", impedance)
             set_complex(model, name, "output_current", current)
             set_complex(model, name, "output_power", power)
+            delta = get_int(model, name, "phases") & PHASE_D == PHASE_D
             for k, x in enumerate("ABC"):
                 set_complex(model, name, f"constant_power_{x}", power)
-                angle = cmath.phase(get_complex(model, name, f"voltage_{x}"))
+                angle = BASE_ANGLES[k] + (math.pi/6 if delta else 0.0)
                 set_complex(model, name, f"constant_current_{x}", cmath.rect(outputs[2], math.radians(outputs[3]) + angle))
-                state.setdefault("pq_angle", [0.0]*3)[k] = angle
                 if impedance != 0:
                     set_complex(model, name, f"constant_impedance_{x}", impedance)
         super().before_solve(model, name, t0)
-
-    @classmethod
-    def load_terms(cls, model:Any, name:str) -> dict[tuple[str,str],complex]:
-        """The load's terms, with the constant currents referred to their
-        phases' nominal angles"""
-        terms = super().load_terms(model, name)
-        angles = object_state(model, name).get("pq_angle")
-        if angles:
-            for k, x in enumerate("ABC"):
-                if ("current", x) in terms:
-                    terms[("current", x)] *= cmath.exp(1j*((0.0, -2*math.pi/3, 2*math.pi/3)[k] - angles[k]))
-        return terms
 
 __all__ = ["PQLoad"]

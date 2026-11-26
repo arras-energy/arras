@@ -17,11 +17,11 @@ from powerflow._common import PowerflowError
 VNOM = 2401.7771
 STUB = "class weather_stub { double temperature[degF]; double solar_flux[W/sf]; double wind_speed[mph]; double rainfall[in/h]; double humidity[%]; }\n"
 
-def feeder(cls:str, extra:str, tail:str="") -> str:
+def feeder(cls:str, extra:str, tail:str="", phases:str="ABCN") -> str:
     return f"""{STUB}
 object node {{ name n0; phases ABCN; nominal_voltage {VNOM}; bustype SWING; }}
 object test_line {{ name l01; phases ABCN; from n0; to n1; length 2000; }}
-object {cls} {{ name n1; phases ABCN; nominal_voltage {VNOM}; {extra} }}
+object {cls} {{ name n1; phases {phases}; nominal_voltage {VNOM}; {extra} }}
 {tail}"""
 
 def test_registration():
@@ -107,10 +107,11 @@ object triplex_zipload {{ name t1; phases AS; parent t0; Pp 3000; Pz 1000; }}
     assert powerflow.get_complex(m, "t1", "constant_power_12") == pytest.approx(3000/math.sqrt(3))
     assert powerflow.get_complex(m, "t1", "constant_impedance_12") == pytest.approx((240**2)/(1000/math.sqrt(3)))
 
-def test_pqload(helpers):
-    """Power, impedance, and current (at its angle from the voltage) on
-    every phase; the same solution as the equivalent load"""
-    r = helpers.run(feeder("pqload", "Pp 500000; Pq 100000; Zp 400; Im 50; Ia -30;"))
+@pytest.mark.parametrize("phases, shift", [("ABCN", 0.0), ("ABCD", math.pi/6)])
+def test_pqload(helpers, phases, shift):
+    """Power, impedance, and current (at its angle from the nominal voltage)
+    on every phase; the same solution as the equivalent load"""
+    r = helpers.run(feeder("pqload", "Pp 500000; Pq 100000; Zp 400; Im 50; Ia -30;", phases=phases))
     assert r.returncode == 0, r.stderr
     m = r.model
     assert any("pqload: no climate data found" in x for x in helpers.warnings(r))
@@ -118,9 +119,9 @@ def test_pqload(helpers):
     for k, x in enumerate("ABC"):
         assert powerflow.get_complex(m, "n1", f"constant_power_{x}") == 500000+100000j
         assert powerflow.get_complex(m, "n1", f"constant_impedance_{x}") == 400
-        assert powerflow.get_complex(m, "n1", f"constant_current_{x}") == pytest.approx(cmath.rect(50, math.radians(-30) + cmath.phase(v[k])), rel=1e-4)
-    same = helpers.run(feeder("load", " ".join(f"constant_power_{x} 500000+100000j; constant_impedance_{x} 400; constant_current_{x} {cmath.rect(50, math.radians(-30) + (0, -2*math.pi/3, 2*math.pi/3)[k])};".replace("(", "").replace(")", "") for k, x in enumerate("ABC"))))
-    assert np.max(np.abs(v - helpers.voltages(same.model, "n1"))) < 1e-3
+        assert powerflow.get_complex(m, "n1", f"constant_current_{x}") == pytest.approx(cmath.rect(50, math.radians(-30) + (0, -2*math.pi/3, 2*math.pi/3)[k] + shift))
+    same = helpers.run(feeder("load", " ".join(f"constant_power_{x} 500000+100000j; constant_impedance_{x} 400; constant_current_{x} {cmath.rect(50, math.radians(-30) + (0, -2*math.pi/3, 2*math.pi/3)[k] + shift)};".replace("(", "").replace(")", "") for k, x in enumerate("ABC")), phases=phases))
+    assert np.max(np.abs(v - helpers.voltages(same.model, "n1"))) < 1e-6
     assert powerflow.get_complex(m, "n1", "output_power") == 500000+100000j
 
 def test_pqload_weather(helpers):
