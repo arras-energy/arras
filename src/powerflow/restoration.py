@@ -28,8 +28,8 @@ gridlabd's `fault_check` calls the `restoration` object, after a fault, to
 find switch operations that restore service within feeder and microgrid
 power limits and voltage limits. When it initializes, it is expected to:
 
-1. fail when the solver method is `FD_XB`, `FD_BX`, or `DC` (NR and FBS,
-   which is solved with NR, are accepted);
+1. fail when the solver method is not `NR` (FBS included, as in
+   gridlabd);
 2. fail when it is not the model's first `restoration` object (one per
    model);
 3. fail when `reconfig_attempts` is 0, and warn when
@@ -37,7 +37,8 @@ power limits and voltage limits. When it initializes, it is expected to:
 4. parse the comma-separated lists, warning for each one that is empty,
    and fail when the feeder limits, feeder vertices, and feeder links (or
    the microgrid limits, vertices, and links) are not as many, or when a
-   link of the lists is not a powerflow link;
+   link of the lists is not a powerflow link or has no `power_out`
+   (reporting the link's name, or `Unnamed`);
 5. fail when `upper_voltage_limit` is not above `lower_voltage_limit`;
 6. create `output_filename` empty when it is set.
 
@@ -53,7 +54,8 @@ Caveats
 Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
 -----------------------------------------------------------------
 
-1. FBS is accepted (it is solved with NR); gridlabd accepts only NR.
+1. The message for a link without `power_out` names the link; gridlabd's
+   format has `link:s` without the `%`, so it never reports the name.
 2. A name in the object lists that is not an object fails with "not
    found"; gridlabd stores a null object and fails when it looks up the
    link's power function.
@@ -68,12 +70,17 @@ References
 from typing import Any
 
 from ._base import prop
-from ._common import (SM_NR, SM_FBS, g, get_double, get_int, get_text, isa, objects_of, gl_warning,
+from ._common import (SM_NR, g, get_double, get_int, get_text, isa, objects_of, gl_warning,
     text_to_complex, object_state, PowerflowError)
 from .powerflow_library import LibraryObject
 
 TRL_PROTOTYPE = 7
 """Technology readiness level `TRL_PROTOTYPE`"""
+
+def _label(model:Any, name:str) -> str:
+    """Name gridlabd reports for an object: its name, or `Unnamed`"""
+    obj = model.objects[name]
+    return "Unnamed" if name == f"{obj.oclass.name}:{obj.id}" else name
 
 def _items(text:str) -> list[str]:
     """Items of a comma-separated list (none for an empty text)"""
@@ -105,7 +112,7 @@ class Restoration(LibraryObject):
     @classmethod
     def check(cls, model:Any, name:str) -> None:
         # pylint: disable=too-many-branches
-        if g(model, "solver_method") not in (SM_NR, SM_FBS):
+        if g(model, "solver_method") != SM_NR:
             raise PowerflowError("Restoration control is only valid for the Newton-Raphson solver at this time.")
         if objects_of(model, "restoration")[0] != name:
             raise PowerflowError("Only one restoration object is permitted per model file")
@@ -132,7 +139,9 @@ class Restoration(LibraryObject):
                     raise PowerflowError(f"restoration: object {item} of the {kind} lists is not found")
             for link in links:
                 if not isa(model, link, "link"):
-                    raise PowerflowError(f"Restoration: failed to find power calculation function for link:{link}")
+                    raise PowerflowError(f"Restoration: failed to find power calculation function for link:{_label(model, link)}")
+                if model.objects[link].oclass.find_property("power_out") is None:
+                    raise PowerflowError(f"Restoration: failed to find calculated power value for link:{_label(model, link)}")
             object_state(model, name)[f"{kind}_limits"] = [text_to_complex(x) for x in limits]
         if get_double(model, name, "upper_voltage_limit") <= get_double(model, name, "lower_voltage_limit"):
             raise PowerflowError("restoration: the upper and lower voltage limits are either equal, or backwards")

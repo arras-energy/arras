@@ -74,8 +74,11 @@ defaults, the `climate_impact_zone` global); valid objects of every class
 (last one set wins); center-tapped impedances from losses and copied
 secondary impedances; the shunt warning only for a shunt impedance that
 is not the default; the pole diameter; the `restoration` output file
-emptied; the initialization errors and warnings of each class with
-gridlabd's messages.
+emptied, FBS refused, and unnamed links reported as `Unnamed`; the
+initialization errors and warnings of each class with gridlabd's
+messages; `triplex_line_configuration` accepted by a `line` as a
+`line_configuration`; the `power_metrics` indices, resets, extra data,
+`fault_check` requirement, and log file header.
 
 test_powerflow_line.py
 ----------------------

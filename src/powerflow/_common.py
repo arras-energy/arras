@@ -219,12 +219,19 @@ def object_state(model:Any, name:str) -> dict[str,Any]:
 #
 def isa(model:Any, name:str|None, cname:str) -> bool:
     """`True` when the object's class is the powerflow class `cname` or
-    inherits from it (gridlabd `gl_object_isa(obj, cname, "powerflow")`)"""
+    inherits from it (gridlabd `gl_object_isa(obj, cname, "powerflow")`):
+    through the class's parents, or through the behavior classes, since a
+    C++ class can answer `isa()` for a class it does not inherit
+    publications from (`triplex_line_configuration` is a
+    `line_configuration`)"""
     if name is None or name not in model.objects:
         return False
     oclass = model.objects[name].oclass
     while oclass is not None:
         if oclass.name == cname and oclass.module == MODULE:
+            return True
+        if oclass.module == MODULE and oclass.name in BEHAVIORS and cname in BEHAVIORS \
+                and issubclass(BEHAVIORS[oclass.name], BEHAVIORS[cname]) and cname not in ("powerflow_library",):
             return True
         oclass = getattr(oclass, "parent", None)
     return False

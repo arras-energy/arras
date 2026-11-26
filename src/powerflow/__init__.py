@@ -50,9 +50,10 @@ Classes
 | `line_configuration` | `powerflow.line_configuration.LineConfiguration` | line impedance and capacitance matrices per mile |
 | `transformer_configuration` | `powerflow.transformer_configuration.TransformerConfiguration` | transformer ratings and impedances |
 | `regulator_configuration` | `powerflow.regulator_configuration.RegulatorConfiguration` | voltage regulator settings |
+| `triplex_line_configuration` | `powerflow.triplex_line_configuration.TriplexLineConfiguration` | triplex line conductors or impedance matrix |
 | `triplex_line_conductor` | `powerflow.triplex_line_conductor.TriplexLineConductor` | triplex conductor data |
-| `restoration` | `powerflow.restoration.Restoration` | post-fault reconfiguration settings (initialization only) |
-| `power_metrics` | `powerflow.power_metrics.PowerMetrics` | IEEE 1366 reliability indices (not computed yet) |
+| `restoration` | `powerflow.restoration.Restoration` | post-fault reconfiguration settings (initialization; the algorithm needs `fault_check`) |
+| `power_metrics` | `powerflow.power_metrics.PowerMetrics` | IEEE 1366 reliability indices, computed when the reliability module calls it |
 | `pole_configuration` | `powerflow.pole_configuration.PoleConfiguration` | utility pole design data |
 
 Globals
@@ -140,7 +141,7 @@ node:
     ... object node { name n2; phases ABCN; nominal_voltage 2401.8; power_A 100000+50000j; power_B 50000; }
     ... ''')
     >>> [oclass.name for oclass in powerflow.classes()]
-    ['powerflow_object', 'powerflow_library', 'node', 'link', 'fuse', 'line', 'line_spacing', 'overhead_line_conductor', 'underground_line_conductor', 'line_configuration', 'transformer_configuration', 'regulator_configuration', 'triplex_line_conductor', 'restoration', 'power_metrics', 'pole_configuration']
+    ['powerflow_object', 'powerflow_library', 'node', 'link', 'fuse', 'line', 'line_spacing', 'overhead_line_conductor', 'underground_line_conductor', 'line_configuration', 'transformer_configuration', 'regulator_configuration', 'triplex_line_configuration', 'triplex_line_conductor', 'restoration', 'power_metrics', 'pole_configuration']
     >>> Runner(model=m).returncode
     0
     >>> m.get_property("link:1", "flow_direction")
@@ -215,6 +216,7 @@ from .underground_line_conductor import UndergroundLineConductor
 from .line_configuration import LineConfiguration
 from .transformer_configuration import TransformerConfiguration
 from .regulator_configuration import RegulatorConfiguration
+from .triplex_line_configuration import TriplexLineConfiguration
 from .triplex_line_conductor import TriplexLineConductor
 from .restoration import Restoration
 from .power_metrics import PowerMetrics
@@ -223,7 +225,7 @@ from . import solver
 
 CLASSES = (PowerflowObject, PowerflowLibrary, Node, Link, Fuse, Line, LineSpacing, OverheadLineConductor,
     UndergroundLineConductor, LineConfiguration, TransformerConfiguration, RegulatorConfiguration,
-    TriplexLineConductor, Restoration, PowerMetrics, PoleConfiguration)
+    TriplexLineConfiguration, TriplexLineConductor, Restoration, PowerMetrics, PoleConfiguration)
 """Behavior of each class of the module, in gridlabd's registration order"""
 
 for _cls in CLASSES:
@@ -314,11 +316,11 @@ GLOBALS: tuple[tuple[str,Any,str,dict[str,Any]],...] = (
 
 __all__ = ["PowerflowError", "PowerflowObject", "PowerflowLibrary", "Node", "Link", "Fuse", "Line",
     "LineSpacing", "OverheadLineConductor", "UndergroundLineConductor", "LineConfiguration",
-    "TransformerConfiguration", "RegulatorConfiguration", "TriplexLineConductor", "Restoration",
+    "TransformerConfiguration", "RegulatorConfiguration", "TriplexLineConfiguration", "TriplexLineConductor", "Restoration",
     "PowerMetrics", "PoleConfiguration", "load", "classes", "init", "behavior", "solver",
     "powerflow_object", "powerflow_library", "node", "link", "fuse", "line", "line_spacing",
     "overhead_line_conductor", "underground_line_conductor", "line_configuration",
-    "transformer_configuration", "regulator_configuration", "triplex_line_conductor", "restoration",
+    "transformer_configuration", "regulator_configuration", "triplex_line_configuration", "triplex_line_conductor", "restoration",
     "power_metrics", "pole_configuration", "get_complex", "get_double"]
 
 def load(model:Any) -> None:

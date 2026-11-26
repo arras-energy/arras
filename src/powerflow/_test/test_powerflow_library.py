@@ -13,7 +13,7 @@ from arras.model import Model
 from powerflow.pole_configuration import PoleConfiguration
 
 LIBRARY = ["line_spacing", "overhead_line_conductor", "underground_line_conductor", "line_configuration",
-    "transformer_configuration", "regulator_configuration", "triplex_line_conductor", "restoration",
+    "transformer_configuration", "regulator_configuration", "triplex_line_configuration", "triplex_line_conductor", "restoration",
     "power_metrics", "pole_configuration"]
 
 def test_registration():
@@ -164,3 +164,77 @@ def test_init_warnings(helpers, glm, message):
     r = run(helpers, glm)
     assert r.returncode == 0, r.stderr
     assert any(message in x for x in helpers.warnings(r)), r.stderr
+
+#
+# triplex_line_configuration
+#
+def test_triplex_line_configuration(helpers):
+    """A `triplex_line_configuration` has no parent class but is a
+    `line_configuration`: a `line` accepts it and uses its z11 ... z22"""
+    m = Model()
+    m.read_glm("module powerflow;\n")
+    config = Class.find("triplex_line_configuration", module="powerflow")
+    assert getattr(config, "parent", None) is None
+    assert [p.name for p in config.properties()] == ["conductor_1", "conductor_2", "conductor_N", "insulation_thickness",
+        "diameter", "spacing", "z11", "z12", "z21", "z22", "rating.summer.continuous", "rating.summer.emergency",
+        "rating.winter.continuous", "rating.winter.emergency"]
+    assert config.find_property("rating.winter.emergency").default == "2000 A"
+    Class.reset()
+    r = helpers.run("""
+        object triplex_line_configuration { name tlc; z11 0.5+0.3j; z12 0.1+0.2j; z21 0.1+0.2j; z22 0.5+0.3j; }
+        object node { name n0; phases ABN; nominal_voltage 120; bustype SWING; }
+        object line { name l1; phases ABN; from n0; to n1; length 100; configuration tlc; }
+        object node { name n1; phases ABN; nominal_voltage 120; power_A 500; }
+        """, lines=False)
+    assert r.returncode == 0, r.stderr
+    from powerflow.line import Line # pylint: disable=import-outside-toplevel
+    zabc, yabc = Line.line_matrices(r.model, "l1")
+    assert zabc[0, 1] == pytest.approx((0.1+0.2j)*100/5280) and zabc[2, 2] == 0 and not yabc.any()
+    assert powerflow.get_complex(r.model, "l1", "power_out_A") == pytest.approx(500)
+
+#
+# power_metrics
+#
+def test_power_metrics(helpers):
+    """IEEE 1366 indices from the reliability module's calls"""
+    from powerflow.power_metrics import PowerMetrics as P # pylint: disable=import-outside-toplevel
+    m = helpers.model("object power_metrics { name pm; }", lines=False)
+    get = lambda prop_: powerflow.get_double(m, "pm", prop_)
+    assert P.calc_metrics(m, "pm", 10, 0, 100, 3600, 0) == 1
+    assert (get("SAIFI"), get("SAIDI"), get("CAIDI"), get("MAIFI")) == pytest.approx((0.1, 6.0, 60.0, 0.0))
+    assert get("ASAI") == pytest.approx((876000 - 10)/876000)
+    assert get("SAIFI_int") == pytest.approx(0.1)
+    extra = P.init_reliability(m, "pm", "metrics1")
+    extra.value = 2
+    P.calc_metrics(m, "pm", 20, 5, 100, 120, 0)
+    assert get("SAIFI") == pytest.approx(0.1)
+    assert get("MAIFI") == pytest.approx((20 + 2*5)/100)
+    assert P.reset_annual_metrics(m, "pm") == 1
+    assert (get("SAIFI_int"), get("ASAI_int"), get("SAIFI")) == pytest.approx((0.0, 1.0, 0.1))
+    P.calc_metrics(m, "pm", 10, 0, 100, 3600, 0)
+    assert get("SAIFI") == pytest.approx(0.2) and get("SAIFI_int") == pytest.approx(0.1)
+    P.calc_metrics(m, "pm", 10, 0, 0, 3600, 0)
+    assert (get("SAIFI"), get("ASAI"), get("MAIFI")) == (0, 0, 0)
+    with pytest.raises(powerflow.PowerflowError, match="power_metrics failed to map fault_check object!"):
+        P.reset_interval_metrics(m, "pm")
+
+@pytest.mark.parametrize("base,text", [(60, "1366 metrics based around 1-minute base (outage-minutes)\n\n"),
+    (3600, "1366 metrics based around 1-hour base (outage-hours)\n\n"), (900, "1366 metrics uses time base of 900 seconds\n\n")])
+def test_power_metrics_logfile(helpers, base, text):
+    from powerflow.power_metrics import PowerMetrics # pylint: disable=import-outside-toplevel
+    m = helpers.model(f"object power_metrics {{ name pm; base_time_value {base}; }}", lines=False)
+    assert PowerMetrics.logfile_extra(m, "pm") == text
+
+#
+# restoration
+#
+def test_restoration_rejects_fbs(helpers):
+    r = run(helpers, "object restoration { name rs; }", "solver_method FBS;")
+    assert r.returncode != 0
+    assert any("init_restoration(obj=0;rs): Restoration control is only valid for the Newton-Raphson solver at this time." in x for x in helpers.errors(r))
+
+def test_restoration_unnamed_link(helpers):
+    """An unnamed object in the link lists is reported as `Unnamed`"""
+    r = run(helpers, 'object node { phases ABC; nominal_voltage 120; } object restoration { name rs; feeder_power_limit "1e6"; feeder_vertex_list "node:0"; feeder_power_links "node:0"; }')
+    assert r.returncode != 0
+    assert any("Restoration: failed to find power calculation function for link:Unnamed" in x for x in helpers.errors(r)), r.stderr

@@ -77,13 +77,17 @@ class LineConfiguration(PowerflowClass):
 
     @classmethod
     def impedance(cls, model:Any, name:str) -> np.ndarray:
-        """Series impedance matrix (3x3, ohm per mile)"""
-        return np.array([get_complex(model, name, f"z{ij}") for ij in INDEXES]).reshape(3, 3)
+        """Series impedance matrix (3x3, ohm per mile); terms the object's
+        class does not publish are 0"""
+        oclass = model.objects[name].oclass
+        return np.array([get_complex(model, name, f"z{ij}") if oclass.find_property(f"z{ij}") else 0j for ij in INDEXES]).reshape(3, 3)
 
     @classmethod
     def capacitance(cls, model:Any, name:str) -> np.ndarray:
-        """Shunt capacitance matrix (3x3, nF per mile)"""
-        return np.array([get_double(model, name, f"c{ij}") for ij in INDEXES]).reshape(3, 3)
+        """Shunt capacitance matrix (3x3, nF per mile); terms the object's
+        class does not publish are 0"""
+        oclass = model.objects[name].oclass
+        return np.array([get_double(model, name, f"c{ij}") if oclass.find_property(f"c{ij}") else 0.0 for ij in INDEXES]).reshape(3, 3)
 
     @classmethod
     def key(cls, model:Any, name:str) -> tuple:
