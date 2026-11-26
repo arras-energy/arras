@@ -11,9 +11,10 @@ with PYPOWER's Newton-Raphson, fast-decoupled, or DC solvers, which
 replace gridlabd's own Newton-Raphson solver.
 
 This first version implements the base of gridlabd's class hierarchy:
-`powerflow_object`, `node`, and `link`, then `fuse`, and `line` with its
-`line_configuration` (and the empty `powerflow_library`, which gridlabd
-registers between them). The other classes (overhead and underground
+`powerflow_object`, `node`, and `link`, then `fuse` and `line`, and the
+library classes (`powerflow_library` and the configuration, spacing,
+conductor, `restoration`, `power_metrics`, and `pole_configuration`
+classes). The other classes (overhead and underground
 lines with their conductors and spacings, transformers, regulators,
 switches, loads, meters, triplex objects, ...) derive from these and are to
 be added as behavior classes that derive from `powerflow.node.Node`,
@@ -43,7 +44,16 @@ Classes
 | `link` | `powerflow.link.Link` | branch between two nodes; flows from the solution |
 | `fuse` | `powerflow.fuse.Fuse` | link whose phases blow above a current limit and are replaced later |
 | `line` | `powerflow.line.Line` | link with the impedance and capacitance of a `line_configuration` and a length |
+| `line_spacing` | `powerflow.line_spacing.LineSpacing` | distances between the wires of a line |
+| `overhead_line_conductor` | `powerflow.overhead_line_conductor.OverheadLineConductor` | overhead conductor data |
+| `underground_line_conductor` | `powerflow.underground_line_conductor.UndergroundLineConductor` | underground cable data |
 | `line_configuration` | `powerflow.line_configuration.LineConfiguration` | line impedance and capacitance matrices per mile |
+| `transformer_configuration` | `powerflow.transformer_configuration.TransformerConfiguration` | transformer ratings and impedances |
+| `regulator_configuration` | `powerflow.regulator_configuration.RegulatorConfiguration` | voltage regulator settings |
+| `triplex_line_conductor` | `powerflow.triplex_line_conductor.TriplexLineConductor` | triplex conductor data |
+| `restoration` | `powerflow.restoration.Restoration` | post-fault reconfiguration settings (initialization only) |
+| `power_metrics` | `powerflow.power_metrics.PowerMetrics` | IEEE 1366 reliability indices (not computed yet) |
+| `pole_configuration` | `powerflow.pole_configuration.PoleConfiguration` | utility pole design data |
 
 Globals
 -------
@@ -130,7 +140,7 @@ node:
     ... object node { name n2; phases ABCN; nominal_voltage 2401.8; power_A 100000+50000j; power_B 50000; }
     ... ''')
     >>> [oclass.name for oclass in powerflow.classes()]
-    ['powerflow_object', 'powerflow_library', 'node', 'link', 'fuse', 'line', 'line_configuration']
+    ['powerflow_object', 'powerflow_library', 'node', 'link', 'fuse', 'line', 'line_spacing', 'overhead_line_conductor', 'underground_line_conductor', 'line_configuration', 'transformer_configuration', 'regulator_configuration', 'triplex_line_conductor', 'restoration', 'power_metrics', 'pole_configuration']
     >>> Runner(model=m).returncode
     0
     >>> m.get_property("link:1", "flow_direction")
@@ -178,8 +188,8 @@ References
 
 - `arras-energy/gridlabd`: `module/powerflow/` (`init.cpp`,
   `powerflow.h`, `powerflow_object.cpp`, `powerflow_library.cpp`,
-  `node.cpp`, `link.cpp`, `fuse.cpp`, `line.cpp`, `line_configuration.cpp`,
-  `solver_nr.cpp`)
+  `node.cpp`, `link.cpp`, `fuse.cpp`, `line.cpp`, the library classes'
+  `.cpp` files, `solver_nr.cpp`)
 - [Powerflow module](https://docs.gridlabd.us/index.html?owner=arras-energy&project=gridlabd&doc=/Module/Powerflow.md)
   (`docs/Module/Powerflow.md`)
 - [PYPOWER](https://github.com/rwl/PYPOWER)
@@ -199,10 +209,21 @@ from .node import Node
 from .link import Link
 from .fuse import Fuse
 from .line import Line
+from .line_spacing import LineSpacing
+from .overhead_line_conductor import OverheadLineConductor
+from .underground_line_conductor import UndergroundLineConductor
 from .line_configuration import LineConfiguration
+from .transformer_configuration import TransformerConfiguration
+from .regulator_configuration import RegulatorConfiguration
+from .triplex_line_conductor import TriplexLineConductor
+from .restoration import Restoration
+from .power_metrics import PowerMetrics
+from .pole_configuration import PoleConfiguration, CLIMATE_IMPACT_ZONES
 from . import solver
 
-CLASSES = (PowerflowObject, PowerflowLibrary, Node, Link, Fuse, Line, LineConfiguration)
+CLASSES = (PowerflowObject, PowerflowLibrary, Node, Link, Fuse, Line, LineSpacing, OverheadLineConductor,
+    UndergroundLineConductor, LineConfiguration, TransformerConfiguration, RegulatorConfiguration,
+    TriplexLineConductor, Restoration, PowerMetrics, PoleConfiguration)
 """Behavior of each class of the module, in gridlabd's registration order"""
 
 for _cls in CLASSES:
@@ -283,6 +304,8 @@ GLOBALS: tuple[tuple[str,Any,str,dict[str,Any]],...] = (
     ("default_continuous_rating", 1000.0, "double", {"unit": "A"}),
     ("default_emergency_rating", 2000.0, "double", {"unit": "A"}),
     ("default_violation_rating", 0.0, "double", {"unit": "A"}),
+    # pole_configuration (keywords in gridlabd's table order)
+    ("climate_impact_zone", "NONE", "enumeration", {"keywords": dict(CLIMATE_IMPACT_ZONES), "description": "pole deterioration climate impact zone"}),
 )
 """Module globals `powerflow::NAME` in gridlabd's creation order (module
 `init()`, then the class constructors): name, default, type, and
@@ -290,8 +313,13 @@ GLOBALS: tuple[tuple[str,Any,str,dict[str,Any]],...] = (
 `target`, as gridlabd publishes two names for one variable"""
 
 __all__ = ["PowerflowError", "PowerflowObject", "PowerflowLibrary", "Node", "Link", "Fuse", "Line",
-    "LineConfiguration", "load", "classes", "init", "behavior", "solver", "powerflow_object",
-    "powerflow_library", "node", "link", "fuse", "line", "line_configuration", "get_complex", "get_double"]
+    "LineSpacing", "OverheadLineConductor", "UndergroundLineConductor", "LineConfiguration",
+    "TransformerConfiguration", "RegulatorConfiguration", "TriplexLineConductor", "Restoration",
+    "PowerMetrics", "PoleConfiguration", "load", "classes", "init", "behavior", "solver",
+    "powerflow_object", "powerflow_library", "node", "link", "fuse", "line", "line_spacing",
+    "overhead_line_conductor", "underground_line_conductor", "line_configuration",
+    "transformer_configuration", "regulator_configuration", "triplex_line_conductor", "restoration",
+    "power_metrics", "pole_configuration", "get_complex", "get_double"]
 
 def load(model:Any) -> None:
     """Load the module into a model (the `arras.modules` entry point that

@@ -64,6 +64,19 @@ exponential replacement durations repeatable with `randomseed`; the
 initialization warnings and errors (triplex, negative limit, FD_XB and
 DC); FBS solved with NR.
 
+test_powerflow_library.py
+-------------------------
+
+The library classes: registration (order, no parent, readiness levels,
+defaults, the `climate_impact_zone` global); valid objects of every class
+(phase ratings split, degradation rate from the table); the
+`transformer_configuration` `resistance`/`reactance`/`impedance` sharing
+(last one set wins); center-tapped impedances from losses and copied
+secondary impedances; the shunt warning only for a shunt impedance that
+is not the default; the pole diameter; the `restoration` output file
+emptied; the initialization errors and warnings of each class with
+gridlabd's messages.
+
 test_powerflow_line.py
 ----------------------
 
