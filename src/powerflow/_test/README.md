@@ -222,6 +222,17 @@ taken in the order set; a zero impedance's admittance; an open reactor
 taking out its to node; DC angles from the reactance or the impedance
 magnitude.
 
+test_powerflow_volt_var_control.py
+----------------------------------
+
+`volt_var_control`: registration (no `phases`) and the capacitor size
+order; defaults (limits, drop and deadbands, link, phases, MANUAL
+modes); individual taps raised one step per delay until in the deadband,
+banked taps, lowering; capacitor closing and opening (unsigned), no
+switching above the desired power factor, signed switching; STANDBY and
+restoring control modes; all-MANUAL regulators; initialization errors,
+list errors, and warnings; measurement pairs.
+
 test_powerflow_solver.py
 ------------------------
 

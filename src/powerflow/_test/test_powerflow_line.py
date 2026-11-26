@@ -50,7 +50,7 @@ def test_registration():
     Model().read_glm("module powerflow;\n")
     assert [x.name for x in powerflow.classes()] == ["powerflow_object", "powerflow_library", "node", "link", "capacitor", "fuse", "meter", "line", "line_spacing",
         "overhead_line", "underground_line", "overhead_line_conductor", "underground_line_conductor", "line_configuration",
-        "transformer_configuration", "transformer", "load", "regulator_configuration", "regulator", "triplex_node", "triplex_meter", "triplex_line", "triplex_line_configuration", "triplex_line_conductor", "switch", "substation", "pqload", "series_reactor", "restoration", "motor", "power_metrics", "recloser",
+        "transformer_configuration", "transformer", "load", "regulator_configuration", "regulator", "triplex_node", "triplex_meter", "triplex_line", "triplex_line_configuration", "triplex_line_conductor", "switch", "substation", "pqload", "series_reactor", "restoration", "volt_var_control", "motor", "power_metrics", "recloser",
         "sectionalizer", "triplex_load", "triplex_zipload", "vfd", "pole_configuration", "zipload"]
     line = Class.find("line", module="powerflow")
     assert line.parent.name == "link"

@@ -142,6 +142,11 @@ classDiagram
         phase_X_impedance
     }
     link_ <|-- series_reactor
+    class volt_var_control {
+        regulator_list
+        capacitor_list
+        desired_pf
+    }
     switch <|-- recloser
     switch <|-- sectionalizer
     powerflow_library <|.. line_spacing
@@ -192,6 +197,7 @@ Classes are listed in gridlabd's registration order. TRL is the technology readi
 | `pqload` | `load` | `pqload.PQLoad` | 7 | A load whose constant power, current, and impedance are linear in the weather (temperature, humidity, solar, wind, rain). |
 | `series_reactor` | `link` | `series_reactor.SeriesReactor` | 9 | A link with an uncoupled series impedance on each phase (a zero impedance is gridlabd's 1e4+1e4j S admittance). |
 | `restoration` | — | `restoration.Restoration` | 7 | Settings for reconfiguring the network after a fault: feeder and microgrid limits, vertices, links, and voltage limits. Initialization only; the algorithm runs when `fault_check` is ported. |
+| `volt_var_control` | — | `volt_var_control.VoltVarControl` | 0 | Integrated volt-VAr control: steps regulator taps toward set points from end-of-line measurements, and switches capacitors on the substation power factor. |
 | `motor` | `node` | `motor.Motor` | 1 | A node with a single-phase (capacitor-run) or three-phase induction motor: steady-state models, protection (trip and reconnect), triplex connections; its current is solved with the solution's voltage. |
 | `power_metrics` | — | `power_metrics.PowerMetrics` | 8 | IEEE 1366 reliability indices (SAIFI, SAIDI, CAIDI, ASAI, MAIFI), computed when the reliability module calls it. |
 | `recloser` | `switch` | `recloser.Recloser` | 0 | A switch with reclosing settings (tries, retry time); the reclosing itself needs `fault_check`. |

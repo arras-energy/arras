@@ -62,6 +62,10 @@ dwell or delay expiry is a soft event. `cap_X_switch_count` counts, for
 each time step, a switch that ended the step in a state other than the one
 it started it in.
 
+`Capacitor.toggle_bank_status()` is gridlabd's `toggle_bank_status()`:
+it opens or closes the connected phases at once, with no delay (used by
+`volt_var_control`).
+
 When it initializes, a capacitor is expected to initialize as a `node`,
 then to apply gridlabd's checks on its sensors, set points, monitored
 phases, and connection (errors and warnings with gridlabd's messages).
@@ -243,6 +247,24 @@ class Capacitor(Node):
         """Write the switch states"""
         for x, state in zip("ABC", states):
             model.objects[name][f"switch{x}"] = "CLOSED" if state == CLOSED else "OPEN"
+
+    @classmethod
+    def toggle_bank_status(cls, model:Any, name:str, closed:bool) -> None:
+        """gridlabd's `capacitor::toggle_bank_status()` (used by
+        `volt_var_control`): open or close the connected phases at once,
+        with no delay"""
+        connected = get_int(model, name, "phases_connected")
+        switches = cls.switches(model, name)
+        state = object_state(model, name)
+        for k in range(3):
+            if connected & BITS[k]:
+                switches[k] = CLOSED if closed else OPEN
+                for key in ("next", "prev"):
+                    if key in state:
+                        state[key][k] = switches[k]
+        state["time_to_change"] = 0.0
+        state["dwell_left"] = 0.0
+        cls.set_switches(model, name, switches)
 
     @classmethod
     def load_terms(cls, model:Any, name:str) -> dict[tuple[str,str],complex]:
