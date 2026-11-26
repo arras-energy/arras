@@ -378,7 +378,7 @@ def _fd_matrices(net:Network, vb:np.ndarray, Ypu:sp.csr_matrix, method:str) -> t
         return _laplacian(n, reactance), _laplacian(n, full, shunt)
     return _laplacian(n, full), _laplacian(n, reactance, shunt)
 
-def solve(net:Network, method:str="NR", tol:float=1e-8, max_it:int=500, max_outer:int=100) -> Result: # pylint: disable=too-many-locals,too-many-branches
+def solve(net:Network, method:str="NR", tol:float=1e-8, max_it:int=500, max_outer:int=100) -> Result: # pylint: disable=too-many-locals,too-many-branches,too-many-return-statements
     """Solve a network
 
     Arguments

@@ -29,7 +29,7 @@ the `data` folder when collecting tests, and provides helpers (the
 - `model()` and `run()`: GLM text after a clock and `module powerflow`
   (with `test_line` registered unless `lines=False`);
 - `reference()`: an independent solution of a network of
-  configuration-601 lines with wye constant-power, constant-current, and
+  configuration-601 lines (shunt admittance `B601`, or another one) with wye constant-power, constant-current, and
   constant-admittance loads and delta constant-power loads, by fixed-point
   iteration on the nodal equations, which uses neither PYPOWER nor
   `powerflow.solver`;
@@ -50,6 +50,20 @@ split-phase neutral; phases taken from a parent; child nodes folded into
 their parent (loads added, voltages copied, grandchildren moved, nominal
 voltage replaced); a link to a child node deferred until the node
 initializes.
+
+test_powerflow_line.py
+----------------------
+
+`line` and `line_configuration`: registration (order, parents,
+properties); the unbalanced feeder of `test_powerflow_flows.py` built of
+`line` objects of configuration 601 (impedance and capacitance per mile)
+with `line_capacitance` against `reference()` with NR and FD_XB, and the
+same solution as the stand-in line class; without `line_capacitance`,
+the capacitance left out with a warning; the terms used for a line on two
+phases; the admittance at another nominal frequency; the admittance key
+following the configuration; the initialization errors (nominal voltage
+mismatch, zero length, missing or wrong configuration, same from and to
+node) with gridlabd's messages.
 
 test_powerflow_solver.py
 ------------------------

@@ -11,10 +11,13 @@ with PYPOWER's Newton-Raphson, fast-decoupled, or DC solvers, which
 replace gridlabd's own Newton-Raphson solver.
 
 This first version implements the base of gridlabd's class hierarchy:
-`powerflow_object`, `node`, and `link`. The other classes (lines and
-their configurations, transformers, regulators, switches, loads, meters,
-triplex objects, ...) derive from these and are to be added as behavior
-classes that derive from `powerflow.node.Node` and `powerflow.link.Link`.
+`powerflow_object`, `node`, and `link`, then `line` with its
+`line_configuration` (and the empty `powerflow_library`, which gridlabd
+registers between them). The other classes (overhead and underground
+lines with their conductors and spacings, transformers, regulators,
+switches, loads, meters, triplex objects, ...) derive from these and are to
+be added as behavior classes that derive from `powerflow.node.Node`,
+`powerflow.link.Link`, and `powerflow.line.Line`.
 
 Syntax
 ------
@@ -35,8 +38,11 @@ Classes
 | Class | Python class | Does |
 | ----- | ------------ | ---- |
 | `powerflow_object` | `powerflow.powerflow_object.PowerflowObject` | abstract base: phases, nominal voltage |
+| `powerflow_library` | `powerflow.powerflow_library.PowerflowLibrary` | empty base of the library objects |
 | `node` | `powerflow.node.Node` | bus with loads; voltages from the solution |
 | `link` | `powerflow.link.Link` | branch between two nodes; flows from the solution |
+| `line` | `powerflow.line.Line` | link with the impedance and capacitance of a `line_configuration` and a length |
+| `line_configuration` | `powerflow.line_configuration.LineConfiguration` | line impedance and capacitance matrices per mile |
 
 Globals
 -------
@@ -52,6 +58,9 @@ Globals
   `powerflow::maximum_voltage_error` is the same global.
 - `powerflow::default_resistance`: resistance of a base-class link on each
   phase (1e-4 Ohm).
+- `powerflow::line_capacitance`: include the shunt capacitance of lines
+  (false); `powerflow::nominal_frequency`: the frequency of that
+  capacitance's admittance (60 Hz).
 - `powerflow::convergence_error_handling`: when a solution cannot be used
   (a singular matrix, or voltages that are not finite), `FATAL` writes an
   error and fails the run, `IGNORE` warns and keeps the last voltages,
@@ -73,10 +82,10 @@ expected to:
 
 1. load the module in `arras.module.Module.registry` with the solvers
    `init` and `sync`;
-2. register `powerflow_object`, `node`, and `link` for module `powerflow`
-   in `arras.oclass.Class.registry` (unless they are registered already),
-   in gridlabd's registration order, `node` and `link` inheriting from
-   `powerflow_object`, with the properties, types, units, keywords,
+2. register the classes for module `powerflow` in
+   `arras.oclass.Class.registry` (unless they are registered already), in
+   gridlabd's registration order, `node` and `link` inheriting from
+   `powerflow_object` and `line` from `link`, with the properties, types, units, keywords,
    defaults, flags, descriptions, pass configurations, and technology
    readiness levels that gridlabd publishes; and
 3. create the globals in the model.
@@ -120,7 +129,7 @@ node:
     ... object node { name n2; phases ABCN; nominal_voltage 2401.8; power_A 100000+50000j; power_B 50000; }
     ... ''')
     >>> [oclass.name for oclass in powerflow.classes()]
-    ['powerflow_object', 'node', 'link']
+    ['powerflow_object', 'powerflow_library', 'node', 'link', 'line', 'line_configuration']
     >>> Runner(model=m).returncode
     0
     >>> m.get_property("link:1", "flow_direction")
@@ -137,7 +146,7 @@ Caveats
   the handlers outside a run raises `PowerflowError`.
 - PYPOWER is the version vendored in `pypower._pypower` (5.1.16); numpy and
   scipy are required.
-- Only `powerflow_object`, `node`, and `link` are implemented. Split-phase
+- Only the classes listed above are implemented. Split-phase
   (triplex) nodes, deltamode, faults and reliability, frequency
   measurement, GFA, violation recording, the matrix dumps, and the solver
   profiler are not implemented; their globals and properties are
@@ -167,7 +176,8 @@ References
 ----------
 
 - `arras-energy/gridlabd`: `module/powerflow/` (`init.cpp`,
-  `powerflow.h`, `powerflow_object.cpp`, `node.cpp`, `link.cpp`,
+  `powerflow.h`, `powerflow_object.cpp`, `powerflow_library.cpp`,
+  `node.cpp`, `link.cpp`, `line.cpp`, `line_configuration.cpp`,
   `solver_nr.cpp`)
 - [Powerflow module](https://docs.gridlabd.us/index.html?owner=arras-energy&project=gridlabd&doc=/Module/Powerflow.md)
   (`docs/Module/Powerflow.md`)
@@ -183,11 +193,14 @@ from ._common import (MODULE, MESSAGE_FLAGS, SOLVER_METHODS, BEHAVIORS, Powerflo
     get_complex, get_double)
 from ._module import solver_init, solver_sync, behavior
 from .powerflow_object import PowerflowObject
+from .powerflow_library import PowerflowLibrary
 from .node import Node
 from .link import Link
+from .line import Line
+from .line_configuration import LineConfiguration
 from . import solver
 
-CLASSES = (PowerflowObject, Node, Link)
+CLASSES = (PowerflowObject, PowerflowLibrary, Node, Link, Line, LineConfiguration)
 """Behavior of each class of the module, in gridlabd's registration order"""
 
 for _cls in CLASSES:
@@ -274,8 +287,9 @@ GLOBALS: tuple[tuple[str,Any,str,dict[str,Any]],...] = (
 `Globals.create()` options; type `alias` is a second name of the global
 `target`, as gridlabd publishes two names for one variable"""
 
-__all__ = ["PowerflowError", "PowerflowObject", "Node", "Link", "load", "classes", "init",
-    "behavior", "solver", "powerflow_object", "node", "link", "get_complex", "get_double"]
+__all__ = ["PowerflowError", "PowerflowObject", "PowerflowLibrary", "Node", "Link", "Line",
+    "LineConfiguration", "load", "classes", "init", "behavior", "solver", "powerflow_object",
+    "powerflow_library", "node", "link", "line", "line_configuration", "get_complex", "get_double"]
 
 def load(model:Any) -> None:
     """Load the module into a model (the `arras.modules` entry point that

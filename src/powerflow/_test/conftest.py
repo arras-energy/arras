@@ -116,7 +116,7 @@ def voltages(m:Model, name:str) -> np.ndarray:
 VNOM = 2401.7771
 """Nominal line-to-neutral voltage of a 4.16 kV feeder (V)"""
 
-def reference(nodes:dict[str,dict], lines:list[tuple[str,str,float]], swing:str, iterations:int=500) -> dict[str,np.ndarray]:
+def reference(nodes:dict[str,dict], lines:list[tuple[str,str,float]], swing:str, iterations:int=500, shunt:np.ndarray|None=None) -> dict[str,np.ndarray]:
     """Independent solution of a three-phase network of configuration-601
     lines, by fixed-point iteration on the nodal equations (no PYPOWER, no
     `powerflow.solver`)
@@ -128,7 +128,10 @@ def reference(nodes:dict[str,dict], lines:list[tuple[str,str,float]], swing:str,
       AB, BC, CA, VA)
     - `lines`: `(from, to, length in feet)`
     - `swing`: the swing node (voltages at nominal)
+    - `shunt`: shunt admittance per mile (S/mile, 3x3; `B601` when `None`)
     """
+    if shunt is None:
+        shunt = B601
     names = list(nodes)
     n = len(names)
     index = {name: k for k, name in enumerate(names)}
@@ -136,7 +139,7 @@ def reference(nodes:dict[str,dict], lines:list[tuple[str,str,float]], swing:str,
     for fnode, tnode, length in lines:
         miles = length/5280
         ys = np.linalg.inv(Z601*miles)
-        ysh = B601*miles/2
+        ysh = shunt*miles/2
         f, t = 3*index[fnode], 3*index[tnode]
         Y[f:f+3, f:f+3] += ys + ysh
         Y[t:t+3, t:t+3] += ys + ysh

@@ -185,7 +185,7 @@ The `pypower` module describes a transmission network as PYPOWER case tables (bu
 
 PYPOWER 5.1.16, the version gridlabd pins, is vendored in the package, so `arras` needs numpy and scipy. See the [`pypower` documentation](https://arras-energy.github.io/arras/pypower.html) for its classes `bus`, `branch`, `dcline`, `gen`, `gencost`, `geodata`, `load`, `powerplant`, `powerline`, `relay`, `scada`, `shunt`, `transformer`, and `weather`, the controllers module, and the differences from gridlabd.
 
-The `powerflow` module solves the unbalanced three-phase power flow of a distribution network of nodes and links. Its first version implements the base classes `powerflow_object`, `node`, and `link`; the other gridlabd powerflow classes (lines, transformers, loads, meters, ...) are to follow. gridlabd's Newton-Raphson solver is replaced by the vendored PYPOWER, given the network in phase coordinates (one bus per node phase, the full 3x3 link admittances), so unbalanced flows are solved without a sequence reduction. `solver_method` is `NR` (the default), `FD_XB`, `FD_BX`, or `DC`; `FBS` is deprecated and solved with NR:
+The `powerflow` module solves the unbalanced three-phase power flow of a distribution network of nodes and links. Its first version implements the base classes `powerflow_object`, `node`, and `link`, and `line` with its `line_configuration` (impedance and capacitance matrices per mile); the other gridlabd powerflow classes (overhead and underground lines, transformers, loads, meters, ...) are to follow. gridlabd's Newton-Raphson solver is replaced by the vendored PYPOWER, given the network in phase coordinates (one bus per node phase, the full 3x3 link admittances), so unbalanced flows are solved without a sequence reduction. `solver_method` is `NR` (the default), `FD_XB`, `FD_BX`, or `DC`; `FBS` is deprecated and solved with NR:
 
 ```python
 >>> from arras import Model, Runner
@@ -203,7 +203,7 @@ The `powerflow` module solves the unbalanced three-phase power flow of a distrib
 'CN|BF|AF'
 ```
 
-Node loads (`power_X`, `current_X`, `shunt_X`, wye or delta) are positive when they draw power. A link of the base class is a small resistance (`powerflow::default_resistance`) on each phase; the line and transformer classes will supply their own impedances. See the [`powerflow` documentation](https://arras-energy.github.io/arras/powerflow.html) for the classes, the solver, and the differences from gridlabd.
+Node loads (`power_X`, `current_X`, `shunt_X`, wye or delta) are positive when they draw power. A link of the base class is a small resistance (`powerflow::default_resistance`) on each phase; a `line` takes its impedance from its configuration and length, and its shunt capacitance too when `powerflow::line_capacitance` is true. See the [`powerflow` documentation](https://arras-energy.github.io/arras/powerflow.html) for the classes, the solver, and the differences from gridlabd.
 
 A distribution can provide other modules the same way, as an `arras.modules` entry point (see [`arras.model`](https://arras-energy.github.io/arras/arras/model.html)).
 
