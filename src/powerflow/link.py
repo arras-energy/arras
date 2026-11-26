@@ -202,9 +202,7 @@ class Link(PowerflowObject):
             raise PowerflowError("link from reference not a node")
         if not isa(model, tnode, "node"):
             raise PowerflowError("link to reference not a node")
-        phases = get_int(model, name, "phases") & ~(PHASE_N | PHASE_D)
-        if (get_int(model, fnode, "phases") & phases) != phases or (get_int(model, tnode, "phases") & phases) != phases:
-            raise PowerflowError(f"line:{obj.id} - {name} has a phase mismatch at one or both ends")
+        cls.check_phases(model, name)
         if get_double(model, name, "nominal_voltage") == 0:
             set_double(model, name, "nominal_voltage", get_double(model, fnode, "nominal_voltage"))
         if get_double(model, name, "nominal_voltage") == 0:
@@ -214,6 +212,16 @@ class Link(PowerflowObject):
             raise PowerflowError("negative violation_rating is not valid")
         if rating == 0:
             set_double(model, name, "violation_rating", float(g(model, "default_violation_rating") or 0.0))
+
+    @classmethod
+    def check_phases(cls, model:Any, name:str) -> None:
+        """The phase check of `link::init()`: the nodes have the link's
+        phases (transformers override it); raises `PowerflowError`"""
+        obj = model.objects[name]
+        fnode, tnode = ref(model, name, "from"), ref(model, name, "to")
+        phases = get_int(model, name, "phases") & ~(PHASE_N | PHASE_D)
+        if (get_int(model, fnode, "phases") & phases) != phases or (get_int(model, tnode, "phases") & phases) != phases:
+            raise PowerflowError(f"line:{obj.id} - {name} has a phase mismatch at one or both ends")
 
     #
     # Admittance (overridden by the link classes)
@@ -254,6 +262,14 @@ class Link(PowerflowObject):
             y[np.ix_(mask, mask)] = np.linalg.inv(sub)
         yf, yt = cls.shunt_admittance(model, name)
         return y + yf, -y, -y, y + yt
+
+    @classmethod
+    def dc_model(cls, model:Any, name:str) -> tuple[np.ndarray|None,float]: # pylint: disable=unused-argument
+        """Self series impedances (3, ohms, or `None` for the diagonal of
+        `inv(-Yft)`) and phase shift (radians) of the link in the DC and
+        fast-decoupled methods (`powerflow.solver.Network.impedances`,
+        `Network.shifts`; overridden by delta-wye transformers)"""
+        return None, 0.0
 
     @classmethod
     def admittance_key(cls, model:Any, name:str) -> tuple:

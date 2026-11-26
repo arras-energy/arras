@@ -42,6 +42,15 @@ classDiagram
         ductbank
     }
     class triplex_line
+    class transformer {
+        configuration
+        degradation_factor
+    }
+    class regulator {
+        configuration
+        tap_A/B/C
+        sense_node
+    }
     class powerflow_library {
         <<library>>
     }
@@ -59,6 +68,8 @@ classDiagram
     line <|-- overhead_line
     line <|-- underground_line
     line <|-- triplex_line
+    link_ <|-- transformer
+    link_ <|-- regulator
     powerflow_library <|.. line_spacing
     powerflow_library <|.. overhead_line_conductor
     powerflow_library <|.. underground_line_conductor
@@ -91,7 +102,9 @@ Classes are listed in gridlabd's registration order. TRL is the technology readi
 | `underground_line_conductor` | — | `underground_line_conductor.UndergroundLineConductor` | 9 | Dimensions, resistances, and ratings of a concentric-neutral or tape-shielded underground cable. |
 | `line_configuration` | — | `line_configuration.LineConfiguration` | 9 | Impedance (ohm/mile) and capacitance (nF/mile) matrices of a line, or the conductors and spacing they are computed from. |
 | `transformer_configuration` | — | `transformer_configuration.TransformerConfiguration` | 9 | Connection, voltages, kVA ratings, series and shunt impedances (per unit), losses, and thermal and in-rush data of a transformer. |
+| `transformer` | `link` | `transformer.Transformer` | 9 | A transformer with gridlabd's NR admittance for its configuration's connection: wye-wye, single-phase, delta-delta (phase by phase), or delta-wye (30-degree shift); center-tapped transformers are not solved yet. |
 | `regulator_configuration` | — | `regulator_configuration.RegulatorConfiguration` | 9 | Connection, band, delays, taps, transducer ratios, line drop compensation, and control mode of a voltage regulator. |
+| `regulator` | `link` | `regulator.Regulator` | 9 | A step voltage regulator: tap-ratio autotransformer with a small resistance; manual taps or automatic control of the output, remote-node, or line-drop-compensated voltage with gridlabd's dwell and delay timing. |
 | `triplex_line` | `line` | `triplex_line.TriplexLine` | 9 | A split-phase secondary line (lines 1 and 2 and a neutral): initializes and computes gridlabd's `b_mat` and `tn`, but is not solved until the triplex nodes and center-tapped transformer are ported. |
 | `triplex_line_configuration` | — | `triplex_line_configuration.TriplexLineConfiguration` | 9 | Conductors, insulation, and diameter of a split-phase secondary cable, or its 2x2 impedance matrix. A `line_configuration` for `isa()`. |
 | `triplex_line_conductor` | — | `triplex_line_conductor.TriplexLineConductor` | 9 | Resistance, geometric mean radius, and ratings of a triplex conductor. |
@@ -111,4 +124,4 @@ Classes are listed in gridlabd's registration order. TRL is the technology readi
 
 ## Not yet ported
 
-The other gridlabd powerflow classes derive from the classes above and are to be added as behavior classes that subclass `Node`, `Link`, or `Line`: `switch`, `recloser`, `sectionalizer`, `transformer`, `regulator`, `capacitor`, `load`, `meter`, the triplex node classes, `fault_check`, and the others listed in gridlabd's `module/powerflow/init.cpp`. The proposed order is in `DESIGN.md`, open question 12.
+The other gridlabd powerflow classes derive from the classes above and are to be added as behavior classes that subclass `Node`, `Link`, or `Line`: `switch`, `recloser`, `sectionalizer`, `capacitor`, `load`, `meter`, the triplex node classes, `fault_check`, and the others listed in gridlabd's `module/powerflow/init.cpp`. The proposed order is in `DESIGN.md`, open question 12.

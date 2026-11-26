@@ -113,6 +113,23 @@ the solver refusing triplex lines, and the triplex warnings and errors
 (no phase S, bad diameter or insulation, missing conductor, unsupported
 method, z-matrix with a method other than NR).
 
+test_powerflow_transformer.py
+-----------------------------
+
+`transformer` and `regulator`: registration; transformer secondary
+voltages against independent fixed-point solutions of `V2 = C V1 - zt I`
+for wye-wye (NR, FD_XB, FD_BX), delta-wye step-down and step-up (the
+30-degree lag and lead), and a single-phase transformer with a
+degradation factor; the delta-wye admittance blocks; DC angles with the
+delta-wye shift; a transformer listed before its configuration; the
+center-tapped transformer refused by the solver; initialization errors
+and the thermal-model warning. Regulator no-load output `V1/a` for types
+A and B; its admittance blocks; the first-run tap jump; the dwell and
+time-delay timing of tap steps; banked remote-node control; line drop
+compensation (the monitored voltage formula); the reverse-flow lock; two
+regulators sharing a configuration; FD_XB and DC solutions;
+initialization errors and the zero-resistance warning.
+
 test_powerflow_solver.py
 ------------------------
 

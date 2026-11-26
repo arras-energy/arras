@@ -25,7 +25,7 @@ References
 from typing import Any
 
 from ._base import PowerflowClass
-from ._common import SM_FBS, SM_NR, SOLVER_METHODS, g, PowerflowError
+from ._common import SM_FBS, SM_NR, SOLVER_METHODS, g, object_state, PowerflowError
 
 class PowerflowLibrary(PowerflowClass): # pylint: disable=too-few-public-methods
     """Behavior of class `powerflow_library`"""
@@ -49,6 +49,7 @@ class LibraryObject(PowerflowLibrary):
         except PowerflowError as err:
             init_failed(model, name, err)
             return False
+        object_state(model, name)["initialized"] = True
         return True
 
     @classmethod

@@ -57,7 +57,17 @@ Given a network, `solve()` is expected to return the voltages at which:
   magnitudes at their initial values, the loads evaluated at the initial
   voltages, and no losses or reactive flows. Branches added with
   `magnitude` (fuses) use the magnitude of their self impedance in the DC
-  method, since their reactance has the wrong sign there.
+  method, since their reactance has the wrong sign there. Branches added
+  with `self_impedance` (transformers whose series admittance blocks are
+  not diagonal, such as delta-wye) use those impedances in place of the
+  diagonal of `inv(-Yft)` in the DC method and in the fast-decoupled
+  matrices, and a branch's `shift` (radians, the angle by which the to
+  end lags the from end at no load) is a fixed angle difference in the
+  DC power equations. The fast-decoupled methods cannot solve purely
+  resistive branches (plain links, regulators), whose real power depends
+  on voltage magnitudes rather than angles; they solve them as reactances
+  of the same magnitude (`Network.rotated()`), a simplification whose
+  effect is a rotation of the small voltage drop across those branches.
 
 Bus types follow PYPOWER: `REF` buses keep their voltage, `PV` buses
 their voltage magnitude, `PQ` buses neither. Each island needs at least
@@ -193,6 +203,15 @@ class Network: # pylint: disable=too-many-instance-attributes
     self series impedance rather than its reactance, for branches whose
     reactance has the wrong sign (fuses)"""
 
+    impedances: list[np.ndarray|None] = field(default_factory=list)
+    """For each branch: the self series impedance of each phase (ohms,
+    3 values, as the diagonal of `inv(-Yft)` would be) used by the DC and
+    fast-decoupled methods, or `None` to use the diagonal of `inv(-Yft)`"""
+
+    shifts: list[float] = field(default_factory=list)
+    """For each branch: the angle (radians) by which the to end lags the
+    from end at no load, used by the DC method"""
+
     wye: list[tuple[int,complex,complex,complex,complex]] = field(default_factory=list)
     """Wye loads `(bus, S, I, Y, vnom)`"""
 
@@ -225,14 +244,19 @@ class Network: # pylint: disable=too-many-instance-attributes
         self.types.append(btype)
         return len(self.labels) - 1
 
-    def add_branch(self, fbus:Any, tbus:Any, Yff:Any, Yft:Any, Ytf:Any, Ytt:Any, magnitude:bool=False) -> None: # pylint: disable=invalid-name,too-many-arguments,too-many-positional-arguments
+    def add_branch(self, fbus:Any, tbus:Any, Yff:Any, Yft:Any, Ytf:Any, Ytt:Any, magnitude:bool=False, # pylint: disable=invalid-name,too-many-arguments,too-many-positional-arguments
+            self_impedance:Any=None, shift:float=0.0) -> None:
         """Add a branch: buses of phases A, B, C at each end (-1 for a phase
         not connected) and the 3x3 admittance blocks (S) such that
         `I_from = Yff V_from + Yft V_to` and `I_to = Ytf V_from + Ytt V_to`
-        (currents into the branch); `magnitude`: see `Network.magnitude`"""
+        (currents into the branch); `magnitude`: see `Network.magnitude`;
+        `self_impedance`: see `Network.impedances`; `shift`: see
+        `Network.shifts`"""
         blocks = [np.asarray(x, dtype=complex).reshape(3, 3) for x in (Yff, Yft, Ytf, Ytt)]
         self.branches.append((tuple(int(x) for x in fbus), tuple(int(x) for x in tbus), *blocks))
         self.magnitude.append(bool(magnitude))
+        self.impedances.append(None if self_impedance is None else np.asarray(self_impedance, dtype=complex).reshape(3))
+        self.shifts.append(float(shift))
 
     def add_wye_load(self, bus:int, S:complex=0j, I:complex=0j, Y:complex=0j, vnom:complex|None=None) -> None: # pylint: disable=invalid-name,too-many-arguments,too-many-positional-arguments
         """Add a phase-to-ground load: constant power `S` (VA), current
@@ -253,9 +277,25 @@ class Network: # pylint: disable=too-many-instance-attributes
     #
     # Matrices
     #
-    def ybus(self, loads:bool=True) -> sp.csr_matrix: # pylint: disable=too-many-locals
+    def rotated(self, index:int) -> bool:
+        """`True` when a branch is purely resistive (its `Yft` is real and
+        not 0), which the fast-decoupled methods solve as a reactance of the
+        same magnitude (its blocks times `-j`)"""
+        yft = self.branches[index][3]
+        return bool(np.any(yft != 0) and not np.any(yft.imag))
+
+    def blocks(self, index:int, rotate:bool=False) -> tuple[np.ndarray,np.ndarray,np.ndarray,np.ndarray]:
+        """Admittance blocks of a branch; with `rotate`, a purely resistive
+        branch's blocks times `-j` (see `Network.rotated()`)"""
+        blocks = self.branches[index][2:]
+        if rotate and self.rotated(index):
+            return tuple(-1j*x for x in blocks)
+        return blocks
+
+    def ybus(self, loads:bool=True, rotate:bool=False) -> sp.csr_matrix: # pylint: disable=too-many-locals
         """Bus admittance matrix (S), with the constant-impedance loads
-        when `loads` is true"""
+        when `loads` is true, and the purely resistive branches rotated
+        when `rotate` is true (see `Network.rotated()`)"""
         n = len(self.labels)
         rows, cols, vals = [], [], []
         def stamp(i:int, j:int, y:complex) -> None:
@@ -263,7 +303,8 @@ class Network: # pylint: disable=too-many-instance-attributes
                 rows.append(i)
                 cols.append(j)
                 vals.append(y)
-        for fbus, tbus, yff, yft, ytf, ytt in self.branches:
+        for index, (fbus, tbus, *_) in enumerate(self.branches):
+            yff, yft, ytf, ytt = self.blocks(index, rotate)
             for p in range(3):
                 for q in range(3):
                     stamp(fbus[p], fbus[q], yff[p, q])
@@ -330,10 +371,32 @@ class Network: # pylint: disable=too-many-instance-attributes
         mutual coupling is in it; the fast-decoupled matrices use these)"""
         result = []
         for index, (fbus, tbus, _, yft, _, _) in enumerate(self.branches):
+            z = self.self_impedance(index)
             for p in range(3):
                 if fbus[p] >= 0 and tbus[p] >= 0 and yft[p, p] != 0:
-                    result.append((fbus[p], tbus[p], -yft[p, p], self.magnitude[index]))
+                    y = 1/z[p] if z is not None and z[p] != 0 else -yft[p, p]
+                    if self.rotated(index):
+                        y = -1j*y
+                    result.append((fbus[p], tbus[p], y, self.magnitude[index]))
         return result
+
+    def self_impedance(self, index:int) -> np.ndarray|None:
+        """`Network.impedances` of a branch (`None` when not set)"""
+        return self.impedances[index] if index < len(self.impedances) else None
+
+    def shift(self, index:int) -> float:
+        """`Network.shifts` of a branch (0 when not set)"""
+        return self.shifts[index] if index < len(self.shifts) else 0.0
+
+    def self_impedances(self, index:int) -> dict[int,complex]:
+        """Self series impedance of each phase a branch connects (ohms), by
+        phase: `Network.impedances` when set, else the diagonal of
+        `inv(-Yft)`"""
+        fbus, tbus, _, yft, _, _ = self.branches[index]
+        z = self.self_impedance(index)
+        if z is None:
+            return _self_impedances(fbus, tbus, yft)
+        return {p: complex(z[p]) for p in range(3) if fbus[p] >= 0 and tbus[p] >= 0 and z[p] != 0}
 
     def is_magnitude(self, index:int) -> bool:
         """`Network.magnitude` of a branch (`False` when not set)"""
@@ -376,16 +439,22 @@ def _laplacian(n:int, items:list[tuple[int,int,float]], diag:np.ndarray|None=Non
         matrix = matrix + sp.diags(diag)
     return matrix.tocsr()
 
-def _pu(net:Network) -> tuple[np.ndarray,sp.csr_matrix]:
+def _pu(net:Network, rotate:bool=False) -> tuple[np.ndarray,sp.csr_matrix]:
     vb = np.array(net.vbase)
     scale = sp.diags(vb)
-    return vb, (scale @ net.ybus() @ scale / net.sbase).tocsr()
+    return vb, (scale @ net.ybus(rotate=rotate) @ scale / net.sbase).tocsr()
 
 def _xb(y:complex) -> complex:
     """Admittance of the reactance of an admittance (the XB convention:
     resistance left out)"""
     z = 1/y
     return 1/complex(0, z.imag) if z.imag != 0 else y
+
+def _b(y:complex) -> float:
+    """Susceptance term of B' and B'': `-Im y`, or `|y|` for a purely
+    resistive branch (a plain link, a regulator), which would otherwise
+    leave the matrix singular"""
+    return -y.imag if y.imag != 0 else abs(y)
 
 def _fd_matrices(net:Network, vb:np.ndarray, Ypu:sp.csr_matrix, method:str) -> tuple[sp.csr_matrix,sp.csr_matrix]: # pylint: disable=invalid-name
     """B' and B'' of the fast-decoupled method, phase by phase (no mutual
@@ -394,8 +463,8 @@ def _fd_matrices(net:Network, vb:np.ndarray, Ypu:sp.csr_matrix, method:str) -> t
     full, reactance = [], []
     for i, j, y, _ in net.series():
         ypu = y*vb[i]*vb[j]/net.sbase
-        full.append((i, j, -ypu.imag))
-        reactance.append((i, j, -_xb(ypu).imag))
+        full.append((i, j, _b(ypu)))
+        reactance.append((i, j, _b(_xb(ypu))))
     shunt = -np.asarray(Ypu.sum(axis=1)).ravel().imag
     if method == "FD_XB":
         return _laplacian(n, reactance), _laplacian(n, full, shunt)
@@ -430,7 +499,7 @@ def solve(net:Network, method:str="NR", tol:float=1e-8, max_it:int=500, max_oute
         return Result(np.zeros(0, dtype=complex), True)
     _check(net)
     ref, pv, pq = _types(net)
-    vb, Ypu = _pu(net) # pylint: disable=invalid-name
+    vb, Ypu = _pu(net, method in ("FD_XB", "FD_BX")) # pylint: disable=invalid-name
     V0 = np.array(net.v0, dtype=complex) / vb # pylint: disable=invalid-name
     if method == "DC":
         return _solve_dc(net, vb, V0, ref, pv, pq)
@@ -465,11 +534,14 @@ def solve(net:Network, method:str="NR", tol:float=1e-8, max_it:int=500, max_oute
         load = new
     return Result(V*vb, False, total, max_outer, f"voltage-dependent loads did not settle in {max_outer} solver calls")
 
-def _solve_dc(net:Network, vb:np.ndarray, V0:np.ndarray, ref:np.ndarray, pv:np.ndarray, pq:np.ndarray) -> Result: # pylint: disable=invalid-name,too-many-arguments,too-many-positional-arguments
+def _solve_dc(net:Network, vb:np.ndarray, V0:np.ndarray, ref:np.ndarray, pv:np.ndarray, pq:np.ndarray) -> Result: # pylint: disable=invalid-name,too-many-arguments,too-many-positional-arguments,too-many-locals
     n = len(net.labels)
-    items = [(i, j, 1/xpu) for i, j, xpu in dc_reactances(net, vb) if xpu != 0]
-    B = _laplacian(n, items).tocsr() # pylint: disable=invalid-name
+    branches = [(i, j, xpu, shift) for i, j, xpu, shift in _dc_branches(net, vb) if xpu != 0]
+    B = _laplacian(n, [(i, j, 1/xpu) for i, j, xpu, _ in branches]).tocsr() # pylint: disable=invalid-name
     Pbus = -(net.load_power(V0*vb, real_only=True) / net.sbase).real # pylint: disable=invalid-name
+    for i, j, xpu, shift in branches: # flow (Va_i - Va_j - shift)/x: B Va = P + shift/x at i, - at j
+        Pbus[i] += shift/xpu
+        Pbus[j] -= shift/xpu
     Va0 = np.angle(V0) # pylint: disable=invalid-name
     if len(pv) + len(pq) == 0:
         return Result(V0*vb, True)
@@ -487,11 +559,15 @@ def dc_reactances(net:Network, vb:np.ndarray|None=None) -> list[tuple[int,int,fl
     reactance is 0)"""
     if vb is None:
         vb = np.array(net.vbase)
+    return [(i, j, x) for i, j, x, _ in _dc_branches(net, vb)]
+
+def _dc_branches(net:Network, vb:np.ndarray) -> list[tuple[int,int,float,float]]:
+    """`dc_reactances()` with each branch phase's shift (radians)"""
     result = []
-    for index, (fbus, tbus, _, yft, _, _) in enumerate(net.branches):
-        for p, z in _self_impedances(fbus, tbus, yft).items():
+    for index, (fbus, tbus, *_) in enumerate(net.branches):
+        for p, z in net.self_impedances(index).items():
             x = _dc_x(z, net.is_magnitude(index))
-            result.append((fbus[p], tbus[p], x*net.sbase/(vb[fbus[p]]*vb[tbus[p]])))
+            result.append((fbus[p], tbus[p], x*net.sbase/(vb[fbus[p]]*vb[tbus[p]]), net.shift(index)))
     return result
 
 def _dc_x(z:complex, magnitude:bool) -> float:
@@ -499,12 +575,14 @@ def _dc_x(z:complex, magnitude:bool) -> float:
     part, or its magnitude for `magnitude` branches or when it has none"""
     return abs(z) if magnitude or z.imag == 0 else z.imag
 
-def branch_currents(net:Network, V:np.ndarray) -> list[tuple[np.ndarray,np.ndarray]]: # pylint: disable=invalid-name
+def branch_currents(net:Network, V:np.ndarray, rotate:bool=False) -> list[tuple[np.ndarray,np.ndarray]]: # pylint: disable=invalid-name
     """Currents of each branch (A) at voltages `V` (V): `(I_in, I_out)`,
     the currents into the branch at its from end and out of it at its to
-    end, by phase (0 for a phase not connected)"""
+    end, by phase (0 for a phase not connected); `rotate` for a solution
+    of the fast-decoupled methods (see `Network.rotated()`)"""
     result = []
-    for fbus, tbus, yff, yft, ytf, ytt in net.branches:
+    for index, (fbus, tbus, *_) in enumerate(net.branches):
+        yff, yft, ytf, ytt = net.blocks(index, rotate)
         vf = np.array([V[k] if k >= 0 else 0j for k in fbus])
         vt = np.array([V[k] if k >= 0 else 0j for k in tbus])
         result.append((yff @ vf + yft @ vt, -(ytf @ vf + ytt @ vt)))
@@ -516,12 +594,12 @@ def dc_branch_power(net:Network, V:np.ndarray) -> list[np.ndarray]: # pylint: di
     connected)"""
     vb = np.array(net.vbase)
     result = []
-    for index, (fbus, tbus, _, yft, _, _) in enumerate(net.branches):
+    for index, (fbus, tbus, *_) in enumerate(net.branches):
         flows = np.zeros(3)
-        for p, z in _self_impedances(fbus, tbus, yft).items():
+        for p, z in net.self_impedances(index).items():
             i, j = fbus[p], tbus[p]
             x = _dc_x(z, net.is_magnitude(index))
             xpu = x*net.sbase/(vb[i]*vb[j])
-            flows[p] = (np.angle(V[i]) - np.angle(V[j]))/xpu*net.sbase
+            flows[p] = (np.angle(V[i]) - np.angle(V[j]) - net.shift(index))/xpu*net.sbase
         result.append(flows)
     return result

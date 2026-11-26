@@ -143,7 +143,8 @@ def build(model:Any, state:ModuleState, dead:set[tuple[str,int]]|None=None) -> t
         mask = cls.phase_mask(model, name)
         fbus = [buses.get((fnode, k), -1) if mask[k] else -1 for k in range(3)]
         tbus = [buses.get((tnode, k), -1) if mask[k] else -1 for k in range(3)]
-        net.add_branch(fbus, tbus, *cached[1], magnitude=cls.MAGNITUDE)
+        impedance, shift = cls.dc_model(model, name)
+        net.add_branch(fbus, tbus, *cached[1], magnitude=cls.MAGNITUDE, self_impedance=impedance, shift=shift)
         links.append(name)
     return net, buses, links
 
@@ -206,10 +207,10 @@ def solver_sync(t0:int) -> int:
         # gridlabd node::sync(), solver_nr() result < 0: keep the voltages reached and iterate
         gl_verbose(f"Newton-Raphson failed to converge, sticking at same iteration ({result.message}).")
         _write_voltages(model, nodes, buses, result.V, dead)
-        _write_flows(model, net, links, result.V, method == "DC")
+        _write_flows(model, net, links, result.V, method)
         return t0
     changed = _write_voltages(model, nodes, buses, result.V, dead)
-    _write_flows(model, net, links, result.V, method == "DC")
+    _write_flows(model, net, links, result.V, method)
     for name in objects_of(model, "link"):
         if behavior(model, name).after_solve(model, name, t0):
             changed = True
@@ -236,11 +237,12 @@ def _write_voltages(model:Any, nodes:list[str], buses:dict[tuple[str,int],int], 
         set_line_voltages(model, name)
     return changed
 
-def _write_flows(model:Any, net:Network, links:list[str], V:np.ndarray, dc:bool) -> None: # pylint: disable=invalid-name,too-many-locals
+def _write_flows(model:Any, net:Network, links:list[str], V:np.ndarray, method:str) -> None: # pylint: disable=invalid-name,too-many-locals
     from .link import write_flows # pylint: disable=import-outside-toplevel
+    dc = method == "DC"
     if dc:
         powers = dc_branch_power(net, V)
-    currents = branch_currents(net, V)
+    currents = branch_currents(net, V, method in ("FD_XB", "FD_BX"))
     for index, name in enumerate(links):
         fbus, tbus = net.branches[index][0], net.branches[index][1]
         vf = np.array([V[k] if k >= 0 else 0j for k in fbus])
