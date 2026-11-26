@@ -34,6 +34,14 @@ classDiagram
         configuration
         length
     }
+    class overhead_line {
+        ice_thickness
+        is_covered
+    }
+    class underground_line {
+        ductbank
+    }
+    class triplex_line
     class powerflow_library {
         <<library>>
     }
@@ -48,6 +56,9 @@ classDiagram
     powerflow_object <|-- link_
     link_ <|-- fuse
     link_ <|-- line
+    line <|-- overhead_line
+    line <|-- underground_line
+    line <|-- triplex_line
     powerflow_library <|.. line_spacing
     powerflow_library <|.. overhead_line_conductor
     powerflow_library <|.. underground_line_conductor
@@ -74,11 +85,14 @@ Classes are listed in gridlabd's registration order. TRL is the technology readi
 | `fuse` | `link` | `fuse.Fuse` | 8 | A link whose phases blow when their current exceeds `current_limit` and are replaced after `mean_replacement_time` (a soft event). A node fed only by the fuse loses the blown phases. |
 | `line` | `link` | `line.Line` | 9 | A line of a given length, the pi model of its configuration's impedance and capacitance matrices (capacitance only with `powerflow::line_capacitance`). Base of the overhead, underground, and triplex lines. |
 | `line_spacing` | — | `line_spacing.LineSpacing` | 9 | Distances between the phase and neutral wires and to earth, for overhead and underground line impedances. |
+| `overhead_line` | `line` | `overhead_line.OverheadLine` | 9 | A line of overhead conductors: impedance by Carson's equations from its configuration's conductors and spacing, the neutral Kron-reduced, and capacitance from the potential coefficients of the conductors and their images (Kersting chapters 4 and 5); or the matrix form when the configuration gives one. |
+| `underground_line` | `line` | `underground_line.UndergroundLine` | 9 | A line of underground cables with concentric neutrals or tape shields (or neither) and an optional separate neutral, Kron-reduced, with the cables' capacitance; or the matrix form. Duct banks are not modeled. |
 | `overhead_line_conductor` | — | `overhead_line_conductor.OverheadLineConductor` | 9 | Resistance, geometric mean radius, diameter, ratings, weight, and strength of an overhead conductor. |
 | `underground_line_conductor` | — | `underground_line_conductor.UndergroundLineConductor` | 9 | Dimensions, resistances, and ratings of a concentric-neutral or tape-shielded underground cable. |
 | `line_configuration` | — | `line_configuration.LineConfiguration` | 9 | Impedance (ohm/mile) and capacitance (nF/mile) matrices of a line, or the conductors and spacing they are computed from. |
 | `transformer_configuration` | — | `transformer_configuration.TransformerConfiguration` | 9 | Connection, voltages, kVA ratings, series and shunt impedances (per unit), losses, and thermal and in-rush data of a transformer. |
 | `regulator_configuration` | — | `regulator_configuration.RegulatorConfiguration` | 9 | Connection, band, delays, taps, transducer ratios, line drop compensation, and control mode of a voltage regulator. |
+| `triplex_line` | `line` | `triplex_line.TriplexLine` | 9 | A split-phase secondary line (lines 1 and 2 and a neutral): initializes and computes gridlabd's `b_mat` and `tn`, but is not solved until the triplex nodes and center-tapped transformer are ported. |
 | `triplex_line_configuration` | — | `triplex_line_configuration.TriplexLineConfiguration` | 9 | Conductors, insulation, and diameter of a split-phase secondary cable, or its 2x2 impedance matrix. A `line_configuration` for `isa()`. |
 | `triplex_line_conductor` | — | `triplex_line_conductor.TriplexLineConductor` | 9 | Resistance, geometric mean radius, and ratings of a triplex conductor. |
 | `restoration` | — | `restoration.Restoration` | 7 | Settings for reconfiguring the network after a fault: feeder and microgrid limits, vertices, links, and voltage limits. Initialization only; the algorithm runs when `fault_check` is ported. |
@@ -97,4 +111,4 @@ Classes are listed in gridlabd's registration order. TRL is the technology readi
 
 ## Not yet ported
 
-The other gridlabd powerflow classes derive from the classes above and are to be added as behavior classes that subclass `Node`, `Link`, or `Line`: `overhead_line`, `underground_line`, `triplex_line`, `switch`, `recloser`, `sectionalizer`, `transformer`, `regulator`, `capacitor`, `load`, `meter`, the triplex node classes, `fault_check`, and the others listed in gridlabd's `module/powerflow/init.cpp`. The proposed order is in `DESIGN.md`, open question 12.
+The other gridlabd powerflow classes derive from the classes above and are to be added as behavior classes that subclass `Node`, `Link`, or `Line`: `switch`, `recloser`, `sectionalizer`, `transformer`, `regulator`, `capacitor`, `load`, `meter`, the triplex node classes, `fault_check`, and the others listed in gridlabd's `module/powerflow/init.cpp`. The proposed order is in `DESIGN.md`, open question 12.

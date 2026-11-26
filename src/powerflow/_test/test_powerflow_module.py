@@ -14,6 +14,7 @@ from arras.model import Model
 
 MODULES = ["powerflow", "powerflow.solver", "powerflow.powerflow_object", "powerflow.powerflow_library",
     "powerflow.node", "powerflow.link", "powerflow.fuse", "powerflow.line", "powerflow.line_spacing",
+    "powerflow.overhead_line", "powerflow.underground_line", "powerflow.triplex_line",
     "powerflow.overhead_line_conductor", "powerflow.underground_line_conductor", "powerflow.line_configuration",
     "powerflow.transformer_configuration", "powerflow.regulator_configuration", "powerflow.triplex_line_configuration", "powerflow.triplex_line_conductor",
     "powerflow.restoration", "powerflow.power_metrics", "powerflow.pole_configuration"]
@@ -30,8 +31,8 @@ def test_load():
     m = Model()
     m.read_glm("module powerflow;\n")
     assert [x.name for x in powerflow.classes()] == ["powerflow_object", "powerflow_library", "node", "link", "fuse", "line", "line_spacing",
-        "overhead_line_conductor", "underground_line_conductor", "line_configuration", "transformer_configuration",
-        "regulator_configuration", "triplex_line_configuration", "triplex_line_conductor", "restoration", "power_metrics", "pole_configuration"]
+        "overhead_line", "underground_line", "overhead_line_conductor", "underground_line_conductor", "line_configuration",
+        "transformer_configuration", "regulator_configuration", "triplex_line", "triplex_line_configuration", "triplex_line_conductor", "restoration", "power_metrics", "pole_configuration"]
     assert {"init", "sync"} <= set(Module.find("powerflow").solvers)
     assert Class.find("node", module="powerflow").parent.name == "powerflow_object"
     assert Class.find("link", module="powerflow").parent.name == "powerflow_object"

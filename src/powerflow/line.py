@@ -84,6 +84,40 @@ from ._common import isa, ref, g, msg, get_double, PowerflowError, SM_FBS, SM_NR
 from .link import Link
 from .line_configuration import LineConfiguration
 
+EARTH_RESISTIVITY = 100.0
+"""Earth resistivity (ohm-m) of Carson's equations (gridlabd `EARTH_RESISTIVITY`)"""
+
+PERMITIVITTY_AIR = 0.014240
+"""Permittivity of air (uF/mile), gridlabd `PERMITIVITTY_AIR`"""
+
+PERMITIVITTY_FREE = 0.01420
+"""Permittivity of free space (uF/mile), gridlabd `PERMITIVITTY_FREE`"""
+
+def frequency(model:Any) -> float:
+    """Frequency of the line models: `powerflow::current_frequency` when
+    `powerflow::enable_frequency_dependence`, else
+    `powerflow::nominal_frequency`"""
+    if g(model, "enable_frequency_dependence"):
+        return float(g(model, "current_frequency") or 60.0)
+    return float(g(model, "nominal_frequency") or 60.0)
+
+def carson(model:Any) -> tuple[float,float,float]:
+    """Constants of the modified Carson's equations, as gridlabd computes
+    them: `(real, imag, additive)`, where a self impedance is
+    `r + real + j imag (ln(1/GMR) + additive)` and a mutual impedance
+    `real + j imag (ln(1/D) + additive)` (ohm/mile, feet)"""
+    f = frequency(model)
+    return 0.00158836*f, 0.00202237*f, math.log(EARTH_RESISTIVITY/f)/2.0 + 7.6786
+
+def snapshot(model:Any, *names:str|None) -> tuple:
+    """Property values of objects (for admittance keys)"""
+    return tuple((name, tuple(sorted((k, str(v)) for k, v in model.objects[name].items()))) if name in model.objects else (name,) for name in names)
+
+def label(model:Any, name:str) -> str:
+    """Name gridlabd prints for `obj->name`: the name, or `Unnamed`"""
+    obj = model.objects[name]
+    return "Unnamed" if name == f"{obj.oclass.name}:{obj.id}" else name
+
 ZERO_LENGTH_METHODS = {SM_FBS: "Newton-Raphson", SM_NR: "Newton-Raphson", SM_FD_XB: "FD_XB", SM_FD_BX: "FD_BX", SM_DC: "DC"}
 """Method named in the zero-length line error: gridlabd's message for NR
 (and FBS, which is solved with NR), the method's keyword for the others"""

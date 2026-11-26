@@ -22,8 +22,8 @@ the `data` folder when collecting tests, and provides helpers (the
   `length[ft]` property) by `register_test_line()`: a line of IEEE 13-node
   feeder configuration 601 (series impedance and shunt admittance per
   mile, Kersting, *Distribution System Modeling and Analysis*, examples
-  4.1 and 5.1). The line classes of gridlabd are not ported yet; this
-  class stands in for them and shows how a link class supplies its
+  4.1 and 5.1). The tests of the solver and flows use this
+  class in place of gridlabd's line classes and shows how a link class supplies its
   impedance (`series_impedance()`, `shunt_admittance()`,
   `admittance_key()`);
 - `model()` and `run()`: GLM text after a clock and `module powerflow`
@@ -95,6 +95,23 @@ following the configuration; the initialization errors (nominal voltage
 mismatch, zero length, missing or wrong configuration, same from and to
 node) with gridlabd's messages; a zero-length line refused with every
 solver method.
+
+test_powerflow_line_subclasses.py
+---------------------------------
+
+`overhead_line`, `underground_line`, and `triplex_line`: registration
+(parents, properties); the overhead impedance and capacitance of
+Kersting's examples 4.1 and 5.1, and an independent Kron reduction of a
+two-phase line; the matrix form; an overhead line solved as a `line` with
+its impedance in matrix form; capacitance left out with a warning when a
+height is missing; the initialization errors with gridlabd's messages; a
+conductor change taken into the matrices; the underground impedance and
+capacitance of the concentric-neutral cables of examples 4.3 and 5.2 and
+the tape-shielded cable of example 4.4; the underground conductor
+message; the triplex `b_mat` and `tn` from an independent computation,
+the solver refusing triplex lines, and the triplex warnings and errors
+(no phase S, bad diameter or insulation, missing conductor, unsupported
+method, z-matrix with a method other than NR).
 
 test_powerflow_solver.py
 ------------------------

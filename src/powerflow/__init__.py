@@ -14,11 +14,11 @@ This first version implements the base of gridlabd's class hierarchy:
 `powerflow_object`, `node`, and `link`, then `fuse` and `line`, and the
 library classes (`powerflow_library` and the configuration, spacing,
 conductor, `restoration`, `power_metrics`, and `pole_configuration`
-classes). The other classes (overhead and underground
-lines with their conductors and spacings, transformers, regulators,
-switches, loads, meters, triplex objects, ...) derive from these and are to
-be added as behavior classes that derive from `powerflow.node.Node`,
-`powerflow.link.Link`, and `powerflow.line.Line`.
+classes), and the `overhead_line`, `underground_line`, and
+`triplex_line` subclasses of `line`. The other classes (transformers,
+regulators, switches, loads, meters, triplex nodes, ...) derive from these
+and are to be added as behavior classes that derive from
+`powerflow.node.Node`, `powerflow.link.Link`, and `powerflow.line.Line`.
 
 Syntax
 ------
@@ -45,11 +45,14 @@ Classes
 | `fuse` | `powerflow.fuse.Fuse` | link whose phases blow above a current limit and are replaced later |
 | `line` | `powerflow.line.Line` | link with the impedance and capacitance of a `line_configuration` and a length |
 | `line_spacing` | `powerflow.line_spacing.LineSpacing` | distances between the wires of a line |
+| `overhead_line` | `powerflow.overhead_line.OverheadLine` | line whose matrices come from overhead conductors and spacing (Carson's equations) |
+| `underground_line` | `powerflow.underground_line.UndergroundLine` | line whose matrices come from concentric-neutral or tape-shielded cables and spacing |
 | `overhead_line_conductor` | `powerflow.overhead_line_conductor.OverheadLineConductor` | overhead conductor data |
 | `underground_line_conductor` | `powerflow.underground_line_conductor.UndergroundLineConductor` | underground cable data |
 | `line_configuration` | `powerflow.line_configuration.LineConfiguration` | line impedance and capacitance matrices per mile |
 | `transformer_configuration` | `powerflow.transformer_configuration.TransformerConfiguration` | transformer ratings and impedances |
 | `regulator_configuration` | `powerflow.regulator_configuration.RegulatorConfiguration` | voltage regulator settings |
+| `triplex_line` | `powerflow.triplex_line.TriplexLine` | split-phase secondary line (matrices only; not solved yet) |
 | `triplex_line_configuration` | `powerflow.triplex_line_configuration.TriplexLineConfiguration` | triplex line conductors or impedance matrix |
 | `triplex_line_conductor` | `powerflow.triplex_line_conductor.TriplexLineConductor` | triplex conductor data |
 | `restoration` | `powerflow.restoration.Restoration` | post-fault reconfiguration settings (initialization; the algorithm needs `fault_check`) |
@@ -141,7 +144,7 @@ node:
     ... object node { name n2; phases ABCN; nominal_voltage 2401.8; power_A 100000+50000j; power_B 50000; }
     ... ''')
     >>> [oclass.name for oclass in powerflow.classes()]
-    ['powerflow_object', 'powerflow_library', 'node', 'link', 'fuse', 'line', 'line_spacing', 'overhead_line_conductor', 'underground_line_conductor', 'line_configuration', 'transformer_configuration', 'regulator_configuration', 'triplex_line_configuration', 'triplex_line_conductor', 'restoration', 'power_metrics', 'pole_configuration']
+    ['powerflow_object', 'powerflow_library', 'node', 'link', 'fuse', 'line', 'line_spacing', 'overhead_line', 'underground_line', 'overhead_line_conductor', 'underground_line_conductor', 'line_configuration', 'transformer_configuration', 'regulator_configuration', 'triplex_line', 'triplex_line_configuration', 'triplex_line_conductor', 'restoration', 'power_metrics', 'pole_configuration']
     >>> Runner(model=m).returncode
     0
     >>> m.get_property("link:1", "flow_direction")
@@ -211,6 +214,9 @@ from .link import Link
 from .fuse import Fuse
 from .line import Line
 from .line_spacing import LineSpacing
+from .overhead_line import OverheadLine
+from .underground_line import UndergroundLine
+from .triplex_line import TriplexLine
 from .overhead_line_conductor import OverheadLineConductor
 from .underground_line_conductor import UndergroundLineConductor
 from .line_configuration import LineConfiguration
@@ -223,9 +229,9 @@ from .power_metrics import PowerMetrics
 from .pole_configuration import PoleConfiguration, CLIMATE_IMPACT_ZONES
 from . import solver
 
-CLASSES = (PowerflowObject, PowerflowLibrary, Node, Link, Fuse, Line, LineSpacing, OverheadLineConductor,
-    UndergroundLineConductor, LineConfiguration, TransformerConfiguration, RegulatorConfiguration,
-    TriplexLineConfiguration, TriplexLineConductor, Restoration, PowerMetrics, PoleConfiguration)
+CLASSES = (PowerflowObject, PowerflowLibrary, Node, Link, Fuse, Line, LineSpacing, OverheadLine, UndergroundLine,
+    OverheadLineConductor, UndergroundLineConductor, LineConfiguration, TransformerConfiguration,
+    RegulatorConfiguration, TriplexLine, TriplexLineConfiguration, TriplexLineConductor, Restoration, PowerMetrics, PoleConfiguration)
 """Behavior of each class of the module, in gridlabd's registration order"""
 
 for _cls in CLASSES:
@@ -315,10 +321,10 @@ GLOBALS: tuple[tuple[str,Any,str,dict[str,Any]],...] = (
 `target`, as gridlabd publishes two names for one variable"""
 
 __all__ = ["PowerflowError", "PowerflowObject", "PowerflowLibrary", "Node", "Link", "Fuse", "Line",
-    "LineSpacing", "OverheadLineConductor", "UndergroundLineConductor", "LineConfiguration",
+    "LineSpacing", "OverheadLine", "UndergroundLine", "TriplexLine", "OverheadLineConductor", "UndergroundLineConductor", "LineConfiguration",
     "TransformerConfiguration", "RegulatorConfiguration", "TriplexLineConfiguration", "TriplexLineConductor", "Restoration",
     "PowerMetrics", "PoleConfiguration", "load", "classes", "init", "behavior", "solver",
-    "powerflow_object", "powerflow_library", "node", "link", "fuse", "line", "line_spacing",
+    "powerflow_object", "powerflow_library", "node", "link", "fuse", "line", "line_spacing", "overhead_line", "underground_line", "triplex_line",
     "overhead_line_conductor", "underground_line_conductor", "line_configuration",
     "transformer_configuration", "regulator_configuration", "triplex_line_configuration", "triplex_line_conductor", "restoration",
     "power_metrics", "pole_configuration", "get_complex", "get_double"]

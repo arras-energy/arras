@@ -23,7 +23,7 @@ def test_registration():
     m = Model()
     m.read_glm("module powerflow;\n")
     names = [x.name for x in powerflow.classes()]
-    assert names[names.index("line_spacing"):] == LIBRARY
+    assert [x for x in names[names.index("line_spacing"):] if not x.endswith("_line")] == LIBRARY
     for name in LIBRARY:
         assert getattr(Class.find(name, module="powerflow"), "parent", None) is None
     assert Class.find("restoration", module="powerflow").trl == 7
