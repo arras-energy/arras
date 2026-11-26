@@ -74,8 +74,8 @@ import math
 from typing import Any
 
 from ._base import prop
-from ._common import msg, ref, objects_of, object_state, get_double, get_int, set_complex, set_double, PowerflowError, PHASE_D
-from .load import Load, BASE_ANGLES
+from ._common import msg, ref, objects_of, object_state, get_double, set_complex, set_double, PowerflowError
+from .load import Load, nominal_angle
 from .zipload import TRL_PROTOTYPE
 
 WEATHER = (("temperature", "input_temp"), ("humidity", "input_humid"), ("solar_flux", "input_solar"),
@@ -163,11 +163,9 @@ class PQLoad(Load):
             set_complex(model, name, "output_impedance", impedance)
             set_complex(model, name, "output_current", current)
             set_complex(model, name, "output_power", power)
-            delta = get_int(model, name, "phases") & PHASE_D == PHASE_D
             for k, x in enumerate("ABC"):
                 set_complex(model, name, f"constant_power_{x}", power)
-                angle = BASE_ANGLES[k] + (math.pi/6 if delta else 0.0)
-                set_complex(model, name, f"constant_current_{x}", cmath.rect(outputs[2], math.radians(outputs[3]) + angle))
+                set_complex(model, name, f"constant_current_{x}", cmath.rect(outputs[2], math.radians(outputs[3]) + nominal_angle(model, name, k)))
                 if impedance != 0:
                     set_complex(model, name, f"constant_impedance_{x}", impedance)
         super().before_solve(model, name, t0)

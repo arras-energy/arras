@@ -59,7 +59,11 @@ Caveats
 Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
 -----------------------------------------------------------------
 
-None.
+1. On a delta-connected load (phase `D`), the ZIP form refers
+   `constant_current_X` to the nominal line-to-line angle of `AB`, `BC`,
+   or `CA` (30, -90, 150 deg), the voltage the current flows under;
+   gridlabd's `load_update_fxn()` uses the line-to-neutral angles (0,
+   -120, 120 deg), so a delta current is 30 deg behind its power factor.
 
 References
 ----------
@@ -72,7 +76,7 @@ import math
 from typing import Any
 
 from ._base import prop, keywords
-from ._common import (PHASE_S, g, msg, object_state, get_int, get_double, get_complex,
+from ._common import (PHASE_D, PHASE_S, g, msg, object_state, get_int, get_double, get_complex,
     set_complex, set_double, text_to_complex, text_to_double, PowerflowError)
 from .node import Node
 
@@ -90,6 +94,14 @@ ACCUMULATOR = {"power": "power", "current": "current", "impedance": "shunt"}
 """Node accumulator of each kind"""
 
 BASE_ANGLES = (0.0, -2*math.pi/3, 2*math.pi/3)
+"""Nominal line-to-neutral angles of phases A, B, and C"""
+
+def nominal_angle(model:Any, name:str, k:int) -> float:
+    """Nominal angle of the voltage across the load on phase `k` of a load
+    object: line-to-neutral, or line-to-line (`AB`, `BC`, `CA`, 30 deg
+    ahead) when the load is delta-connected"""
+    delta = get_int(model, name, "phases") & PHASE_D == PHASE_D
+    return BASE_ANGLES[k] + (math.pi/6 if delta else 0.0)
 
 def _load_properties() -> tuple:
     result = []
@@ -216,7 +228,7 @@ class Load(Node):
         result[f"constant_power_{x}"] = apparent("power") if fractions["power"] != 0 else 0j
         if fractions["current"] != 0:
             current = apparent("current").conjugate()/vnom
-            result[f"constant_current_{x}"] = cmath.rect(abs(current), cmath.phase(current) + BASE_ANGLES[k])
+            result[f"constant_current_{x}"] = cmath.rect(abs(current), cmath.phase(current) + nominal_angle(model, name, k))
         else:
             result[f"constant_current_{x}"] = 0j
         result[f"constant_impedance_{x}"] = (vnom*vnom/apparent("impedance")).conjugate() if fractions["impedance"] != 0 else 0j
