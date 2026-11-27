@@ -15,10 +15,14 @@ from arras.model import Model, ModelError, Object
 DATA = os.path.join(os.path.dirname(__file__), "data")
 
 @pytest.fixture(autouse=True)
-def registry():
-    """Start and end each test with an empty class registry"""
+def registry(monkeypatch):
+    """Start and end each test with an empty class registry; these tests
+    use `powerflow` as the name of a stand-in module, so the `powerflow`
+    package's entry point is not called (it is tested in src/powerflow)"""
     Class.reset()
     saved = Model.module_loader
+    entry_point = arras.model.module_entry_point
+    monkeypatch.setattr(arras.model, "module_entry_point", lambda name: None if name == "powerflow" else entry_point(name))
     yield
     Model.module_loader = saved
     Class.reset()

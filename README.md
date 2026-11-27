@@ -185,6 +185,26 @@ The `pypower` module describes a transmission network as PYPOWER case tables (bu
 
 PYPOWER 5.1.16, the version gridlabd pins, is vendored in the package, so `arras` needs numpy and scipy. See the [`pypower` documentation](https://arras-energy.github.io/arras/pypower.html) for its classes `bus`, `branch`, `dcline`, `gen`, `gencost`, `geodata`, `load`, `powerplant`, `powerline`, `relay`, `scada`, `shunt`, `transformer`, and `weather`, the controllers module, and the differences from gridlabd.
 
+The `powerflow` module solves the unbalanced three-phase power flow of a distribution network of nodes and links. Its first version implements the base classes `powerflow_object`, `node`, and `link`, then `fuse`, `line`, the `overhead_line`, `underground_line`, and `triplex_line` subclasses (matrices from conductors and spacing by Carson's equations), `transformer` and `regulator` (with automatic tap control), `switch` with `recloser` and `sectionalizer`, `capacitor`, `load`, and `meter`, the triplex classes (`triplex_node`, `triplex_meter`, `triplex_load`, with triplex lines and center-tapped transformers solved on split-phase buses), the weather-driven loads `zipload`, `triplex_zipload`, and `pqload`, `substation` (sequence or transmission voltages), `motor` (steady-state induction motors), `vfd` (variable frequency drives), `series_reactor`, `volt_var_control`, `frequency_gen`, `emissions`, `switch_coordinator`, `load_tracker`, `pole`, `pole_mount`, the `voltdump`, `currdump`, and `billdump` writers, and the library classes (line, transformer, and regulator configurations, spacings, conductors, pole configurations, and the settings of `restoration` and `power_metrics`) (impedance and capacitance matrices per mile); the other gridlabd powerflow classes ( loads, meters, ...) are to follow. gridlabd's Newton-Raphson solver is replaced by the vendored PYPOWER, given the network in phase coordinates (one bus per node phase, the full 3x3 link admittances), so unbalanced flows are solved without a sequence reduction. `solver_method` is `NR` (the default), `FD_XB`, `FD_BX`, or `DC`; `FBS` is deprecated and solved with NR:
+
+```python
+>>> from arras import Model, Runner
+>>> m = Model()
+>>> m.read_glm("""
+... clock { starttime "2020-01-01 00:00:00 UTC"; stoptime "2020-01-01 00:00:00 UTC"; }
+... module powerflow { solver_method NR; }
+... object node { name n1; phases ABCN; nominal_voltage 2401.8; bustype SWING; }
+... object link { name l1; from n1; to n2; phases ABCN; }
+... object node { name n2; phases ABCN; nominal_voltage 2401.8; power_A 100000+50000j; power_B 50000; }
+... """)
+>>> Runner(model=m).returncode
+0
+>>> m.get_property("l1", "flow_direction")
+'CN|BF|AF'
+```
+
+Node loads (`power_X`, `current_X`, `shunt_X`, wye or delta, or the `constant_*` and ZIP loads of a `load`) are positive when they draw power. A link of the base class is a small resistance (`powerflow::default_resistance`) on each phase; a `line` takes its impedance from its configuration and length, and its shunt capacitance too when `powerflow::line_capacitance` is true. A `fuse` blows a phase whose current exceeds its `current_limit` and is replaced after its `mean_replacement_time`. See the [`powerflow` documentation](https://arras-energy.github.io/arras/powerflow.html) for the classes, the solver, and the differences from gridlabd.
+
 A distribution can provide other modules the same way, as an `arras.modules` entry point (see [`arras.model`](https://arras-energy.github.io/arras/arras/model.html)).
 
 ## Testing
@@ -195,7 +215,7 @@ pip install -e . pytest pytest-cov
 pytest --cov
 ```
 
-See `src/arras/_test/README.md`, `src/assert/_test/README.md`, `src/climate/_test/README.md`, `src/tape/_test/README.md`, and `src/pypower/_test/README.md` for what the tests check. The coverage report for `main` is published at https://arras-energy.github.io/arras/coverage/.
+See `src/arras/_test/README.md`, `src/assert/_test/README.md`, `src/climate/_test/README.md`, `src/tape/_test/README.md`, `src/pypower/_test/README.md`, and `src/powerflow/_test/README.md` for what the tests check. The coverage report for `main` is published at https://arras-energy.github.io/arras/coverage/.
 
 ## Source Code Repositories
 
