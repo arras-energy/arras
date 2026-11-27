@@ -249,6 +249,16 @@ emissions, and unchanged maximum outputs; leftover energy to coal with
 its emissions; a disabled source; a shorter cycle; initialization
 errors.
 
+test_powerflow_dump.py
+----------------------
+
+`voltdump`, `currdump`, `billdump`: registration and defaults; a
+version 2 voltage dump against the node voltages; polar, group, and
+version 1 format; a dump at `runtime`; interval dumps up to `maxcount`;
+link currents; interval dumps rewriting with filemode `w`; meter bills;
+no meters; initialization (file deleted, negative interval, invalid
+version).
+
 test_powerflow_solver.py
 ------------------------
 

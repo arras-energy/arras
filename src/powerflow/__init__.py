@@ -23,7 +23,7 @@ classes (`triplex_node`, `triplex_meter`, `triplex_load`, with
 buses), the weather-driven loads `pqload`, `zipload`, and
 `triplex_zipload`, the `substation` and `motor` nodes, the `vfd`
 and `series_reactor` links, `volt_var_control`, `frequency_gen`,
-and `emissions`. The other classes ( loads, meters, triplex nodes, ...) derive from these
+`emissions`, and the `voltdump`, `currdump`, and `billdump` writers. The other classes ( loads, meters, triplex nodes, ...) derive from these
 and are to be added as behavior classes that derive from
 `powerflow.node.Node`, `powerflow.link.Link`, and `powerflow.line.Line`.
 
@@ -74,12 +74,15 @@ Classes
 | `switch` | `powerflow.switch.Switch` | link with a banked or individual switch on each phase |
 | `substation` | `powerflow.substation.Substation` | swing node set from sequence voltages or a `pypower` load, metering the distribution load |
 | `pqload` | `powerflow.pqload.PQLoad` | load whose impedance, current, and power follow the weather |
+| `voltdump` | `powerflow.voltdump.VoltDump` | CSV dump of the node voltages |
 | `series_reactor` | `powerflow.series_reactor.SeriesReactor` | link with an uncoupled series impedance on each phase |
 | `restoration` | `powerflow.restoration.Restoration` | post-fault reconfiguration settings (initialization; the algorithm needs `fault_check`) |
 | `frequency_gen` | `powerflow.frequency_gen.FrequencyGen` | system frequency answering the load at a node (inertia, damping, governor, ramp) |
 | `volt_var_control` | `powerflow.volt_var_control.VoltVarControl` | integrated volt-VAr control of regulator taps and capacitor banks |
 | `motor` | `powerflow.motor.Motor` | node with a single-phase or three-phase induction motor (steady-state models) |
+| `billdump` | `powerflow.billdump.BillDump` | CSV dump of the meters' previous monthly bills |
 | `power_metrics` | `powerflow.power_metrics.PowerMetrics` | IEEE 1366 reliability indices, computed when the reliability module calls it |
+| `currdump` | `powerflow.currdump.CurrDump` | CSV dump of the link currents |
 | `recloser` | `powerflow.recloser.Recloser` | switch with reclosing settings (reclosing needs `fault_check`) |
 | `sectionalizer` | `powerflow.sectionalizer.Sectionalizer` | switch that opens after an upstream recloser (needs `fault_check`) |
 | `triplex_zipload` | `powerflow.triplex_zipload.TriplexZipLoad` | triplex load whose ZIP form follows the weather and a schedule |
@@ -172,7 +175,7 @@ node:
     ... object node { name n2; phases ABCN; nominal_voltage 2401.8; power_A 100000+50000j; power_B 50000; }
     ... ''')
     >>> [oclass.name for oclass in powerflow.classes()]
-    ['powerflow_object', 'powerflow_library', 'node', 'link', 'capacitor', 'fuse', 'meter', 'line', 'line_spacing', 'overhead_line', 'underground_line', 'overhead_line_conductor', 'underground_line_conductor', 'line_configuration', 'transformer_configuration', 'transformer', 'load', 'regulator_configuration', 'regulator', 'triplex_node', 'triplex_meter', 'triplex_line', 'triplex_line_configuration', 'triplex_line_conductor', 'switch', 'substation', 'pqload', 'series_reactor', 'restoration', 'frequency_gen', 'volt_var_control', 'motor', 'power_metrics', 'recloser', 'sectionalizer', 'emissions', 'triplex_load', 'triplex_zipload', 'vfd', 'pole_configuration', 'zipload']
+    ['powerflow_object', 'powerflow_library', 'node', 'link', 'capacitor', 'fuse', 'meter', 'line', 'line_spacing', 'overhead_line', 'underground_line', 'overhead_line_conductor', 'underground_line_conductor', 'line_configuration', 'transformer_configuration', 'transformer', 'load', 'regulator_configuration', 'regulator', 'triplex_node', 'triplex_meter', 'triplex_line', 'triplex_line_configuration', 'triplex_line_conductor', 'switch', 'substation', 'pqload', 'voltdump', 'series_reactor', 'restoration', 'frequency_gen', 'volt_var_control', 'motor', 'billdump', 'power_metrics', 'currdump', 'recloser', 'sectionalizer', 'emissions', 'triplex_load', 'triplex_zipload', 'vfd', 'pole_configuration', 'zipload']
     >>> Runner(model=m).returncode
     0
     >>> m.get_property("link:1", "flow_direction")
@@ -272,6 +275,9 @@ from .series_reactor import SeriesReactor
 from .volt_var_control import VoltVarControl
 from .frequency_gen import FrequencyGen
 from .emissions import Emissions
+from .voltdump import VoltDump
+from .currdump import CurrDump
+from .billdump import BillDump
 from .motor import Motor
 from .vfd import VFD
 from .power_metrics import PowerMetrics
@@ -281,7 +287,7 @@ from . import solver
 CLASSES = (PowerflowObject, PowerflowLibrary, Node, Link, Capacitor, Fuse, Meter, Line, LineSpacing, OverheadLine, UndergroundLine,
     OverheadLineConductor, UndergroundLineConductor, LineConfiguration, TransformerConfiguration,
     Transformer, Load, RegulatorConfiguration, Regulator, TriplexNode, TriplexMeter, TriplexLine, TriplexLineConfiguration, TriplexLineConductor,
-    Switch, Substation, PQLoad, SeriesReactor, Restoration, FrequencyGen, VoltVarControl, Motor, PowerMetrics, Recloser, Sectionalizer, Emissions, TriplexLoad, TriplexZipLoad, VFD, PoleConfiguration,
+    Switch, Substation, PQLoad, VoltDump, SeriesReactor, Restoration, FrequencyGen, VoltVarControl, Motor, BillDump, PowerMetrics, CurrDump, Recloser, Sectionalizer, Emissions, TriplexLoad, TriplexZipLoad, VFD, PoleConfiguration,
     ZipLoad)
 """Behavior of each class of the module, in gridlabd's registration order"""
 
@@ -376,11 +382,11 @@ GLOBALS: tuple[tuple[str,Any,str,dict[str,Any]],...] = (
 __all__ = ["PowerflowError", "PowerflowObject", "PowerflowLibrary", "Node", "Link", "Fuse", "Line",
     "LineSpacing", "OverheadLine", "UndergroundLine", "TriplexLine", "Transformer", "Regulator", "Switch", "Recloser", "Sectionalizer", "Capacitor", "Load", "Meter", "TriplexNode", "TriplexMeter", "TriplexLoad", "PQLoad", "ZipLoad", "TriplexZipLoad", "OverheadLineConductor", "UndergroundLineConductor", "LineConfiguration",
     "TransformerConfiguration", "RegulatorConfiguration", "TriplexLineConfiguration", "TriplexLineConductor", "Restoration",
-    "PowerMetrics", "PoleConfiguration", "Substation", "SeriesReactor", "FrequencyGen", "VoltVarControl", "Emissions", "Motor", "VFD", "load", "classes", "init", "presync", "postsync", "commit", "behavior", "solver",
+    "PowerMetrics", "PoleConfiguration", "Substation", "SeriesReactor", "FrequencyGen", "VoltVarControl", "Emissions", "VoltDump", "CurrDump", "BillDump", "Motor", "VFD", "load", "classes", "init", "presync", "sync", "postsync", "commit", "behavior", "solver",
     "powerflow_object", "powerflow_library", "node", "link", "fuse", "line", "line_spacing", "overhead_line", "underground_line", "triplex_line", "transformer", "regulator", "switch", "recloser", "sectionalizer", "capacitor", "meter", "triplex_node", "triplex_meter", "triplex_load", "pqload", "zipload", "triplex_zipload",
     "overhead_line_conductor", "underground_line_conductor", "line_configuration",
     "transformer_configuration", "regulator_configuration", "triplex_line_configuration", "triplex_line_conductor", "restoration",
-    "power_metrics", "pole_configuration", "substation", "series_reactor", "frequency_gen", "volt_var_control", "emissions", "motor", "vfd", "get_complex", "get_double"]
+    "power_metrics", "pole_configuration", "substation", "series_reactor", "frequency_gen", "volt_var_control", "emissions", "voltdump", "currdump", "billdump", "motor", "vfd", "get_complex", "get_double"]
 
 def load(model:Any) -> None:
     """Load the module into a model (the `arras.modules` entry point that
@@ -430,8 +436,12 @@ def postsync(name:str, t:int) -> int:
     """`on_postsync` event handler (`volt_var_control`)"""
     return _call("postsync", name, t)
 
+def sync(name:str, t:int) -> int:
+    """`on_sync` event handler (the dump classes)"""
+    return _call("sync", name, t)
+
 def commit(name:str, t:int) -> int:
-    """`on_commit` event handler (`frequency_gen`)"""
+    """`on_commit` event handler (`frequency_gen`, the dump classes)"""
     return _call("commit", name, t)
 
 def init(name:str, t:int) -> bool|int:
