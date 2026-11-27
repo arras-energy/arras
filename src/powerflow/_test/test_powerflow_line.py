@@ -51,7 +51,7 @@ def test_registration():
     assert [x.name for x in powerflow.classes()] == ["powerflow_object", "powerflow_library", "node", "link", "capacitor", "fuse", "meter", "line", "line_spacing",
         "overhead_line", "underground_line", "overhead_line_conductor", "underground_line_conductor", "line_configuration",
         "transformer_configuration", "transformer", "load", "regulator_configuration", "regulator", "triplex_node", "triplex_meter", "triplex_line", "triplex_line_configuration", "triplex_line_conductor", "switch_coordinator", "switch", "substation", "pqload", "voltdump", "series_reactor", "restoration", "frequency_gen", "volt_var_control", "motor", "billdump", "power_metrics", "currdump", "recloser",
-        "sectionalizer", "emissions", "triplex_load", "triplex_zipload", "vfd", "pole_configuration", "zipload"]
+        "sectionalizer", "emissions", "load_tracker", "triplex_load", "triplex_zipload", "vfd", "pole_configuration", "zipload"]
     line = Class.find("line", module="powerflow")
     assert line.parent.name == "link"
     assert line.find_property("length").unit == "ft" and line.find_property("length").flags & 0x0008

@@ -216,6 +216,7 @@ Classes are listed in gridlabd's registration order. TRL is the technology readi
 | `recloser` | `switch` | `recloser.Recloser` | 0 | A switch with reclosing settings (tries, retry time); the reclosing itself needs `fault_check`. |
 | `sectionalizer` | `switch` | `sectionalizer.Sectionalizer` | 0 | A switch that opens after an upstream recloser operates; needs `fault_check` to open. |
 | `emissions` | — | `emissions.Emissions` | 0 | Dispatches the energy its parent meter measures to a merit order of sources each cycle, with their emissions. |
+| `load_tracker` | — | `load_tracker.LoadTracker` | 9 | Scales its output so that another object's property tracks a setpoint, within a deadband. |
 | `triplex_load` | `triplex_node` | `triplex_load.TriplexLoad` | 9 | A triplex node with constant power, current, and impedance loads on lines 1, 2, and 1 to 2, or their ZIP form. |
 | `triplex_zipload` | `triplex_load` | `triplex_zipload.TriplexZipLoad` | 7 | A triplex load whose 240 V ZIP form follows the weather, a schedule, and load data, as `zipload`. |
 | `vfd` | `link` | `vfd.VFD` | 7 | A variable frequency drive: its `to` node is a voltage source at the output frequency's voltage, ramped over `stable_time`; its `from` node draws the output power over the drive's efficiency. |

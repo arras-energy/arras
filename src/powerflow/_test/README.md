@@ -267,6 +267,13 @@ connected); toggling and direct switching in the solution and the
 return to IDLE; method values written during a run; connect and arm
 errors.
 
+test_powerflow_load_tracker.py
+------------------------------
+
+`load_tracker`: registration; the feedback of a complex property by
+operation and of an integer property; output tracking, damping, zero
+feedback, the deadband, and the extra pass; initialization errors.
+
 test_powerflow_solver.py
 ------------------------
 
