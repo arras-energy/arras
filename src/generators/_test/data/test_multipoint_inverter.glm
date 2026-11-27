@@ -1,0 +1,83 @@
+#set relax_naming_rules=1
+//Tests multipoint efficiency of inverter model, tested for Xantrex model in this case and validated with NREL's SAM model for the same inverter type
+//#set profiler=1;
+//#set pauseatexit=1;
+
+clock {
+     timezone "America/Los_Angeles";
+     starttime '2009-06-01 00:00:00';
+     stoptime '2009-06-05 00:00:00';
+}
+
+module tape;
+module climate;
+module generators;
+module assert;
+
+module powerflow {
+     solver_method NR;
+     NR_iteration_limit 50;
+};
+
+
+object climate {
+     name "WA-Yakima";
+     tmyfile "WA-Yakima_Air_Terminal.tmy3";
+     interpolate QUADRATIC;
+};
+
+object triplex_meter {
+	name trip_swing;
+	bustype SWING;
+	phases AS;
+	nominal_voltage 120.0;
+}
+
+object triplex_meter {
+	name trip_fixed_meter;
+	parent trip_swing;
+	phases AS;
+	nominal_voltage 120.0;
+}
+
+object inverter {
+	name trip_lat;
+	phases AS;
+	parent trip_fixed_meter;
+	generator_mode CONSTANT_PF;
+  generator_status ONLINE;
+  inverter_type PWM;
+  power_factor 1.0;
+	inverter_manufacturer XANTREX;
+	use_multipoint_efficiency true;
+	object complex_assert {
+			target "VA_Out";
+			object player {
+					property value;
+					file "MPINV_OUT1.player";
+			};
+			within 0.03;
+	};
+	//object recorder {	                	       
+	//			file MPINV_OUT1.csv;
+   //    	interval -1;
+   //     property VA_Out;
+	//};
+}
+
+object solar {
+	name trip_lat_solar;
+	parent trip_lat;
+	rated_power 4.0 kVA;
+	area 29.6296 m^2;
+	latitude_angle_fix true;
+	efficiency 0.135;
+	orientation_azimuth 25.0;
+	orientation FIXED_AXIS;
+	object recorder {
+		property "Insolation,VA_Out.real";
+		file "fixed_array_lat_angle_fix.csv";
+		interval -1;
+		};
+}
+

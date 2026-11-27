@@ -205,6 +205,32 @@ The `powerflow` module solves the unbalanced three-phase power flow of a distrib
 
 Node loads (`power_X`, `current_X`, `shunt_X`, wye or delta, or the `constant_*` and ZIP loads of a `load`) are positive when they draw power. A link of the base class is a small resistance (`powerflow::default_resistance`) on each phase; a `line` takes its impedance from its configuration and length, and its shunt capacitance too when `powerflow::line_capacitance` is true. A `fuse` blows a phase whose current exceeds its `current_limit` and is replaced after its `mean_replacement_time`. See the [`powerflow` documentation](https://arras-energy.github.io/arras/powerflow.html) for the classes, the solver, and the differences from gridlabd.
 
+The `generators` module is being ported the same way, starting with `solar` arrays and the `inverter` objects that connect them to a powerflow `meter` or `triplex_meter`. An inverter posts its output to its parent meter in each pass, so the powerflow solution includes it:
+
+```python
+>>> from arras import Model, Runner
+>>> m = Model()
+>>> m.read_glm("""
+... clock { starttime "2020-06-01 12:00:00 UTC"; stoptime "2020-06-01 12:00:00 UTC"; }
+... module powerflow;
+... module generators;
+... object node { name n1; phases ABCN; nominal_voltage 2401.8; bustype SWING; }
+... object link { name l1; from n1; to m1; phases ABCN; }
+... object meter { name m1; phases ABCN; nominal_voltage 2401.8; }
+... object inverter { name inv; parent m1; inverter_type PWM; generator_mode CONSTANT_PF; generator_status ONLINE; rated_power 10 kVA; }
+... object solar {
+...     name pv; parent inv; SOLAR_TILT_MODEL PLAYERVALUE; Insolation 92.902 W/sf; area 1000 sf;
+...     panel_type SINGLE_CRYSTAL_SILICON; generator_mode SUPPLY_DRIVEN; generator_status ONLINE;
+... }
+... """)
+>>> Runner(model=m).returncode
+0
+>>> round(float(m.get_property("inv", "VA_Out").split("+")[0]))
+14969
+```
+
+The array gets its insolation from a `climate` object, or from the model in player mode as here; the inverter converts the DC power with its efficiency (0.9 for `PWM` by default). Legacy inverters in `CONSTANT_PF` mode and four-quadrant inverters in `CONSTANT_PF` and `CONSTANT_PQ` modes are ported; the other modes, the other generators classes, and deltamode are to follow. See the [`generators` documentation](https://arras-energy.github.io/arras/generators.html) for the classes and the differences from gridlabd.
+
 A distribution can provide other modules the same way, as an `arras.modules` entry point (see [`arras.model`](https://arras-energy.github.io/arras/arras/model.html)).
 
 ## Testing
@@ -215,7 +241,7 @@ pip install -e . pytest pytest-cov
 pytest --cov
 ```
 
-See `src/arras/_test/README.md`, `src/assert/_test/README.md`, `src/climate/_test/README.md`, `src/tape/_test/README.md`, `src/pypower/_test/README.md`, and `src/powerflow/_test/README.md` for what the tests check. The coverage report for `main` is published at https://arras-energy.github.io/arras/coverage/.
+See `src/arras/_test/README.md`, `src/assert/_test/README.md`, `src/climate/_test/README.md`, `src/tape/_test/README.md`, `src/pypower/_test/README.md`, `src/powerflow/_test/README.md`, and `src/generators/_test/README.md` for what the tests check. The coverage report for `main` is published at https://arras-energy.github.io/arras/coverage/.
 
 ## Source Code Repositories
 
