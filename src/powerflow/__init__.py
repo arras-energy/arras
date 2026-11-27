@@ -24,7 +24,7 @@ buses), the weather-driven loads `pqload`, `zipload`, and
 `triplex_zipload`, the `substation` and `motor` nodes, the `vfd`
 and `series_reactor` links, `volt_var_control`, `frequency_gen`,
 `emissions`, `switch_coordinator`, `load_tracker`, `pole`, `pole_mount`, and the `voltdump`, `currdump`,
-`billdump`, and `impedance_dump` writers. The other classes ( loads, meters, triplex nodes, ...) derive from these
+`billdump`, and `impedance_dump` writers, and the `line_sensor`. The other classes ( loads, meters, triplex nodes, ...) derive from these
 and are to be added as behavior classes that derive from
 `powerflow.node.Node`, `powerflow.link.Link`, and `powerflow.line.Line`.
 
@@ -54,6 +54,7 @@ Classes
 | `fuse` | `powerflow.fuse.Fuse` | link whose phases blow above a current limit and are replaced later |
 | `meter` | `powerflow.meter.Meter` | node that meters the power through it: energy, demand, interval statistics, bills |
 | `line` | `powerflow.line.Line` | link with the impedance and capacitance of a `line_configuration` and a length |
+| `line_sensor` | `powerflow.line_sensor.LineSensor` | noisy voltage, current, and power measurement at a point on a line |
 | `line_spacing` | `powerflow.line_spacing.LineSpacing` | distances between the wires of a line |
 | `overhead_line` | `powerflow.overhead_line.OverheadLine` | line whose matrices come from overhead conductors and spacing (Carson's equations) |
 | `underground_line` | `powerflow.underground_line.UndergroundLine` | line whose matrices come from concentric-neutral or tape-shielded cables and spacing |
@@ -181,7 +182,7 @@ node:
     ... object node { name n2; phases ABCN; nominal_voltage 2401.8; power_A 100000+50000j; power_B 50000; }
     ... ''')
     >>> [oclass.name for oclass in powerflow.classes()]
-    ['powerflow_object', 'powerflow_library', 'node', 'link', 'capacitor', 'fuse', 'meter', 'line', 'line_spacing', 'overhead_line', 'underground_line', 'overhead_line_conductor', 'underground_line_conductor', 'line_configuration', 'transformer_configuration', 'transformer', 'load', 'regulator_configuration', 'regulator', 'triplex_node', 'triplex_meter', 'triplex_line', 'triplex_line_configuration', 'triplex_line_conductor', 'switch_coordinator', 'switch', 'substation', 'pqload', 'voltdump', 'series_reactor', 'restoration', 'frequency_gen', 'volt_var_control', 'motor', 'billdump', 'power_metrics', 'currdump', 'recloser', 'sectionalizer', 'emissions', 'load_tracker', 'triplex_load', 'triplex_zipload', 'impedance_dump', 'vfd', 'pole', 'pole_configuration', 'pole_mount', 'zipload']
+    ['powerflow_object', 'powerflow_library', 'node', 'link', 'capacitor', 'fuse', 'meter', 'line', 'line_sensor', 'line_spacing', 'overhead_line', 'underground_line', 'overhead_line_conductor', 'underground_line_conductor', 'line_configuration', 'transformer_configuration', 'transformer', 'load', 'regulator_configuration', 'regulator', 'triplex_node', 'triplex_meter', 'triplex_line', 'triplex_line_configuration', 'triplex_line_conductor', 'switch_coordinator', 'switch', 'substation', 'pqload', 'voltdump', 'series_reactor', 'restoration', 'frequency_gen', 'volt_var_control', 'motor', 'billdump', 'power_metrics', 'currdump', 'recloser', 'sectionalizer', 'emissions', 'load_tracker', 'triplex_load', 'triplex_zipload', 'impedance_dump', 'vfd', 'pole', 'pole_configuration', 'pole_mount', 'zipload']
     >>> Runner(model=m).returncode
     0
     >>> m.get_property("link:1", "flow_direction")
@@ -285,6 +286,7 @@ from .voltdump import VoltDump
 from .currdump import CurrDump
 from .billdump import BillDump
 from .impedance_dump import ImpedanceDump
+from .line_sensor import LineSensor
 from .switch_coordinator import SwitchCoordinator
 from .load_tracker import LoadTracker
 from .pole import Pole
@@ -295,7 +297,7 @@ from .power_metrics import PowerMetrics
 from .pole_configuration import PoleConfiguration, CLIMATE_IMPACT_ZONES
 from . import solver
 
-CLASSES = (PowerflowObject, PowerflowLibrary, Node, Link, Capacitor, Fuse, Meter, Line, LineSpacing, OverheadLine, UndergroundLine,
+CLASSES = (PowerflowObject, PowerflowLibrary, Node, Link, Capacitor, Fuse, Meter, Line, LineSensor, LineSpacing, OverheadLine, UndergroundLine,
     OverheadLineConductor, UndergroundLineConductor, LineConfiguration, TransformerConfiguration,
     Transformer, Load, RegulatorConfiguration, Regulator, TriplexNode, TriplexMeter, TriplexLine, TriplexLineConfiguration, TriplexLineConductor,
     SwitchCoordinator, Switch, Substation, PQLoad, VoltDump, SeriesReactor, Restoration, FrequencyGen, VoltVarControl, Motor, BillDump, PowerMetrics, CurrDump, Recloser, Sectionalizer, Emissions, LoadTracker, TriplexLoad, TriplexZipLoad, ImpedanceDump, VFD, Pole, PoleConfiguration, PoleMount,
@@ -399,11 +401,11 @@ GLOBALS: tuple[tuple[str,Any,str,dict[str,Any]],...] = (
 __all__ = ["PowerflowError", "PowerflowObject", "PowerflowLibrary", "Node", "Link", "Fuse", "Line",
     "LineSpacing", "OverheadLine", "UndergroundLine", "TriplexLine", "Transformer", "Regulator", "Switch", "Recloser", "Sectionalizer", "Capacitor", "Load", "Meter", "TriplexNode", "TriplexMeter", "TriplexLoad", "PQLoad", "ZipLoad", "TriplexZipLoad", "OverheadLineConductor", "UndergroundLineConductor", "LineConfiguration",
     "TransformerConfiguration", "RegulatorConfiguration", "TriplexLineConfiguration", "TriplexLineConductor", "Restoration",
-    "PowerMetrics", "PoleConfiguration", "Substation", "SeriesReactor", "FrequencyGen", "VoltVarControl", "Emissions", "VoltDump", "CurrDump", "BillDump", "ImpedanceDump", "SwitchCoordinator", "LoadTracker", "Pole", "PoleMount", "Motor", "VFD", "load", "classes", "init", "precommit", "presync", "sync", "postsync", "commit", "behavior", "solver",
+    "PowerMetrics", "PoleConfiguration", "Substation", "SeriesReactor", "FrequencyGen", "VoltVarControl", "Emissions", "VoltDump", "CurrDump", "BillDump", "ImpedanceDump", "LineSensor", "SwitchCoordinator", "LoadTracker", "Pole", "PoleMount", "Motor", "VFD", "load", "classes", "init", "precommit", "presync", "sync", "postsync", "commit", "behavior", "solver",
     "powerflow_object", "powerflow_library", "node", "link", "fuse", "line", "line_spacing", "overhead_line", "underground_line", "triplex_line", "transformer", "regulator", "switch", "recloser", "sectionalizer", "capacitor", "meter", "triplex_node", "triplex_meter", "triplex_load", "pqload", "zipload", "triplex_zipload",
     "overhead_line_conductor", "underground_line_conductor", "line_configuration",
     "transformer_configuration", "regulator_configuration", "triplex_line_configuration", "triplex_line_conductor", "restoration",
-    "power_metrics", "pole_configuration", "substation", "series_reactor", "frequency_gen", "volt_var_control", "emissions", "voltdump", "currdump", "billdump", "impedance_dump", "switch_coordinator", "load_tracker", "pole", "pole_mount", "motor", "vfd", "get_complex", "get_double"]
+    "power_metrics", "pole_configuration", "substation", "series_reactor", "frequency_gen", "volt_var_control", "emissions", "voltdump", "currdump", "billdump", "impedance_dump", "line_sensor", "switch_coordinator", "load_tracker", "pole", "pole_mount", "motor", "vfd", "get_complex", "get_double"]
 
 def load(model:Any) -> None:
     """Load the module into a model (the `arras.modules` entry point that

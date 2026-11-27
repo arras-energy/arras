@@ -48,7 +48,7 @@ def test_registration():
     """`line` inherits from `link`; `line_configuration` and
     `powerflow_library` are registered in gridlabd's order"""
     Model().read_glm("module powerflow;\n")
-    assert [x.name for x in powerflow.classes()] == ["powerflow_object", "powerflow_library", "node", "link", "capacitor", "fuse", "meter", "line", "line_spacing",
+    assert [x.name for x in powerflow.classes()] == ["powerflow_object", "powerflow_library", "node", "link", "capacitor", "fuse", "meter", "line", "line_sensor", "line_spacing",
         "overhead_line", "underground_line", "overhead_line_conductor", "underground_line_conductor", "line_configuration",
         "transformer_configuration", "transformer", "load", "regulator_configuration", "regulator", "triplex_node", "triplex_meter", "triplex_line", "triplex_line_configuration", "triplex_line_conductor", "switch_coordinator", "switch", "substation", "pqload", "voltdump", "series_reactor", "restoration", "frequency_gen", "volt_var_control", "motor", "billdump", "power_metrics", "currdump", "recloser",
         "sectionalizer", "emissions", "load_tracker", "triplex_load", "triplex_zipload", "impedance_dump", "vfd", "pole", "pole_configuration", "pole_mount", "zipload"]
