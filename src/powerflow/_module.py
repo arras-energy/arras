@@ -113,13 +113,15 @@ def sourced(model:Any) -> set[str]:
         if behavior(model, name).SOURCE and behavior(model, name).closed(model, name)}
 
 def bus_currents(model:Any, name:str) -> list[complex]|None:
-    """Currents (A) the top node of a node supplies on each bus slot in the
-    last converged solution (`Network.injections()`), or `None` before one"""
+    """Currents (A) the top node of a node draws on each bus slot for its
+    loads and the links it feeds in the last converged solution
+    (`Network.load_currents()`, gridlabd's `current_inj`), or `None` before
+    one"""
     network = _state().network
     if network is None:
         return None
     net, buses, V = network # pylint: disable=invalid-name
-    current = net.injections(V)
+    current = net.load_currents(V)
     top = top_node(model, name)
     return [complex(current[buses[(top, k)]]) if (top, k) in buses else 0j for k in range(3)]
 

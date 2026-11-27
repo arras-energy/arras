@@ -22,7 +22,9 @@ MODULES = ["powerflow", "powerflow.solver", "powerflow.powerflow_object", "power
     "powerflow.pqload", "powerflow.zipload", "powerflow.triplex_zipload",
     "powerflow.overhead_line_conductor", "powerflow.underground_line_conductor", "powerflow.line_configuration",
     "powerflow.transformer_configuration", "powerflow.regulator_configuration", "powerflow.triplex_line_configuration", "powerflow.triplex_line_conductor",
-    "powerflow.restoration", "powerflow.power_metrics", "powerflow.pole_configuration"]
+    "powerflow.restoration", "powerflow.power_metrics", "powerflow.pole_configuration",
+    "powerflow.substation", "powerflow.motor", "powerflow.vfd", "powerflow.series_reactor", "powerflow.volt_var_control",
+    "powerflow.frequency_gen", "powerflow.emissions"]
 
 @pytest.mark.parametrize("name", MODULES)
 def test_doctests(name):
@@ -37,8 +39,8 @@ def test_load():
     m.read_glm("module powerflow;\n")
     assert [x.name for x in powerflow.classes()] == ["powerflow_object", "powerflow_library", "node", "link", "capacitor", "fuse", "meter", "line", "line_spacing",
         "overhead_line", "underground_line", "overhead_line_conductor", "underground_line_conductor", "line_configuration",
-        "transformer_configuration", "transformer", "load", "regulator_configuration", "regulator", "triplex_node", "triplex_meter", "triplex_line", "triplex_line_configuration", "triplex_line_conductor", "switch", "substation", "pqload", "series_reactor", "restoration", "volt_var_control", "motor", "power_metrics", "recloser",
-        "sectionalizer", "triplex_load", "triplex_zipload", "vfd", "pole_configuration", "zipload"]
+        "transformer_configuration", "transformer", "load", "regulator_configuration", "regulator", "triplex_node", "triplex_meter", "triplex_line", "triplex_line_configuration", "triplex_line_conductor", "switch", "substation", "pqload", "series_reactor", "restoration", "frequency_gen", "volt_var_control", "motor", "power_metrics", "recloser",
+        "sectionalizer", "emissions", "triplex_load", "triplex_zipload", "vfd", "pole_configuration", "zipload"]
     assert {"init", "sync"} <= set(Module.find("powerflow").solvers)
     assert Class.find("node", module="powerflow").parent.name == "powerflow_object"
     assert Class.find("link", module="powerflow").parent.name == "powerflow_object"

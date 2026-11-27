@@ -401,6 +401,20 @@ class Network: # pylint: disable=too-many-instance-attributes,too-many-public-me
                 S[b] += V[b]*current.conjugate()
         return S
 
+    def load_currents(self, V:np.ndarray) -> np.ndarray: # pylint: disable=invalid-name
+        """Current (A) each bus draws at voltages `V` (V) for its loads and
+        the branches it feeds: its loads plus the currents into the
+        branches at their from ends (gridlabd's `current_inj` after the NR
+        current update, where each link adds its `current_in` to its from
+        node); at a bus no branch feeds, the current it supplies
+        (`Network.injections()`)"""
+        result = self.injections(V)
+        for fbus_tbus, (_, current_out) in zip(self.branches, branch_currents(self, V)):
+            for slot, bus in enumerate(fbus_tbus[1]):
+                if bus >= 0:
+                    result[bus] += current_out[slot]
+        return result
+
     def injections(self, V:np.ndarray) -> np.ndarray: # pylint: disable=invalid-name
         """Current (A) each bus supplies at voltages `V` (V): into its
         branches and its constant-impedance loads (`Ybus V`) and its other

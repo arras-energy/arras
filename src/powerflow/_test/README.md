@@ -233,13 +233,29 @@ switching above the desired power factor, signed switching; STANDBY and
 restoring control modes; all-MANUAL regulators; initialization errors,
 list errors, and warnings; measurement pairs.
 
+test_powerflow_frequency_gen.py
+-------------------------------
+
+`frequency_gen`: registration; the load it reads at a swing node and a
+load node; a load step (step response with time constant M/D, governor
+delay, ramp, return to nominal); a change within the deadband; the
+hourly statistics; OFF; initialization errors.
+
+test_powerflow_emissions.py
+---------------------------
+
+`emissions`: registration; merit-order dispatch of a cycle's energy,
+emissions, and unchanged maximum outputs; leftover energy to coal with
+its emissions; a disabled source; a shorter cycle; initialization
+errors.
+
 test_powerflow_solver.py
 ------------------------
 
 `powerflow.solver` on networks built in Python: unbalanced wye loads
 through a coupled line with NR, FD_XB, and FD_BX against an independent
 fixed-point solution; constant-current, constant-impedance, and delta
-loads; fixed currents (the line carries them exactly, the swing buses supply them) and split fixed currents; branch currents and losses; PV and reference buses; the DC
+loads; fixed currents (the line carries them exactly, the swing buses supply them) and split fixed currents; gridlabd's current_inj (loads plus currents into the branches a bus feeds); branch currents and losses; PV and reference buses; the DC
 solution's angles and flows; parallel branches; a branch on two phases;
 argument errors, islands without a reference bus (also a phase cut off
 but coupled to the others by a line), non-convergence.

@@ -53,8 +53,9 @@ reference phase rotation (1, `1 at 120 deg`, `1 at -120 deg` for
 `PHASE_A`, `PHASE_B`, `PHASE_C`).
 
 After each solution, in every mode, it writes `distribution_power_X`
-(`V_X conj(I_X)`, with `I_X` the current the bus supplies to its links
-and loads, as gridlabd's `current_inj`), their sum `distribution_load`,
+(`V_X conj(I_X)`, with `I_X` the current the node draws for its loads
+and the links it feeds, as gridlabd's `current_inj`: at a swing node the
+current it supplies), their sum `distribution_load`,
 `distribution_current_X` (`I_X`), and `distribution_voltage_X`,
 `distribution_voltage_XY` (the node voltages). At each new time,
 `distribution_real_energy` is increased by the real distribution power

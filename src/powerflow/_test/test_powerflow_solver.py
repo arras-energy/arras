@@ -78,6 +78,29 @@ def test_fixed_current(method):
     supplied = net.injections(V)
     assert np.allclose(supplied[src], fixed, atol=1e-5) and np.allclose(supplied[dst], 0, atol=1e-5) # the mismatch tolerance, 0.01 VA
 
+def test_load_currents():
+    """gridlabd's current_inj: a bus's loads plus the currents into the
+    branches it feeds; at the swing bus the current it supplies"""
+    net = Network()
+    a = [net.add_bus(f"a{k}", VB, nominal(VB, k), "REF") for k in range(3)]
+    b = [net.add_bus(f"b{k}", VB, nominal(VB, k)) for k in range(3)]
+    c = [net.add_bus(f"c{k}", VB, nominal(VB, k)) for k in range(3)]
+    Y = np.linalg.inv(Z)
+    net.add_branch(a, b, Y, -Y, -Y, Y)
+    net.add_branch(b, c, Y, -Y, -Y, Y)
+    for k in range(3):
+        net.add_wye_load(b[k], S=100e3, vnom=nominal(VB, k))
+        net.add_wye_load(c[k], S=50e3, vnom=nominal(VB, k))
+    result = solve(net, "NR")
+    assert result.success
+    V = result.V
+    current = net.load_currents(V)
+    load_b = np.conj(100e3/V[b])
+    into_bc = branch_currents(net, V)[1][0]
+    assert np.allclose(current[b], load_b + into_bc, atol=1e-6)
+    assert np.allclose(current[c], np.conj(50e3/V[c]), atol=1e-6)
+    assert np.allclose(current[a], branch_currents(net, V)[0][0], atol=1e-6)
+
 def test_fixed_split_current():
     """A split fixed current is drawn on both buses at their voltages"""
     net = Network()
