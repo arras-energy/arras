@@ -9,7 +9,8 @@ gridlabd modules as Python packages and the `assert` module (decisions 1.13, 6.1
 the `climate` module (group 9, #51), 2026-11-24;
 the `tape` module, `Runner.setexitcode()`, and `method` properties in GLM (decisions 2.14, 6.16, group 10, #53), 2026-11-24;
 the `pypower` module and the vendored PYPOWER solver (group 11, #55), 2026-11-24;
-the `powerflow` module, first step: `powerflow_object`, `node`, `link`, `fuse`, `line`, the library classes, and the three-phase PYPOWER solver (group 12, #58), 2026-11-25/26
+the `powerflow` module, first step: `powerflow_object`, `node`, `link`, `fuse`, `line`, the library classes, and the three-phase PYPOWER solver (group 12, #58), 2026-11-25/26;
+the `generators` module, first step: `inverter` and `solar` (group 13, #62), 2026-11-27
 
 ## Purpose
 
@@ -294,6 +295,19 @@ published at https://arras-energy.github.io/arras rather than under
 | 12.9 | Not modeled in this step: deltamode, faults and reliability (`fault_check`, `restoration`), frequency measurement, GFA, DER violation tests, violation recording, `service_status`, link ratings and limit checks, the matrix dumps, the solver profiler, the external LU solver, and `solver_py`. Their globals and properties are published so that models that set them load. |
 | 12.10 | gridlabd's powerflow autotests all use classes that are not ported yet, so the tests use a stand-in line class registered by the tests (`test_line`, IEEE 13-node feeder configuration 601) and compare the node voltages of unbalanced feeders with an independent fixed-point solution of the nodal equations written in the tests (no PYPOWER). The autotests are to be ported with the classes they use. The `arras` model tests that use `powerflow` as the name of a stand-in module (`src/arras/_test/test_model.py`) do not call the package's entry point. |
 
+### 13. The `generators` module (`src/generators/`, #62)
+
+| # | Decision |
+|---|---|
+| 13.1 | The package reproduces gridlabd's `module/generators` class by class. The first step (2026-11-27) has the classes a photovoltaic system needs in event mode, `inverter` and `solar`, registered in that order (gridlabd registers twelve classes, `diesel_dg` first; the order is to match once all are ported; listed under Differences from gridlabd, 1.4), with the published property names, types, units, keywords (reverse publication order, 8.1), the defaults that the C++ `create()` functions set, descriptions, `PC_PRETOPDOWN|PC_BOTTOMUP|PC_POSTTOPDOWN|PC_AUTOLOCK`, and `TRL_PROOF`; and the module globals of `init.cpp` (`generators::message_flags`, `enable_subsecond_models`, `deltamode_timestep`). One module per class, private helpers in `_common.py`. Every published property is published, deltamode ones included, so that models that set them load. |
+| 13.2 | Each class has `on_init`, `on_presync`, `on_sync`, and `on_postsync` handlers `python:generators.EVENT`, which dispatch on the object's class. A `GL_THROW()` or `throw` in the C++ `init()` or a sync function becomes the message of `INIT_CATCHALL()` or `SYNC_CATCHALL()` (`init_CLASS(obj=ID;NAME): message`) and fails the object (`False`, `TS_INVALID`). The state that the C++ objects keep in unpublished members is kept per model and object name. An object waits (init result 2) for a generators parent or a climate `weather` object that has not been initialized; objects of other packages count as initialized. |
+| 13.3 | An inverter posts its output to its parent meter's accumulators the way gridlabd does it, by adding to the property values: currents (`current_A` ... `current_C`, or `current_12`) for the legacy types, powers (`power_A` ... `power_C`, or `power_12`) for four-quadrant, in the bottom-up pass, and removes them in the post-top-down pass. The `powerflow` module solves the network in its module `sync` solver after the objects' bottom-up pass (12.5), so each solution includes the outputs, as gridlabd's NR solver does when the swing node synchronizes; the values are written with 17 significant digits, so the parent's accumulators return to their values after each pass to the last bit that double arithmetic keeps. A `solar` object writes its output voltage and current to its inverter's `V_In` and `I_In`. |
+| 13.4 | gridlabd's `sync_solar()` and `sync_inverter()` set the object's clock after the bottom-up pass (`clockpass`), not at the commit; the clock that the classes read as `t0` is kept in the object state and moved the same way, so `solar`'s `FLATPLATE` temperature history skips the second time step and, with more than one pass in a time step, uses the current temperature instead of an average, as in gridlabd. |
+| 13.5 | gridlabd's arithmetic is kept where it changes results: a `complex` compared with a number compares its magnitude (`source/complex.h`), so a four-quadrant output's sign test and the multipoint thresholds use magnitudes; `TWO_PULSE` has the value of an unset type and becomes `PWM`; the static-weather insolation takes the cosine of the tilt angle in degrees as radians; `solar`'s `wind_speed` (mph) holds the climate's m/s value, which `FLATPLATE` converts from mph; `P_Out` (kW) holds watts; the battery power term (`power_A` ... `power_C`) is added to the four-quadrant efficiency-weighted input; C division and `acos()` give infinities and NaN. The base class losses of `power_electronics` are placeholders that return 0 in gridlabd, so the loss factors are 1. |
+| 13.6 | Not ported in this step, each failing at init with a message that names it: the four-quadrant modes `VOLT_VAR`, `VOLT_VAR_FREQ_PWR`, `LOAD_FOLLOWING`, `GROUP_LOAD_FOLLOWING`, and `VOLTAGE_SOURCE`, power-factor regulation (`pf_reg`), the IEEE 1547 checks, and deltamode with `generators::enable_subsecond_models` (an object with the `DELTAMODE` flag gets gridlabd's warnings otherwise). The legacy `CONSTANT_PQ`, `CONSTANT_V`, and `SUPPLY_DRIVEN` modes throw in the bottom-up pass, as in gridlabd ("not supported at this time"). The other classes are to follow (open question 13). |
+| 13.7 | Fixed or defined and listed (1.4): `VSI_Rfilter` and `VSI_Xfilter` are separate values (gridlabd publishes the `double` members as `complex`, so they overlap); a parent is in service unless its `service_status` is `OUT_OF_SERVICE` (gridlabd compares the stored value with 1, and `arras`'s `triplex_meter` keywords give `IN_SERVICE` another value); an `OFFLINE` legacy inverter clears the currents it posted (gridlabd keeps subtracting them from the parent at every pass). |
+| 13.8 | The gridlabd autotests that use these classes and the Yakima weather file (in `src/climate/_test/data/`, found through `GLPATH`) are ported to `src/generators/_test/data/` by `port_autotests.py`, with the schedules replaced by players and the four-quadrant tests' `const_pq_meter` connected by a link instead of being a child of node 645, since `arras` meters measure the current through the links of their top node (see Known issues). `solar` is also checked against the `Insolation` that gridlabd `solar` objects recorded for the climate reference files (`src/climate/_test/data/reference/`, made with a gridlabd build of master 076e78a). |
+
 ## Module layout
 
 ```
@@ -431,6 +445,14 @@ src/powerflow/     gridlabd powerflow module, first step (decision group 12), en
   _base.py         PowerflowClass: registration
   _test/           pytest tests; conftest.py (test_line stand-in, independent reference solution)
     data/          unbalanced_feeder.glm
+
+src/generators/    gridlabd generators module, first step (decision group 13), entry point generators:load
+  __init__.py      package docs; load(model), classes(), init/presync/sync/postsync(name,t)
+  inverter.py      Inverter: class inverter (legacy CONSTANT_PF, four-quadrant CONSTANT_PF and CONSTANT_PQ)
+  solar.py         Solar: class solar (climate or player insolation, base efficiency and flat plate models)
+  _common.py       constants, messages, state, values, posting to the parent, BEHAVIORS
+  _test/           pytest tests; conftest.py (GLPATH to the climate test data)
+    data/          gridlabd generators autotests ported to arras, their players, port_autotests.py
 ```
 
 Dependencies between modules (`runner` imports `model` when a `Runner`
@@ -477,9 +499,16 @@ flowchart LR
   powerflow --> oclass
   powerflow --> runner
   powerflow --> pypower
+  generators --> model
+  generators --> module
+  generators --> oclass
+  generators --> runner
+  generators --> pypower
+  generators --> powerflow
+  generators --> climate
 ```
 
-`model` reaches `assert`, `climate`, `tape`, `pypower`, and `powerflow` only through the `arras.modules` entry point
+`model` reaches `assert`, `climate`, `tape`, `pypower`, `powerflow`, and `generators` only through the `arras.modules` entry point
 (6.15), so `arras` does not import the module packages.
 
 ## Contracts
@@ -514,6 +543,7 @@ Each module is checked against these gridlabd files (`master` 076e78a):
 | `tape` | `module/tape/` (all files and `autotest/`), `module/tape_file/tape_file.cpp`, `source/aggregate.cpp`, `convert.cpp` (`convert_from_double()`, `convert_from_complex()`, `convert_from_set()`), `output.cpp` (`output_error()`), `exec.cpp` (`exec_setexitcode()`), `third_party/jsonCpp/jsoncpp.cpp`; `docs/Module/Tape.md`, `docs/Module/Tape/` |
 | `pypower` | `module/pypower/` (all files and `autotest/`), `converters/py2glm.py`, `source/gridlabd.h` (`gld_object` messages, `get_distance()`), `complex.h` (notations), `convert.cpp` (`convert_to_complex()`), `globals.cpp` (`global_create()`), `exec.cpp` (`init_all()`, the pass order); PYPOWER 5.1.16; `docs/Module/Pypower.md`, `docs/Module/Pypower/` |
 | `powerflow` | `module/powerflow/` (`init.cpp`, `powerflow.h`, `powerflow_object.cpp`, `powerflow_object.h`, `powerflow_library.cpp`, `node.cpp`, `node.h`, `link.cpp`, `link.h`, `fuse.cpp`, `fuse.h`, `line.cpp`, `line.h`, `overhead_line.cpp`, `underground_line.cpp`, `triplex_line.cpp`, `transformer.cpp`, `regulator.cpp`, `switch_object.cpp`, `capacitor.cpp`, `load.cpp`, `meter.cpp`, `triplex_node.cpp`, `triplex_meter.cpp`, `triplex_load.cpp`, `zipload.cpp`, `triplex_zipload.cpp`, `pqload.cpp`, `substation.cpp`, `motor.cpp`, `vfd.cpp`, `series_reactor.cpp`, `volt_var_control.cpp`, `frequency_gen.cpp`, `emissions.cpp`, `voltdump.cpp`, `currdump.cpp`, `billdump.cpp`, `switch_coordinator.cpp`, `load_tracker.cpp`, `pole.cpp`, `pole_mount.cpp`, `recloser.cpp`, `sectionalizer.cpp`, `line_configuration.cpp`, `line_spacing.cpp`, `overhead_line_conductor.cpp`, `underground_line_conductor.cpp`, `triplex_line_configuration.cpp`, `triplex_line_conductor.cpp`, `transformer_configuration.cpp`, `regulator_configuration.cpp`, `restoration.cpp`, `power_metrics.cpp`, `pole_configuration.cpp`, `solver_nr.cpp`), `source/convert.cpp` (`convert_from_set()`); PYPOWER 5.1.16 (`newtonpf.py`, `fdpf.py`, `dcpf.py`, `makeB.py`); `docs/Module/Powerflow.md` |
+| `generators` | `module/generators/` (`init.cpp`, `generators.h`, `inverter.cpp`, `inverter.h`, `solar.cpp`, `solar.h`, `power_electronics.cpp`, `power_electronics.h`, and `autotest/`), `source/gridlabd.h` (`INIT_MMF()`, `INIT_CATCHALL()`, `SYNC_CATCHALL()`, `gld_object`), `complex.h` (comparison operators), `exec.cpp` and `object.cpp` (object clocks); `docs/Module/Generators.md` |
 | `assert` | `module/assert/` (all files and `autotest/`), `source/gridlabd.h` (`INIT_MMF()`, `gld_object`, `gld_property`, `INIT_CATCHALL()`), `property.cpp`, `compare.cpp`, `convert.cpp`, `timestamp.cpp`, `object.cpp`, `enduse.cpp`, `random.cpp`, `find.cpp`; `docs/Module/Assert.md`, `docs/Module/Assert/` |
 
 ## Files and formats
@@ -563,6 +593,12 @@ Each module is checked against these gridlabd files (`master` 076e78a):
   get no effect from them in `arras` (1.12): move shared files to the user
   `share` folder (or set `ARRAS_USERDIR`), or set the folder globals in the
   model.
+
+- `powerflow` meters measure the current through the links of their top
+  node, so a meter that is a child of a node measures the node's whole
+  load rather than its own (gridlabd measures the child's own current
+  injection); the ported four-quadrant generators autotests connect their
+  meter with a link (13.8).
 
 - `arras.runner` initializes modules after objects, while gridlabd's
   `init_all()` calls `module_initall()` before initializing objects;

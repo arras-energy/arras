@@ -53,7 +53,7 @@ jobs:
 
       - name: Create docs
         run: |
-          pdoc -o docs arras assert climate tape pypower
+          pdoc -o docs arras assert climate tape pypower generators
 
       - name: Add coverage report
         # coverage-report artifact of the Validation run that triggered this one,
