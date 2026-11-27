@@ -108,7 +108,6 @@ Caveats
   high resistance-to-reactance ratios, as distribution lines often do;
   their iteration limit is the same as NR's.
 - PYPOWER's NR and FD solvers do not limit `PV` bus reactive power.
-- Split-phase (triplex) buses are not supported yet.
 
 References
 ----------

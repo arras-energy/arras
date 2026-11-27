@@ -211,11 +211,15 @@ Caveats
   the handlers outside a run raises `PowerflowError`.
 - PYPOWER is the version vendored in `pypower._pypower` (5.1.16); numpy and
   scipy are required.
-- Only the classes listed above are implemented. Split-phase
-  (triplex) nodes, deltamode, faults and reliability, frequency
-  measurement, GFA, violation recording, the matrix dumps, and the solver
-  profiler are not implemented; their globals and properties are
-  published.
+- Every class gridlabd's powerflow module registers is implemented, but
+  not every feature: the `restoration` algorithm, reliability (the
+  `eventgen` module, link faults, `fault_check`'s reliability functions,
+  reclosing and sectionalizing on faults), deltamode, frequency
+  measurement, GFA, DER violation tests, violation recording,
+  `service_status`, link ratings and limit checks, the NR matrix and
+  solver dumps, the solver profiler, the external LU solver, `solver_py`,
+  and transformer thermal, aging, in-rush, and saturation models are not
+  implemented; their globals and properties are published.
 
 Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
 -----------------------------------------------------------------
