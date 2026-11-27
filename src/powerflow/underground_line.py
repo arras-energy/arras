@@ -51,11 +51,13 @@ matrix before its inversion, as in gridlabd. Each phase whose capacitance
 cannot be computed (a zero diameter, radius, or strand count, or a zero
 denominator) gets none, with a warning.
 
+A line whose `ductbank` names a `ductbank` adds its cables (the
+conductors of its configuration) and its losses to the duct bank's
+thermal model (`powerflow.ductbank`).
+
 Caveats
 -------
 
-- `ductbank` is published but not used (gridlabd adds the cables to the
-  duct bank's thermal model, which is not ported).
 - The ratings gridlabd derives from the cables are not used.
 
 Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)

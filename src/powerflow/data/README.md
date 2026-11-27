@@ -12,3 +12,4 @@ own copy by naming it in the module global.
 | `building_loadshapes.csv` | `powerflow::building_loadshapes` | `building` | `module/powerflow/data/building_loadshapes.csv` |
 | `building_occupancy.csv` | `powerflow::building_occupancy` | `building` | `module/powerflow/data/building_occupancy.csv` |
 | `inverter_settings.csv` | `powerflow::inverter_settings` | `building` | `module/powerflow/data/inverter_settings.csv` |
+| `ductbank_configurations.csv` | `powerflow::ductbank_configuration_file` | `ductbank` | `module/powerflow/data/ductbank_configurations.csv` |
