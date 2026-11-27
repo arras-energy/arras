@@ -274,6 +274,15 @@ test_powerflow_load_tracker.py
 operation and of an integer property; output tracking, damping, zero
 feedback, the deadband, and the extra pass; initialization errors.
 
+test_powerflow_pole.py
+----------------------
+
+`pole`: registration and globals; resisting, wind, tilt, and total
+moments, stress, and critical wind speed against an independent
+computation; aging; failure and repair at the repair event; stopping on
+failure; wind from a weather object; the gust function; initialization
+errors and warnings.
+
 test_powerflow_solver.py
 ------------------------
 
