@@ -36,7 +36,7 @@ and returns an object that is expected to satisfy:
    it.
 2. `find(name)` returns the same unit parameters that `unit_find()` does,
    including units with a scalar prefix (`kW`, `mm`) and compound units
-   derived on request (`m/s`, `ft^3/min`, `pu.V`), and raises `UnitsError`
+   derived on request (`m/s`, `ft^3/min`, `pu./MW`), and raises `UnitsError`
    where `unit_find()` returns `NULL`.
 3. `convert(value,from_unit,to_unit)` returns the value that
    `unit_convert()` stores, i.e. `(value-from.b)*(from.a/to.a)+to.b`, and
@@ -75,8 +75,16 @@ Unit file syntax
 In a derivation, a term is a unit name or a number. A number after `*` or
 `/` scales the unit; a number after `+` or `-` offsets it (e.g.
 `degC=K-273.14`). `^N` repeats the preceding `*` or `/` term, with N at
-least 2. A `.` that is not between digits ends the derivation, so `pu.V`
-is derived as `pu`. Lines that start with white space are ignored.
+least 2. Lines that start with white space are ignored.
+
+A `.` that is not a decimal point starts an annotation, which tells the
+reader what the unit refers to (such as the base of a per-unit value) and
+is not part of the unit's dimensions. The text from the `.` on is ignored,
+so `pu.V`, `pu./MW`, and `pu.100MVA` are all derived as `pu`, and
+`MVAr/pu.V` as `MVAr/pu`. A `.` is a decimal point only inside a number,
+i.e., when the characters since the last operator or space are digits (or
+there are none) and the next character is a digit, an operator, a space,
+or the end of the text, as in `1.5 kW`, `.5 kW`, or `2. kW`.
 
 Examples
 --------
@@ -109,6 +117,11 @@ Caveats
 
 - `Units` is an independent Python model of gridlabd's unit manager. It
   does not read from or write to a running `gridlabd` process.
+- Annotations differ from gridlabd on purpose: gridlabd ends a unit only at
+  a `.` with no digit on either side, so it cannot find `pu.100MVA` or
+  `pu.1/MW` and reads `m^2.s` as `m^2` only because `^` ignores what
+  follows the exponent. `Units` ignores every annotation (see "Unit file
+  syntax").
 - A unit file shared by all models goes in the `share` folder of the user
   folder (`arras.folders.userdir("share")`) or in a `GLPATH` folder.
 - Each `Units` object has its own unit list. Units derived by `find()` are
@@ -247,6 +260,28 @@ def _scan_int(text:str) -> int|None:
     """@private Read a leading integer as `sscanf("%d")` does"""
     match = _INT.match(text)
     return int(match.group(1)) if match else None
+
+def _strip_annotation(text:str) -> str:
+    """@private Remove a `.` annotation from a unit, e.g., `pu./MW` -> `pu`
+
+    A `.` is a decimal point only when it is part of a number, i.e., when
+    the characters since the last operator or space are all digits (or
+    there are none) and the next character is a digit, an operator, a
+    space, or the end of the text (`1.5`, `.5`, `2.`). Any other `.`
+    starts an annotation, which describes the unit (such as the base of a
+    per-unit value) but is not part of its dimensions, so the text from
+    the `.` on is dropped.
+    """
+    start = 0
+    for n,char in enumerate(text):
+        if char in "*/^+- ":
+            start = n+1
+        elif char == ".":
+            prefix = text[start:n]
+            after = text[n+1:n+2]
+            if not (prefix.isdigit() or prefix == "") or not (after == "" or after in _DIGITS or after in "*/^+- "):
+                return text[:n]
+    return text
 
 def _precision(term:str) -> int:
     """@private Number of significant digits of a number (`unit_precision()`)"""
@@ -415,12 +450,10 @@ class Units:
         - `UnitsError`: the unit is already defined or the derivation is not
           valid
         """
-        # a '.' not between digits ends the derivation, e.g., "pu.V"
-        for n in range(1,len(derivation)):
-            if derivation[n] == "." and derivation[n-1] not in _DIGITS \
-                    and (n+1 == len(derivation) or derivation[n+1] not in _DIGITS):
-                derivation = derivation[:n]
-                break
+        # a '.' that is not a decimal point starts an annotation, e.g., "pu./MW"
+        derivation = _strip_annotation(derivation)
+        if not derivation.strip():
+            raise self._error(f"derived definition of '{name}' failed; no unit before '.'")
 
         if self._find_raw(name) is not None:
             raise self._error(f"derived definition of '{name}' failed; unit already defined")

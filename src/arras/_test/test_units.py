@@ -99,6 +99,32 @@ def test_compound(units):
     assert units.find("1/unit").a == 1
     assert "m/s" in list(units)
 
+@pytest.mark.parametrize("name,base", [
+    ("pu.V", "pu"),
+    ("pu./MW", "pu"),
+    ("pu./MVAr", "pu"),
+    ("pu.", "pu"),
+    ("pu.100MVA", "pu"),
+    ("pu.1/MW", "pu"),
+    ("%.MW", "%"),
+    ("MVAr/pu.V", "MVAr/pu"),
+    ("m^2.s", "m^2"),
+    ("kW*2.h", "kW*2"),
+    ("2.5 pu.MW", "2.5 pu"),
+    ("1.5 kW", "1.5 kW"),
+    (".5 kW", ".5 kW"),
+    ("2. kW", "2. kW"),
+    ])
+def test_annotation(units,name,base):
+    """Text after a '.' that is not a decimal point is not part of the unit"""
+    assert units.find(name).parameters == units.find(base).parameters
+    assert units.convert(3,name,base) == pytest.approx(3)
+
+def test_annotation_alone(units):
+    """An annotation with no unit before it is not valid"""
+    with pytest.raises(UnitsError,match="no unit before '.'"):
+        units.find(".MW")
+
 @pytest.mark.parametrize("name,match", [
     ("furlong", "unable to find or derive unit 'furlong'"),
     ("m^1", "exponent must be greater than 1"),
