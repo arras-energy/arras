@@ -221,6 +221,7 @@ Classes are listed in gridlabd's registration order. TRL is the technology readi
 | `triplex_zipload` | `triplex_load` | `triplex_zipload.TriplexZipLoad` | 7 | A triplex load whose 240 V ZIP form follows the weather, a schedule, and load data, as `zipload`. |
 | `vfd` | `link` | `vfd.VFD` | 7 | A variable frequency drive: its `to` node is a voltage source at the output frequency's voltage, ramped over `stable_time`; its `from` node draws the output power over the drive's efficiency. |
 | `pole` | — | `pole.Pole` | 7 | A utility pole's wind and tilt moments, aging, stress, critical wind speed, failure, and repair. |
+| `pole_mount` | — | `pole_mount.PoleMount` | 7 | An overhead line or piece of equipment on a pole: its moments added to the pole, opened while the pole is failed. |
 | `pole_configuration` | — | `pole_configuration.PoleConfiguration` | 9 | Material, dimensions, design loads, overload and strength factors, and degradation of a utility pole. Creates `powerflow::climate_impact_zone`. |
 | `zipload` | `load` | `zipload.ZipLoad` | 7 | A load whose ZIP form follows the weather (heating and cooling degrees, solar, wind, rain), an hourly schedule, and load data by geohash, class, and type. |
 

@@ -40,7 +40,9 @@ properties named by `powerflow::wind_speed_name`, `wind_dir_name`, and
 current year), and computes the pole's own moments: the wind pressure
 `0.00256 (2.24 v)^2` psf times the pole's moment per unit wind pressure
 (`h^2 (D + 2 D_top) / 72 * overload_factor_transverse_general`), and the
-tilt moment of its weight (`material_density`). When the wind changed,
+tilt moment of its weight (`material_density`), and clears the wire and
+equipment moments, which its `pole_mount` objects add again in the sync
+pass. When the wind changed,
 the pole was repaired, or no critical wind speed is known yet, it
 recalculates after the solution (`postsync`): the total moment (pole,
 wire, and equipment moments in x and y, the wire and equipment moments
@@ -49,7 +51,9 @@ over resisting moment), `susceptibility`, and `critical_wind_speed` (the
 wind at which the resisting moment, with `wind_overdesign`, is reached);
 a stress of 1 or more fails the pole, with a warning (or, when
 `powerflow::stop_on_pole_failure` is true, a verbose message and a stop
-of the run), and its repair time is an event.
+of the run); a pole that fails asks for another pass at the same time,
+in which its mounts open their equipment, and its repair time is an
+event.
 
 When it initializes, a pole is expected to fail unless `configuration` is
 a `pole_configuration`, to take `repair_time` from the configuration or
@@ -62,8 +66,9 @@ and to warn when `install_year` is in the future.
 Caveats
 -------
 
-- `pole_mount` is not ported, so the wire and equipment moments are 0
-  unless set otherwise, and a failed pole does not change the network.
+- Without `pole_mount` objects the wire and equipment moments are 0, and
+  a failed pole does not change the network (its mounts open their
+  equipment).
 
 Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
 -----------------------------------------------------------------
@@ -80,6 +85,13 @@ Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
    the event it asks for does not repair it.
 4. An `install_year` after the current year is warned about; gridlabd
    compares the year with the clock timestamp, so it never warns.
+5. `equipment_weight` and the wire wind moment are cleared at each time
+   step with the other moments; gridlabd does not clear
+   `equipment_weight`, so it grows at each recalculation.
+6. A pole that fails asks for another pass at the same time, so its
+   equipment opens at once; gridlabd's mounts open it at the next time
+   step, so without other events it stays closed until the repair
+   closes it again.
 
 References
 ----------
@@ -97,8 +109,9 @@ PS_OK, PS_FAILED = 0, 1
 """`status` values"""
 
 COMMIT_OUTPUTS = ("equipment_moment_nowind", "pole_moment", "equipment_moment", "wire_weight", "wire_moment_x",
-    "wire_moment_y", "wire_tension", "equipment_moment_x", "equipment_moment_y")
-"""Accumulators reset at each time step (`reset_commit_accumulators()`)"""
+    "wire_moment_y", "wire_tension", "equipment_moment_x", "equipment_moment_y", "equipment_weight")
+"""Accumulators reset at each time step (`reset_commit_accumulators()`,
+and `equipment_weight`)"""
 
 def wind_gust_cdf(wind_ratio:float) -> float:
     """gridlabd `wind_gust_cdf()`: the chance a gust ratio is withstood"""
@@ -234,7 +247,7 @@ class Pole(PowerflowClass):
         config = state["config"]
         for prop_ in COMMIT_OUTPUTS:
             set_double(model, name, prop_, 0.0)
-        state.update(wire_load_nowind=0.0, wire_moment_nowind=0.0, pole_moment_wind=0.0)
+        state.update(wire_load_nowind=0.0, wire_moment_nowind=0.0, pole_moment_wind=0.0, wire_wind=0.0)
         for local, (weather, source) in state["refs"].items():
             set_double(model, name, local, get_double(model, weather, source))
         state["height"] = cls.height(model, name)
@@ -319,6 +332,7 @@ class Pole(PowerflowClass):
             if gusts > 0 and critical > 0:
                 out.verbose(f"chance_of_withstanding = {wind_gust_cdf(gusts/critical)*100:g} % (wind_gusts = {gusts:g} m/s)")
             failed = not stress < 1.0 # pylint: disable=unnecessary-negation # NaN fails, as gridlabd's `stress < 1 ? OK : FAILED`
+            was_ok = get_int(model, name, "status") == PS_OK
             model.objects[name]["status"] = "FAILED" if failed else "OK"
             if failed:
                 text = f"pole failed at {stress*100:.0f}% stress, time to repair is {repair:g} h"
@@ -328,6 +342,8 @@ class Pole(PowerflowClass):
                     out.warning(text)
                 state["down_time"] = t
             state["recalc"] = False
+            if failed and was_ok and not g(model, "stop_on_pole_failure"):
+                return t # another pass, in which the pole's mounts open their equipment
         if get_int(model, name, "status") == PS_FAILED:
             if g(model, "stop_on_pole_failure"):
                 return TS_INVALID

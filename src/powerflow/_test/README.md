@@ -283,6 +283,15 @@ computation; aging; failure and repair at the repair event; stopping on
 failure; wind from a weather object; the gust function; initialization
 errors and warnings.
 
+test_powerflow_pole_mount.py
+----------------------------
+
+`pole_mount`: registration; an overhead line's and a switch's moments
+on the pole against an independent computation, and the pole's totals
+and stress; a tilted pole; moments at every time step; failure opening
+the equipment (a parallel line carrying the load, the switch's node
+taken out); initialization errors and warnings.
+
 test_powerflow_solver.py
 ------------------------
 
