@@ -259,6 +259,14 @@ link currents; interval dumps rewriting with filemode `w`; meter bills;
 no meters; initialization (file deleted, negative interval, invalid
 version).
 
+test_powerflow_switch_coordinator.py
+------------------------------------
+
+`switch_coordinator`: registration; arming (including the last switch
+connected); toggling and direct switching in the solution and the
+return to IDLE; method values written during a run; connect and arm
+errors.
+
 test_powerflow_solver.py
 ------------------------
 

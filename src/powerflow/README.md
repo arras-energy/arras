@@ -200,6 +200,7 @@ Classes are listed in gridlabd's registration order. TRL is the technology readi
 | `triplex_line` | `line` | `triplex_line.TriplexLine` | 9 | A split-phase secondary line (lines 1 and 2 and a Kron-reduced neutral) between triplex nodes, with gridlabd's `b_mat` from its conductors or 2x2 matrix. |
 | `triplex_line_configuration` | — | `triplex_line_configuration.TriplexLineConfiguration` | 9 | Conductors, insulation, and diameter of a split-phase secondary cable, or its 2x2 impedance matrix. A `line_configuration` for `isa()`. |
 | `triplex_line_conductor` | — | `triplex_line_conductor.TriplexLineConductor` | 9 | Resistance, geometric mean radius, and ratings of a triplex conductor. |
+| `switch_coordinator` | — | `switch_coordinator.SwitchCoordinator` | 9 | Arms connected switches and toggles them, or sets them directly, in one time step. |
 | `switch` | `link` | `switch.Switch` | 8 | A switch on each phase: closed phases are the switch impedance, open ones connect nothing (isolating a to node fed only by them); banked majority rule or individual phases. |
 | `substation` | `node` | `substation.Substation` | 7 | A swing node whose voltages come from sequence voltages or a `pypower` `load` parent (to which it posts the distribution load); meters the distribution power, current, and energy. |
 | `pqload` | `load` | `pqload.PQLoad` | 7 | A load whose constant power, current, and impedance are linear in the weather (temperature, humidity, solar, wind, rain). |
