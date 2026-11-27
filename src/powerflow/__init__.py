@@ -25,8 +25,8 @@ buses), the weather-driven loads `pqload`, `zipload`, and
 and `series_reactor` links, `volt_var_control`, `frequency_gen`,
 `emissions`, `switch_coordinator`, `load_tracker`, `pole`, `pole_mount`, and the `voltdump`, `currdump`,
 `billdump`, and `impedance_dump` writers, the `line_sensor`, the scheduled
-loads `agricultural`, `industrial`, and `public_service`, the `building` load, and the
-`ductbank` cable thermal model. The other classes ( loads, meters, triplex nodes, ...) derive from these
+loads `agricultural`, `industrial`, and `public_service`, the `building` load, the
+`ductbank` cable thermal model, and the `fault_check` topology check. The other classes ( loads, meters, triplex nodes, ...) derive from these
 and are to be added as behavior classes that derive from
 `powerflow.node.Node`, `powerflow.link.Link`, and `powerflow.line.Line`.
 
@@ -82,15 +82,16 @@ Classes
 | `pqload` | `powerflow.pqload.PQLoad` | load whose impedance, current, and power follow the weather |
 | `voltdump` | `powerflow.voltdump.VoltDump` | CSV dump of the node voltages |
 | `series_reactor` | `powerflow.series_reactor.SeriesReactor` | link with an uncoupled series impedance on each phase |
-| `restoration` | `powerflow.restoration.Restoration` | post-fault reconfiguration settings (initialization; the algorithm needs `fault_check`) |
+| `restoration` | `powerflow.restoration.Restoration` | post-fault reconfiguration settings (initialization; the algorithm is not ported) |
 | `frequency_gen` | `powerflow.frequency_gen.FrequencyGen` | system frequency answering the load at a node (inertia, damping, governor, ramp) |
 | `volt_var_control` | `powerflow.volt_var_control.VoltVarControl` | integrated volt-VAr control of regulator taps and capacitor banks |
+| `fault_check` | `powerflow.fault_check.FaultCheck` | topology check: unsupported phases fail the run or are taken out of the powerflow |
 | `motor` | `powerflow.motor.Motor` | node with a single-phase or three-phase induction motor (steady-state models) |
 | `billdump` | `powerflow.billdump.BillDump` | CSV dump of the meters' previous monthly bills |
 | `power_metrics` | `powerflow.power_metrics.PowerMetrics` | IEEE 1366 reliability indices, computed when the reliability module calls it |
 | `currdump` | `powerflow.currdump.CurrDump` | CSV dump of the link currents |
-| `recloser` | `powerflow.recloser.Recloser` | switch with reclosing settings (reclosing needs `fault_check`) |
-| `sectionalizer` | `powerflow.sectionalizer.Sectionalizer` | switch that opens after an upstream recloser (needs `fault_check`) |
+| `recloser` | `powerflow.recloser.Recloser` | switch with reclosing settings (reclosing needs reliability faults, not ported) |
+| `sectionalizer` | `powerflow.sectionalizer.Sectionalizer` | switch that opens after an upstream recloser (needs reliability faults, not ported) |
 | `triplex_zipload` | `powerflow.triplex_zipload.TriplexZipLoad` | triplex load whose ZIP form follows the weather and a schedule |
 | `impedance_dump` | `powerflow.impedance_dump.ImpedanceDump` | XML dump of the link sweep matrices and capacitors |
 | `vfd` | `powerflow.vfd.VFD` | variable frequency drive: a voltage source at its output frequency, its output power plus losses drawn at its input |
@@ -155,9 +156,12 @@ During a run, the module is expected to:
 1. at initialization (after the objects), warn when `solver_method` is
    `FBS`, and fail when it is `GS`;
 2. at each sync (after the objects' syncs), when the model has nodes:
+   update the nodes and links (switch states, fuses, loads), let the
+   model's `fault_check` check the topology (`powerflow.fault_check`),
    build the three-phase network of the nodes and the closed links
-   (`powerflow.solver`), solve it with the PYPOWER solver of
-   `solver_method`, and write the node voltages and the link flows;
+   without the phases the check took out (`powerflow.solver`), solve it
+   with the PYPOWER solver of `solver_method`, and write the node voltages
+   (0 on the phases taken out) and the link flows;
 3. ask to iterate the time step when a node voltage changed by more than
    the node's `maximum_voltage_error`, so that objects that read voltages
    see the solution, and otherwise ask for no event;
@@ -165,7 +169,8 @@ During a run, the module is expected to:
    the voltages reached and iterate the time step (the run's
    `iteration_limit` ends it), as gridlabd does; when the solution cannot
    be used, act as `convergence_error_handling` says; a bus not connected
-   to a `SWING` or `SWING_PQ` node is an error.
+   to a `SWING` or `SWING_PQ` node (and not taken out by `fault_check`) is
+   an error.
 
 Error messages are written as gridlabd's `gl_error()` writes them, and make
 the run end with exit code `RUNERR`; a failed solution also fails the
@@ -189,7 +194,7 @@ node:
     ... object node { name n2; phases ABCN; nominal_voltage 2401.8; power_A 100000+50000j; power_B 50000; }
     ... ''')
     >>> [oclass.name for oclass in powerflow.classes()]
-    ['powerflow_object', 'powerflow_library', 'node', 'link', 'capacitor', 'fuse', 'meter', 'line', 'line_sensor', 'line_spacing', 'overhead_line', 'underground_line', 'overhead_line_conductor', 'underground_line_conductor', 'line_configuration', 'transformer_configuration', 'transformer', 'load', 'regulator_configuration', 'regulator', 'triplex_node', 'triplex_meter', 'triplex_line', 'triplex_line_configuration', 'triplex_line_conductor', 'switch_coordinator', 'switch', 'substation', 'pqload', 'voltdump', 'series_reactor', 'restoration', 'frequency_gen', 'volt_var_control', 'motor', 'billdump', 'power_metrics', 'currdump', 'recloser', 'sectionalizer', 'emissions', 'load_tracker', 'triplex_load', 'triplex_zipload', 'impedance_dump', 'vfd', 'pole', 'pole_configuration', 'pole_mount', 'building', 'industrial', 'agricultural', 'public_service', 'ductbank', 'zipload']
+    ['powerflow_object', 'powerflow_library', 'node', 'link', 'capacitor', 'fuse', 'meter', 'line', 'line_sensor', 'line_spacing', 'overhead_line', 'underground_line', 'overhead_line_conductor', 'underground_line_conductor', 'line_configuration', 'transformer_configuration', 'transformer', 'load', 'regulator_configuration', 'regulator', 'triplex_node', 'triplex_meter', 'triplex_line', 'triplex_line_configuration', 'triplex_line_conductor', 'switch_coordinator', 'switch', 'substation', 'pqload', 'voltdump', 'series_reactor', 'restoration', 'frequency_gen', 'volt_var_control', 'fault_check', 'motor', 'billdump', 'power_metrics', 'currdump', 'recloser', 'sectionalizer', 'emissions', 'load_tracker', 'triplex_load', 'triplex_zipload', 'impedance_dump', 'vfd', 'pole', 'pole_configuration', 'pole_mount', 'building', 'industrial', 'agricultural', 'public_service', 'ductbank', 'zipload']
     >>> Runner(model=m).returncode
     0
     >>> m.get_property("link:1", "flow_direction")
@@ -299,6 +304,7 @@ from .agricultural import Agricultural
 from .public_service import PublicService
 from .industrial import Industrial
 from .ductbank import Ductbank
+from .fault_check import FaultCheck
 from .switch_coordinator import SwitchCoordinator
 from .load_tracker import LoadTracker
 from .pole import Pole
@@ -312,7 +318,7 @@ from . import solver
 CLASSES = (PowerflowObject, PowerflowLibrary, Node, Link, Capacitor, Fuse, Meter, Line, LineSensor, LineSpacing, OverheadLine, UndergroundLine,
     OverheadLineConductor, UndergroundLineConductor, LineConfiguration, TransformerConfiguration,
     Transformer, Load, RegulatorConfiguration, Regulator, TriplexNode, TriplexMeter, TriplexLine, TriplexLineConfiguration, TriplexLineConductor,
-    SwitchCoordinator, Switch, Substation, PQLoad, VoltDump, SeriesReactor, Restoration, FrequencyGen, VoltVarControl, Motor, BillDump, PowerMetrics, CurrDump, Recloser, Sectionalizer, Emissions, LoadTracker, TriplexLoad, TriplexZipLoad, ImpedanceDump, VFD, Pole, PoleConfiguration, PoleMount,
+    SwitchCoordinator, Switch, Substation, PQLoad, VoltDump, SeriesReactor, Restoration, FrequencyGen, VoltVarControl, FaultCheck, Motor, BillDump, PowerMetrics, CurrDump, Recloser, Sectionalizer, Emissions, LoadTracker, TriplexLoad, TriplexZipLoad, ImpedanceDump, VFD, Pole, PoleConfiguration, PoleMount,
     Building, Industrial, Agricultural, PublicService, Ductbank, ZipLoad)
 """Behavior of each class of the module, in gridlabd's registration order"""
 
@@ -426,11 +432,11 @@ GLOBALS: tuple[tuple[str,Any,str,dict[str,Any]],...] = (
 __all__ = ["PowerflowError", "PowerflowObject", "PowerflowLibrary", "Node", "Link", "Fuse", "Line",
     "LineSpacing", "OverheadLine", "UndergroundLine", "TriplexLine", "Transformer", "Regulator", "Switch", "Recloser", "Sectionalizer", "Capacitor", "Load", "Meter", "TriplexNode", "TriplexMeter", "TriplexLoad", "PQLoad", "ZipLoad", "TriplexZipLoad", "OverheadLineConductor", "UndergroundLineConductor", "LineConfiguration",
     "TransformerConfiguration", "RegulatorConfiguration", "TriplexLineConfiguration", "TriplexLineConductor", "Restoration",
-    "PowerMetrics", "PoleConfiguration", "Substation", "SeriesReactor", "FrequencyGen", "VoltVarControl", "Emissions", "VoltDump", "CurrDump", "BillDump", "ImpedanceDump", "LineSensor", "Building", "Agricultural", "PublicService", "Industrial", "Ductbank", "SwitchCoordinator", "LoadTracker", "Pole", "PoleMount", "Motor", "VFD", "load", "classes", "init", "precommit", "presync", "sync", "postsync", "commit", "behavior", "solver",
+    "PowerMetrics", "PoleConfiguration", "Substation", "SeriesReactor", "FrequencyGen", "VoltVarControl", "Emissions", "VoltDump", "CurrDump", "BillDump", "ImpedanceDump", "LineSensor", "Building", "Agricultural", "PublicService", "Industrial", "Ductbank", "FaultCheck", "SwitchCoordinator", "LoadTracker", "Pole", "PoleMount", "Motor", "VFD", "load", "classes", "init", "precommit", "presync", "sync", "postsync", "commit", "behavior", "solver",
     "powerflow_object", "powerflow_library", "node", "link", "fuse", "line", "line_spacing", "overhead_line", "underground_line", "triplex_line", "transformer", "regulator", "switch", "recloser", "sectionalizer", "capacitor", "meter", "triplex_node", "triplex_meter", "triplex_load", "pqload", "zipload", "triplex_zipload",
     "overhead_line_conductor", "underground_line_conductor", "line_configuration",
     "transformer_configuration", "regulator_configuration", "triplex_line_configuration", "triplex_line_conductor", "restoration",
-    "power_metrics", "pole_configuration", "substation", "series_reactor", "frequency_gen", "volt_var_control", "emissions", "voltdump", "currdump", "billdump", "impedance_dump", "line_sensor", "building", "agricultural", "public_service", "industrial", "ductbank", "switch_coordinator", "load_tracker", "pole", "pole_mount", "motor", "vfd", "get_complex", "get_double"]
+    "power_metrics", "pole_configuration", "substation", "series_reactor", "frequency_gen", "volt_var_control", "emissions", "voltdump", "currdump", "billdump", "impedance_dump", "line_sensor", "building", "agricultural", "public_service", "industrial", "ductbank", "fault_check", "switch_coordinator", "load_tracker", "pole", "pole_mount", "motor", "vfd", "get_complex", "get_double"]
 
 def load(model:Any) -> None:
     """Load the module into a model (the `arras.modules` entry point that

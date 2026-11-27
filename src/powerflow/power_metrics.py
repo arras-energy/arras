@@ -50,9 +50,9 @@ gridlabd's `create()` sets them. The object has no initialization checks.
 Caveats
 -------
 
-- The reliability module and `fault_check` are not ported, so nothing calls
-  these functions during a run, and `reset_interval_metrics()` fails as it
-  does in gridlabd without a `fault_check` object.
+- The reliability module is not ported, so nothing calls
+  these functions during a run; `reset_interval_metrics()` fails without
+  a `fault_check` object, as in gridlabd.
 
 Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
 -----------------------------------------------------------------

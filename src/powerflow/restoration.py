@@ -48,12 +48,12 @@ iterations, voltage limits 0.95 and 1.05 pu.
 Caveats
 -------
 
-- `fault_check` is not ported, so restoration never runs.
-  `Restoration.perform_restoration()`, the entry point `fault_check` calls,
-  fails with gridlabd's "Restoration: fault_check object not found."; the
-  reconfiguration algorithm (gridlabd's `PerformRestoration()` and its
-  graph search) is to be ported with `fault_check` and the switch,
-  sectionalizer, and recloser classes it operates.
+- The reconfiguration algorithm (gridlabd's `PerformRestoration()` and
+  its graph search) is not ported. `Restoration.perform_restoration()`,
+  which `fault_check` calls at each check when the model has a
+  `restoration` object, fails without a `fault_check` (gridlabd's
+  "Restoration: fault_check object not found.") and otherwise reports
+  that the algorithm is not ported, so the run fails at the first check.
 
 Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
 -----------------------------------------------------------------

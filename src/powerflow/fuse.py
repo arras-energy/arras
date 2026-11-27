@@ -64,11 +64,14 @@ During a run, at each solution:
 Caveats
 -------
 
-- Reliability, faults (`create_fault`, `fix_fault`), `fault_check`, and
-  `eventgen` are not ported; the published functions of gridlabd's fuse are
-  not available.
+- Reliability, faults (`create_fault`, `fix_fault`), and `eventgen` are
+  not ported; the published functions of gridlabd's fuse are not
+  available.
 - A blown fuse that leaves more than one node without a source fails the
-  run (no swing bus), as gridlabd's NR fails without `fault_check`.
+  run (no swing bus), as gridlabd's NR fails without `fault_check`, unless
+  a `fault_check` that checks on changes (`ONCHANGE` or `ALL`, with
+  `reliability_mode` or `grid_association`) takes those nodes out of the
+  powerflow.
 - The admittance `(1+j)/fuse_resistance` is reproduced from gridlabd,
   although it is not the inverse of the impedance `(1+j)*fuse_resistance`
   that gridlabd's `b_mat` holds.

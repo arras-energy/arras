@@ -165,10 +165,26 @@ def build(model:Any, state:ModuleState, dead:set[tuple[str,int]]|None=None) -> t
         fslots, tslots = cls.bus_slots(model, name)
         fbus = [buses.get((fnode, k), -1) if k >= 0 else -1 for k in fslots]
         tbus = [buses.get((tnode, k), -1) if k >= 0 else -1 for k in tslots]
+        blocks = cached[1]
+        if dead and any(k >= 0 and (fnode, k) in dead for k in fslots) | any(k >= 0 and (tnode, k) in dead for k in tslots):
+            blocks = _cut(blocks, [k >= 0 and (fnode, k) in dead for k in fslots], [k >= 0 and (tnode, k) in dead for k in tslots])
         impedance, shift = cls.dc_model(model, name)
-        net.add_branch(fbus, tbus, *cached[1], magnitude=cls.MAGNITUDE, self_impedance=impedance, shift=shift, paths=cls.paths(model, name))
+        net.add_branch(fbus, tbus, *blocks, magnitude=cls.MAGNITUDE, self_impedance=impedance, shift=shift, paths=cls.paths(model, name))
         links.append(name)
     return net, buses, links
+
+def _cut(blocks:tuple, fdead:list[bool], tdead:list[bool]) -> tuple:
+    """Admittance blocks `(Yff, Yft, Ytf, Ytt)` without the rows and
+    columns of the phases whose bus slot at either end is taken out of the
+    network (a link to a removed bus is open on those phases, not a shunt
+    on its other end)"""
+    yff, yft, ytf, ytt = (np.array(x, dtype=complex) for x in blocks)
+    for k, dead in enumerate(f or t for f, t in zip(fdead, tdead)):
+        if dead:
+            for y in (yff, yft, ytf, ytt):
+                y[k, :] = 0
+                y[:, k] = 0
+    return yff, yft, ytf, ytt
 
 def _add_loads(model:Any, name:str, net:Network, buses:dict[tuple[str,int],int], extra:dict[tuple[str,str],complex]|None=None) -> None: # pylint: disable=too-many-locals,too-many-arguments,too-many-positional-arguments
     """Loads of a node (and the `extra` terms links put on it,
@@ -236,8 +252,13 @@ def solver_sync(t0:int) -> int:
     method = method_name(model)
     for name in nodes + objects_of(model, "link"):
         behavior(model, name).before_solve(model, name, t0)
+    checks = objects_of(model, "fault_check")
+    if checks and not behavior(model, checks[0]).solver_check(model, checks[0], t0):
+        return TS_INVALID
     try:
         dead = isolated(model)
+        if checks:
+            dead |= behavior(model, checks[0]).removed(model, checks[0])
         net, buses, links = build(model, state, dead)
         result = solve(net, method, tol=PF_TOL, max_it=max(1, int(g(model, "NR_iteration_limit") or 500)))
     except (SolverError, np.linalg.LinAlgError) as err:

@@ -45,7 +45,7 @@ Before each solution the switch applies gridlabd's switch logic
   phase follow its own state.
 
 `Switch.change_switch_state()` is gridlabd's published `change_switch_state`
-(used by `fault_check` and `restoration` when they are ported).
+(used by the reliability functions and `restoration` when they are ported).
 
 When it initializes, a switch is expected to:
 
@@ -60,7 +60,7 @@ Caveats
 - The DC method uses the magnitude of the switch impedance (its default
   reactance is negative), as for fuses; the fast-decoupled methods keep
   the sign.
-- Reliability (`eventgen`, `fault_check`, faults, `reliability_operation`)
+- Reliability (`eventgen`, faults, `reliability_operation`)
   and deltamode are not ported.
 
 Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)

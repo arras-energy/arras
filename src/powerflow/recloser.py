@@ -34,7 +34,8 @@ then:
 Caveats
 -------
 
-- Faults and reliability (`fault_check`, `eventgen`) are not ported, so
+- Faults and reliability (`eventgen`, `fault_check`'s reliability
+  functions) are not ported, so
   nothing calls `change_recloser_state` yet.
 
 Differences from gridlabd (as of gridlabd master 076e78a, 2026-08-16)
