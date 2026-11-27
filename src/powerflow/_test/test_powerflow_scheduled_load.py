@@ -32,7 +32,7 @@ def test_registration():
     assert Class.find("agricultural", module="powerflow").find_property("Pf").default == "+1 pu"
     assert Class.find("industrial", module="powerflow").find_property("Pf") is None
     names = [x.name for x in powerflow.classes()]
-    assert names[names.index("pole_mount") + 1:names.index("pole_mount") + 4] == ["industrial", "agricultural", "public_service"]
+    assert names[names.index("pole_mount") + 1:names.index("pole_mount") + 5] == ["building", "industrial", "agricultural", "public_service"]
 
 def test_schedule_parse():
     assert schedule_records("1-12,0-4,12-23,1,0.5,0.5,0.5,0.5,0.5,0.5,0.99,1-12,5-6,0-11,0.1") == ["1-12,0-4,12-23,1,0.5,0.5,0.5,0.5,0.5,0.5,0.99", "1-12,5-6,0-11,0.1"]
