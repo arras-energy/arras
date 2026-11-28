@@ -1,0 +1,138 @@
+// Adapted from arras-energy/gridlabd module/residential/autotest/test_zipload_pow_en_hg.glm (076e78a):
+// timezone UTC (arras does not support PST+8PDT), and the meter is fed by a
+// swing triplex_node through a 0.1 ft lossless triplex_line, because arras meters
+// measure the current of the links that feed them; a recorder keeps hourly
+// events to the stop time (arras makes no event at the in-service time of
+// the asserts, which have no synchronization handler); the meter energy
+// tolerances are 0.01 (the feeder line changes the meter voltage).
+// test_zipload_pow_en_hg.glm tests to see if power, energy, and heatgain is being properly calculated in zipload.cpp and passed to the house.
+// The file contains a triplex meter with a single house attached to it.
+// The house contains a single zipload object and the house's HVAC system is turned off
+
+#set minimum_timestep=3600;
+module residential{
+	implicit_enduses NONE;
+}
+module tape;
+module assert;
+module powerflow;
+
+clock{
+	timezone UTC;
+	starttime '2001-01-01 00:00:00';
+	stoptime '2001-01-02 00:00:00';
+}
+
+object triplex_node {
+	name source;
+	phases AS;
+	nominal_voltage 120;
+	bustype SWING;
+}
+object triplex_line_conductor {
+	name tlc;
+	resistance 1e-9;
+	geometric_mean_radius 0.0111;
+}
+object triplex_line_configuration {
+	name tlcfg;
+	conductor_1 tlc;
+	conductor_2 tlc;
+	conductor_N tlc;
+	insulation_thickness 0.08;
+	diameter 0.368;
+}
+object triplex_line {
+	phases AS;
+	from source;
+	to meter;
+	length 0.1;
+	configuration tlcfg;
+}
+object triplex_meter{
+	name meter;
+	object recorder {
+		property measured_real_energy;
+		interval 3600;
+		file "test_zipload_pow_en_hg.csv";
+	};
+	nominal_voltage 120;
+	phases AS;
+	object house{
+		system_mode OFF;
+		auxiliary_strategy NONE;
+		heating_system_type NONE;
+		cooling_system_type NONE;
+		auxiliary_system_type NONE;
+		air_temperature 60;
+		mass_temperature 60;
+		object ZIPload{
+			heat_fraction 0.8;
+			base_power 1;		//base real power is 1 kW 
+			power_pf -0.9;
+			power_fraction .25;
+			current_pf .85;
+			current_fraction .25;
+			impedance_pf 1;
+			impedance_fraction .5;
+			object complex_assert{
+				target "power";
+				once ONCE_FALSE;
+				value 1+0.033856i;
+				within 0.000001;
+			};
+			object complex_assert{
+				target "energy";
+				in '2001-01-02 00:00:00';
+				once ONCE_TRUE;
+				value 24+0.812533i;
+				within 0.000001;
+			};
+			object double_assert{
+				target "heatgain";
+				once ONCE_FALSE;
+				value 2729.6;
+				within 0.01;
+			};
+		};
+		object complex_assert{
+			target "panel.power";
+			once ONCE_FALSE;
+			value 1+0.033856i;
+			within 0.000001;
+		};
+		object complex_assert{
+			target "panel.energy";
+			in '2001-01-02 00:00:00';
+			once ONCE_TRUE;
+			value 24+0.812533i;
+			within 0.000001;
+		};
+		object double_assert{
+			target "internal_gain";
+			once ONCE_FALSE;
+			value 2729.6;
+			within 0.01;
+		};
+	};
+	object complex_assert{
+		target "measured_power";
+		once ONCE_FALSE;
+		value 1000.573+1.939d;
+		within 0.001;
+	};
+	object double_assert{
+		target "measured_real_energy";
+		in '2001-01-02 00:00:00';
+		once ONCE_TRUE;
+		value 24000;
+		within 0.01; // gridlabd: 0.000001 (the feeder line changes the meter voltage by 2e-8 pu)
+	};
+	object double_assert{
+		target "measured_reactive_energy";
+		in '2001-01-02 00:00:00';
+		once ONCE_TRUE;
+		value 812.533401;
+		within 0.01; // gridlabd: 0.000001 (the feeder line changes the meter voltage by 2e-8 pu)
+	};
+}

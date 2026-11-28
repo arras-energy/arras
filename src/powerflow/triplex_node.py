@@ -115,7 +115,7 @@ class TriplexNode(Node):
         ("GFA_freq_disconnect_time[s]", "double", prop("Frequency violation disconnect time for Grid Friendly Appliance(TM)-type functionality", "0.2 s")),
         ("GFA_volt_disconnect_time[s]", "double", prop("Voltage violation disconnect time for Grid Friendly Appliance(TM)-type functionality", "0.2 s")),
         ("GFA_status", "bool", prop("Low frequency trip point for Grid Friendly Appliance(TM)-type functionality", "TRUE")),
-        ("service_status", "enumeration", prop("In and out of service flag", "IN_SERVICE", keywords=keywords(("IN_SERVICE", 0), ("OUT_OF_SERVICE", 1)))),
+        ("service_status", "enumeration", prop("In and out of service flag", "IN_SERVICE", keywords=keywords(("IN_SERVICE", 1), ("OUT_OF_SERVICE", 0)))),
         ("service_status_double", "double", prop("In and out of service flag - type double - will indiscriminately override service_status - useful for schedules")),
         ("previous_uptime[min]", "double", prop("Previous time between disconnects of node in minutes", "-1 min")),
         ("current_uptime[min]", "double", prop("Current time since last disconnect of node in minutes", "-1 min")),

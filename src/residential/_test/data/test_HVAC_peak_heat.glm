@@ -1,0 +1,95 @@
+// Adapted from arras-energy/gridlabd module/residential/autotest/test_HVAC_peak_heat.glm (076e78a):
+// - timezone PST8PDT (PST+8PDT is not an arras timezone)
+// - the constant setpoint schedules are constant setpoints
+// - the 1 s recorders record every 5 min (the results are the same with 60 s steps)
+// - the tests read WA-Yakima_Air_Terminal.tmy3 from src/climate/_test/data
+// - the meter is fed by a swing triplex_node through a 0.1 ft lossless triplex_line (arras meters measure the links that feed them)
+//This will test the accuracy of the HVAC energy use and temperature behavior
+//This test is an example of a peak heating day
+//test_HVAC_peak_heat.glm created by Andy Fisher
+#set minimum_timestep=1;
+
+module residential{
+	implicit_enduses NONE;
+}
+module tape;
+module assert;
+module climate;
+module powerflow;
+
+clock{
+	timezone "PST8PDT";
+	starttime '2001-01-05 05:00:00';
+	stoptime '2001-01-06 05:00:49';
+}
+
+object climate
+{
+	tmyfile "WA-Yakima_Air_Terminal.tmy3";
+}
+
+object triplex_node {
+	name source;
+	phases AS;
+	nominal_voltage 120;
+	bustype SWING;
+}
+object triplex_line_conductor {
+	name tlc;
+	resistance 1e-9;
+	geometric_mean_radius 0.0111;
+}
+object triplex_line_configuration {
+	name tlcfg;
+	conductor_1 tlc;
+	conductor_2 tlc;
+	conductor_N tlc;
+	insulation_thickness 0.08;
+	diameter 0.368;
+}
+object triplex_line {
+	phases AS;
+	from source;
+	to meter;
+	length 0.1;
+	configuration tlcfg;
+}
+object triplex_meter{
+	name meter;
+	nominal_voltage 120;
+	phases AS;
+	object house{
+		system_mode OFF;
+		auxiliary_strategy DEADBAND;
+		heating_system_type HEAT_PUMP;
+		cooling_system_type ELECTRIC;
+		air_temperature 60;
+		mass_temperature 60;
+		heating_setpoint 60;
+		cooling_setpoint 75;
+		object recorder{
+			property panel.energy;
+			file "test_HVAC_peak_heat.csv";
+			interval 300;
+		};
+		object complex_assert{
+			target "panel.energy";
+			in '2001-01-06 5:00:47';
+			once ONCE_TRUE;
+			value 61.9347+0i;
+			within 0.500775;//asserting house_e within 0.5 percent of Rob's ETP result
+		};
+	};
+	object recorder{
+		property measured_real_energy;
+		file "test_HVAC_peak_heat_energy.csv";
+		interval 300;
+	};
+	object double_assert{
+		target "measured_real_energy";
+		in '2001-01-06 5:00:47';
+		once ONCE_TRUE;
+		value 61934.7;
+		within 500.775;//asserting house_e within 0.5 percent of Rob's ETP result
+	};
+}
