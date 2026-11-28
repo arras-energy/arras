@@ -44,7 +44,7 @@ jobs:
 
     - name: Analyse code
       run: |
-        pylint --fail-under 0 src/arras/*.py src/assert/*.py src/climate/*.py src/tape/*.py src/pypower/*.py src/powerflow/*.py
+        pylint --fail-under 0 src/arras/*.py src/assert/*.py src/climate/*.py src/tape/*.py src/pypower/*.py src/powerflow/*.py src/residential/*.py
 
     - name: Run tests
       # coverage settings are in pyproject.toml ([tool.coverage.*]); informational only

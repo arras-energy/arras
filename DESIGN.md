@@ -9,7 +9,8 @@ gridlabd modules as Python packages and the `assert` module (decisions 1.13, 6.1
 the `climate` module (group 9, #51), 2026-11-24;
 the `tape` module, `Runner.setexitcode()`, and `method` properties in GLM (decisions 2.14, 6.16, group 10, #53), 2026-11-24;
 the `pypower` module and the vendored PYPOWER solver (group 11, #55), 2026-11-24;
-the `powerflow` module, first step: `powerflow_object`, `node`, `link`, `fuse`, `line`, the library classes, and the three-phase PYPOWER solver (group 12, #58), 2026-11-25/26
+the `powerflow` module, first step: `powerflow_object`, `node`, `link`, `fuse`, `line`, the library classes, and the three-phase PYPOWER solver (group 12, #58), 2026-11-25/26;
+the `residential` module, first step: `residential_enduse`, `house`, and `ZIPload` (group 13, #68), 2026-11-27
 
 ## Purpose
 
@@ -24,8 +25,8 @@ GridLAB-D. It provides:
   (`arras.model`), and modules with the solvers that keep the clock
   synchronized (`arras.module`); and
 - gridlabd modules implemented in Python, each a top-level package under
-  `src/` (`assert`, `climate`, `tape`, `pypower`, and `powerflow`,
-  decision groups 8 to 12).
+  `src/` (`assert`, `climate`, `tape`, `pypower`, `powerflow`, and
+  `residential`, decision groups 8 to 13).
 
 The Python model reads, checks, edits, and writes what gridlabd reads and
 writes, without running `gridlabd`. Users get the same values, text, and
@@ -44,7 +45,8 @@ transforms, enduses), with all of them written as Python callables
 passes. These stay in the C++ code of
 [arras-energy/gridlabd](https://github.com/arras-energy/gridlabd), except
 the modules ported to Python packages (1.13); `powerflow` is being ported
-class by class, starting at the base of its class hierarchy (group 12).
+class by class, starting at the base of its class hierarchy (group 12),
+and `residential` likewise (group 13).
 The classes that modules publish come into `arras` from JSON that gridlabd
 writes.
 
@@ -294,6 +296,20 @@ published at https://arras-energy.github.io/arras rather than under
 | 12.9 | Not modeled in this step: deltamode, faults and reliability (`fault_check`, `restoration`), frequency measurement, GFA, DER violation tests, violation recording, `service_status`, link ratings and limit checks, the matrix dumps, the solver profiler, the external LU solver, and `solver_py`. Their globals and properties are published so that models that set them load. |
 | 12.10 | gridlabd's powerflow autotests all use classes that are not ported yet, so the tests use a stand-in line class registered by the tests (`test_line`, IEEE 13-node feeder configuration 601) and compare the node voltages of unbalanced feeders with an independent fixed-point solution of the nodal equations written in the tests (no PYPOWER). The autotests are to be ported with the classes they use. The `arras` model tests that use `powerflow` as the name of a stand-in module (`src/arras/_test/test_model.py`) do not call the package's entry point. |
 
+### 13. The `residential` module (`src/residential/`, #68)
+
+| # | Decision |
+|---|----------|
+| 13.1 | The package reproduces gridlabd's `module/residential` class by class. The first step (2026-11-27) has `residential_enduse`, `house` (gridlabd's `house_e`), and `ZIPload`, registered in that order (gridlabd registers `appliance` between the first two and `ZIPload` sixteenth; listed, 1.4), `house` and `ZIPload` inheriting from `residential_enduse`, with the published names, types, units, keywords (reverse publication order, 8.1), defaults, flags, access, descriptions, pass configurations, and readiness levels (the property tables were generated from the `gl_publish_variable()` calls of the C++ source and checked by hand), and the module globals in gridlabd's creation order (`residential::message_flags`, `init.cpp`, then the class constructors). One module per class, private helpers in `_common.py` and `_base.py`. |
+| 13.2 | Enduses: gridlabd's `PT_enduse` properties are published as `enduse_publish()` does (the enduse property, then `energy`, `power`, `peak_demand`, `heatgain`, `cumulative_heatgain`, the fractions, `power_factor`, `constant_power`, `constant_current`, `constant_admittance`, `voltage_factor`, `breaker_amps`, `configuration`, prefixed `panel.` for the house panel). The core's per-step enduse update (`enduse_syncall()`, `PC_PRETOPDOWN`: energy and cumulative heat gain integrated, heat gain cleared when time advanced) is one `arras.module` internal item (`residential.enduse_syncall`), added once per process by `load()`, that updates every residential enduse of the running model. Loadshapes and schedules are not modeled by `arras`, so `shape` is published but unused, and implicit enduses (which are loadshape-driven) are refused: a house fails to initialize unless `residential::implicit_enduses` is `NONE`. |
+| 13.3 | State: each object's published properties are read into Python attributes named as the C++ members at the start of each handler and the changed ones written back at the end (`residential._common.Members`); unpublished members (circuits, thermostat thresholds, rated capacities, the enduse `t_last`) live in the object's state. Properties gridlabd publishes at another member's address (`internal_gain`/`panel.heatgain`, `heat_cool_gain`/`Qh`/`heatgain`, `load_*_fraction`/`*_fraction`, `heat_fraction`/`heatgain_fraction`) are aliases: the one that changed since the last write wins, and before the first write the last one the model sets (else the last one listed, whose `PT_DEFAULT` gridlabd applies last). Values `create()` sets on inherited properties (`residential_enduse::create()`, `ZIPload::create()`) are applied at initialization to the properties the model does not set; `house_e::create()` does not call its parent's, so a house's `power_state` starts `OFF` (the published default) while a ZIP load's starts `UNKNOWN`. Each object keeps gridlabd's `obj->clock` (the time of its last bottom-up pass) for its `t0`. |
+| 13.4 | The house's bottom-up handler runs gridlabd's `plc_house()` (the thermostat) and then `sync()`, returning the earlier result by magnitude, as `_object_sync()` does for classes with a PLC; presync advances the ETP solution and sets circuit voltage factors, postsync removes the panel loads from the parent meter. gridlabd's quirks in these functions are kept, including the sign flip of the dwell-time rounding (hard events become soft and soft hard), the absolute timestamp used as a duration when the thermostat cycle time has not elapsed, the AUX/HEAT swap of `thermostat_last_on_cycle_time`/`off_cycle_time`, integer division in the breaker trip probability (`1/tripsleft`), the `etp` solver's unsigned iteration counter, and the 2-N circuits reading `voltage_1N` (gridlabd's pointer arithmetic). |
+| 13.5 | Coupling with `powerflow`: a house attaches to a parent `triplex_meter` or `triplex_node`, sets `house_present`, reads `voltage_12`, `voltage_1N`, `voltage_2N`, and `service_status`, and adds its panel loads to `power_X` (constant power), `residential_nominal_current_X` (constant current), and `shunt_X` (constant admittance) in sync, removing them in postsync, so the solver in the module sync sees them. `powerflow._module._add_loads()` now adds `residential_nominal_current_X` to the split-phase current terms, turned to the nominal angle so that the solution turns it with the full voltage angle, as gridlabd's NR does for `house_present` nodes. `triplex_node.service_status` keyword values are fixed to gridlabd's (`IN_SERVICE` 1, `OUT_OF_SERVICE` 0; the port had them reversed). |
+| 13.6 | Random values (initial air temperature, sump level, window openings, breaker trips and reclose times) use a `random.Random` per object seeded by `randomseed` and the object id (as `line_sensor`, 12.31), so the values differ from gridlabd's but runs are repeatable. |
+| 13.7 | Fixed and listed (1.4): a ZIP load without a house parent computes its load at a closed breaker and voltage factor 1 (gridlabd dereferences the missing circuit); `residential::default_line_voltage` and `default_line_current` are `char256` globals of the first element, and `default_solar` a `double` of the first of nine (no array or `complex` globals); `thermostat_control_warning` and `paneldump_resolution` are their own `double` values (gridlabd publishes them at the addresses of a `bool` and an `int64`); `include_solar_quadrant` keywords keep gridlabd's effective values (the `house_e.h` macros, 1 to 16). A house does not defer its initialization on its parent meter (parents are created and initialized first). |
+| 13.8 | Not modeled in this step: the other residential classes, implicit enduses, the panel dump, the smart breaker method `circuit`, curved and linear capacity curves (errors, as in gridlabd), the `FULL` motor model (a warning, as in gridlabd), thermal storage, and deltamode. Their globals and properties are published so that models that set them load. |
+| 13.9 | Tests port gridlabd's `test_zipload_pow_en_hg` and the five `test_HVAC_*` autotests to `src/residential/_test/data/` with the changes in each file's header: IANA time zones (`PST8PDT`; `Etc/GMT-1` for `PST+0PDT` in summer), constant schedules as constants and the ZIP schedule as a player, 5-minute recorders for gridlabd's 1-second ones (the results are the same with 60-second steps), and the meter fed by a swing `triplex_node` through a 0.1 ft lossless triplex line (arras meters measure the links that feed them, 12.19); the meter energy tolerances of the ZIP test are 0.01. arras makes no event at the in-service time of objects without synchronization handlers (the asserts), so the energies are checked by the tests at the stop time, against gridlabd's values and tolerances (0.5% of the reference ETP results). |
+
 ## Module layout
 
 ```
@@ -431,6 +447,16 @@ src/powerflow/     gridlabd powerflow module, first step (decision group 12), en
   _base.py         PowerflowClass: registration
   _test/           pytest tests; conftest.py (test_line stand-in, independent reference solution)
     data/          unbalanced_feeder.glm
+
+src/residential/   gridlabd residential module, first step (decision group 13), entry point residential:load
+  __init__.py      package docs; load(model), classes(), enduse_syncall(t), init/presync/sync/postsync(name,t)
+  residential_enduse.py ResidentialEnduse: class residential_enduse (base of the enduses)
+  house.py         House: class house (house_e), e2solve()
+  zipload.py       ZIPload: class ZIPload
+  _common.py       constants, messages, state, Members, Enduse, BEHAVIORS
+  _base.py         ResidentialClass: registration; enduse_properties()
+  _test/           pytest tests
+    data/          gridlabd residential autotests ported to arras
 ```
 
 Dependencies between modules (`runner` imports `model` when a `Runner`
@@ -477,9 +503,15 @@ flowchart LR
   powerflow --> oclass
   powerflow --> runner
   powerflow --> pypower
+  residential --> model
+  residential --> module
+  residential --> oclass
+  residential --> runner
+  residential --> pypower
+  residential --> climate
 ```
 
-`model` reaches `assert`, `climate`, `tape`, `pypower`, and `powerflow` only through the `arras.modules` entry point
+`model` reaches `assert`, `climate`, `tape`, `pypower`, `powerflow`, and `residential` only through the `arras.modules` entry point
 (6.15), so `arras` does not import the module packages.
 
 ## Contracts
@@ -514,6 +546,7 @@ Each module is checked against these gridlabd files (`master` 076e78a):
 | `tape` | `module/tape/` (all files and `autotest/`), `module/tape_file/tape_file.cpp`, `source/aggregate.cpp`, `convert.cpp` (`convert_from_double()`, `convert_from_complex()`, `convert_from_set()`), `output.cpp` (`output_error()`), `exec.cpp` (`exec_setexitcode()`), `third_party/jsonCpp/jsoncpp.cpp`; `docs/Module/Tape.md`, `docs/Module/Tape/` |
 | `pypower` | `module/pypower/` (all files and `autotest/`), `converters/py2glm.py`, `source/gridlabd.h` (`gld_object` messages, `get_distance()`), `complex.h` (notations), `convert.cpp` (`convert_to_complex()`), `globals.cpp` (`global_create()`), `exec.cpp` (`init_all()`, the pass order); PYPOWER 5.1.16; `docs/Module/Pypower.md`, `docs/Module/Pypower/` |
 | `powerflow` | `module/powerflow/` (`init.cpp`, `powerflow.h`, `powerflow_object.cpp`, `powerflow_object.h`, `powerflow_library.cpp`, `node.cpp`, `node.h`, `link.cpp`, `link.h`, `fuse.cpp`, `fuse.h`, `line.cpp`, `line.h`, `overhead_line.cpp`, `underground_line.cpp`, `triplex_line.cpp`, `transformer.cpp`, `regulator.cpp`, `switch_object.cpp`, `capacitor.cpp`, `load.cpp`, `meter.cpp`, `triplex_node.cpp`, `triplex_meter.cpp`, `triplex_load.cpp`, `zipload.cpp`, `triplex_zipload.cpp`, `pqload.cpp`, `substation.cpp`, `motor.cpp`, `vfd.cpp`, `series_reactor.cpp`, `volt_var_control.cpp`, `frequency_gen.cpp`, `emissions.cpp`, `voltdump.cpp`, `currdump.cpp`, `billdump.cpp`, `switch_coordinator.cpp`, `load_tracker.cpp`, `pole.cpp`, `pole_mount.cpp`, `recloser.cpp`, `sectionalizer.cpp`, `line_configuration.cpp`, `line_spacing.cpp`, `overhead_line_conductor.cpp`, `underground_line_conductor.cpp`, `triplex_line_configuration.cpp`, `triplex_line_conductor.cpp`, `transformer_configuration.cpp`, `regulator_configuration.cpp`, `restoration.cpp`, `power_metrics.cpp`, `pole_configuration.cpp`, `solver_nr.cpp`), `source/convert.cpp` (`convert_from_set()`); PYPOWER 5.1.16 (`newtonpf.py`, `fdpf.py`, `dcpf.py`, `makeB.py`); `docs/Module/Powerflow.md` |
+| `residential` | `module/residential/` (`init.cpp`, `residential.h`, `residential_enduse.cpp`, `residential_enduse.h`, `house_e.cpp`, `house_e.h`, `zipload.cpp`, `zipload.h`, `solvers.cpp`, `autotest/`), `source/enduse.cpp`, `enduse.h`, `object.cpp` (`_object_sync()`), `solvers/etp.cpp`; `docs/Module/Residential/` |
 | `assert` | `module/assert/` (all files and `autotest/`), `source/gridlabd.h` (`INIT_MMF()`, `gld_object`, `gld_property`, `INIT_CATCHALL()`), `property.cpp`, `compare.cpp`, `convert.cpp`, `timestamp.cpp`, `object.cpp`, `enduse.cpp`, `random.cpp`, `find.cpp`; `docs/Module/Assert.md`, `docs/Module/Assert/` |
 
 ## Files and formats

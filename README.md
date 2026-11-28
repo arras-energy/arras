@@ -207,6 +207,22 @@ Node loads (`power_X`, `current_X`, `shunt_X`, wye or delta, or the `constant_*`
 
 A distribution can provide other modules the same way, as an `arras.modules` entry point (see [`arras.model`](https://arras-energy.github.io/arras/arras/model.html)).
 
+The `residential` module models homes and their loads. Its first version implements `residential_enduse` (the base of the enduse loads), `house` (gridlabd's `house_e`: the equivalent thermal parameter model of the indoor air and mass, the heating, cooling, and fan system, the thermostat, and a panel of circuits with breakers), and `ZIPload`. A house takes its weather from a `climate` object and its circuit voltages from its parent `triplex_meter`, to which it adds its panel's loads for the `powerflow` solution. Implicit enduses need loadshapes, which `arras` does not model, so models set `residential::implicit_enduses` to `NONE`:
+
+```
+module powerflow;
+module residential { implicit_enduses NONE; }
+object triplex_meter {
+    name meter; phases AS; nominal_voltage 120; bustype SWING;
+    object house {
+        cooling_setpoint 75; heating_setpoint 68;
+        object ZIPload { base_power 1.2; power_fraction 0.6; current_fraction 0.2; impedance_fraction 0.2; };
+    };
+}
+```
+
+See the [`residential` documentation](https://arras-energy.github.io/arras/residential.html) for the classes and the differences from gridlabd.
+
 ## Testing
 
 ```bash
@@ -215,7 +231,7 @@ pip install -e . pytest pytest-cov
 pytest --cov
 ```
 
-See `src/arras/_test/README.md`, `src/assert/_test/README.md`, `src/climate/_test/README.md`, `src/tape/_test/README.md`, `src/pypower/_test/README.md`, and `src/powerflow/_test/README.md` for what the tests check. The coverage report for `main` is published at https://arras-energy.github.io/arras/coverage/.
+See `src/arras/_test/README.md`, `src/assert/_test/README.md`, `src/climate/_test/README.md`, `src/tape/_test/README.md`, `src/pypower/_test/README.md`, `src/powerflow/_test/README.md`, and `src/residential/_test/README.md` for what the tests check. The coverage report for `main` is published at https://arras-energy.github.io/arras/coverage/.
 
 ## Source Code Repositories
 

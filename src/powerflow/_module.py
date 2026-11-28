@@ -204,6 +204,17 @@ def _add_loads(model:Any, name:str, net:Network, buses:dict[tuple[str,int],int],
         angle = (0.0, -2*np.pi/3, 2*np.pi/3)[behavior(model, top).base_phase(model, top)]
         vnom = complex(np.cos(angle), np.sin(angle))*vbase
         one, two, both = cls.SUFFIXES
+        def residential(suffix:str) -> complex:
+            # residential_nominal_current_X turns with the full voltage angle
+            # (gridlabd's house_present terms), so it is the current at
+            # angle 0 turned to the nominal angle
+            prop_ = f"residential_nominal_current_{suffix}"
+            if model.objects[name].oclass.find_property(prop_) is None:
+                return 0j
+            return get_complex(model, name, prop_)*vnom/abs(vnom)
+        terms[("current", one)] = terms.get(("current", one), 0j) + residential(one)
+        terms[("current", two)] = terms.get(("current", two), 0j) + residential(two)
+        terms[("current", both)] = terms.get(("current", both), 0j) + residential(both)
         for slot, suffix in ((0, one), (1, two)):
             s, i, y = (value(kind, suffix) for kind in ("power", "current", "shunt"))
             if (s, i, y) != (0, 0, 0) and (top, slot) in buses:
